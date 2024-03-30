@@ -1,9 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <Nullable>enable</Nullable>    
+    <PackageReadmeFile>README.md</PackageReadmeFile>    
+    <PackageId>FlatlinerDOA.Rope</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>1.0.0</Version>
+    <Authors>Andrew Chisholm</Authors>
+    <Description>
+    C# implementation of a Rope immutable data structure. A Rope is an immutable sequence built using
+    a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly used with strings,
+    but any list or sequence can be efficiently edited using the Rope data structure.
+    </Description>
   </PropertyGroup>
-
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 </Project>

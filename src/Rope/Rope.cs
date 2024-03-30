@@ -23,10 +23,10 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, 46).Select(d => Fibonnaci(d) + 2).ToArray();	
 
 	/// <summary>Left slice of the raw buffer</summary>
-	private readonly Rope<T> left;
+	private readonly Rope<T>? left;
 
 	/// <summary>Right slice of the raw buffer (null if a leaf node.)</summary>
-	private readonly Rope<T> right;
+	private readonly Rope<T>? right;
 	
 	/// <summary>Data is the raw underlying buffer, or a cached copy of the ToMemory call (for efficiency).</summary>
 	private readonly ReadOnlyMemory<T> data;
@@ -552,7 +552,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return this.ToArray().AsMemory();
 	}
 
-	public bool Equals(Rope<T> other)
+	public bool Equals(Rope<T>? other)
 	{
 		if (ReferenceEquals(other, null))
 		{
