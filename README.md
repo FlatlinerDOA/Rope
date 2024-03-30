@@ -1,6 +1,12 @@
 # Rope
 
-![Rope Build](https://github.com/FlatlinerDOA/Rope/actions/workflows/dotnet.yml/badge.svg)
+[![Build Status](https://github.com/FlatlinerDOA/Rope/actions/workflows/dotnet.yml/badge.svg)](https://github.com/FlatlinerDOA/Rope/actions)
+[![License](https://img.shields.io/github/license/FlatlinerDOA/Rope.svg)](https://github.com/FlatlinerDOA/Rope/LICENSE)
+
+
+[![NuGet](https://img.shields.io/nuget/v/FlatlinerDOA.Rope.svg)](https://www.nuget.org/packages/FlatlinerDOA.Rope)
+[![downloads](https://img.shields.io/nuget/dt/FlatlinerDOA.Rope)](https://www.nuget.org/packages/FlatlinerDOA.Rope)
+![Size](https://img.shields.io/github/repo-size/FlatlinerDOA/Rope.svg) 
 
 C# implementation of a Rope&lt;T&gt; immutable data structure. See the paper [Ropes: an Alternative to Strings: h.-j. boehm, r. atkinson and m. plass](https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf)
 
@@ -30,7 +36,6 @@ string text2 = text + " My second favourite text";
 Rope<char> text3 = text + " My second favourite text".ToRope();
 
 ```
-
 
 ## Comparison with StringBuilder
 A comparison could be drawn between a Rope and a StringBuilder as they use a very similar technique for efficient edits.

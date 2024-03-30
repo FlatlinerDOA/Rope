@@ -6,6 +6,9 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>    
     <PackageId>FlatlinerDOA.Rope</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>©️ 2024 Andrew Chisholm</Copyright>
+    <PackageProjectUrl>https://github.com/FlatlinerDOA/Rope</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/FlatlinerDOA/Rope.git</RepositoryUrl>
     <Version>1.0.0</Version>
     <Authors>Andrew Chisholm</Authors>
     <Description>
