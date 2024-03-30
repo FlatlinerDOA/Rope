@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -100,11 +101,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	
 	public T this[int index] => this.ElementAt(index);
 
-	public Rope<T> Left => this.left;
+	public Rope<T>? Left => this.left;
 
-	public Rope<T> Right => this.right;
+	public Rope<T>? Right => this.right;
 
-	public bool IsNode => this.left != null;
+	[MemberNotNullWhen(true, nameof(this.left))]
+	[MemberNotNullWhen(true, nameof(this.right))]
+	public bool IsNode => this.left != null && this.right != null;
 
 	public int Weight => this.left?.Length ?? this.data.Length;
 
@@ -119,12 +122,12 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return this.data.Slice(index).Span[0];
 		}
 		
-		if (this.Weight <= index && this.right.Length != 0)
+		if (this.Weight <= index && this.right is not null && this.right.Length != 0)
 		{
 			return this.right.ElementAt(index - this.Weight);
 		}
 
-		if (this.left.Length != 0)
+		if (this.left is not null && this.left.Length != 0)
 		{
 			return this.left.ElementAt(index);
 		}
@@ -188,13 +191,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			}
 			else if (i <= this.Weight)
 			{
-				var (a, b) = this.left.SplitAt(i);
-				return (a, new Rope<T>(b, this.right));
+				var (a, b) = (this.left ?? Rope<T>.Empty).SplitAt(i);
+				return (a, new Rope<T>(b, this.right ?? Rope<T>.Empty));
 			}
 			else
 			{
-				var (a, b) = this.right.SplitAt(i - this.Weight);
-				return (new Rope<T>(this.left, a), b);
+				var (a, b) = (this.right ?? Rope<T>.Empty).SplitAt(i - this.Weight);
+				return (new Rope<T>(this.left ?? Rope<T>.Empty, a), b);
 			}
 		}
 
@@ -334,7 +337,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public T[] ToArray()
 	{
-		if (this.left == null)
+		if (this.left is null || this.right is null)
 		{
 			return this.data.ToArray();
 		}
@@ -347,7 +350,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	
 	public void CopyTo(Memory<T> other)
 	{
-		if (this.left == null)
+		if (this.left is null || this.right is null)
 		{
 			// Leaf node so copy memory.
 			this.data.CopyTo(other);
@@ -378,12 +381,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public int IndexOf(ReadOnlyMemory<T> find)
 	{
-		if (this.left == null)
-		{
-			// Leaf
-			return this.data.Span.IndexOf(find.Span);
-		}
-		else
+		if (this.IsNode)
 		{
 			// Node
 			var i = this.left.IndexOf(find);
@@ -397,6 +395,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			{
 				return this.left.Length + i;
 			}
+		}
+		else
+		{
+			// Leaf
+			return this.data.Span.IndexOf(find.Span);
 		}
 		
 		return -1;
@@ -404,12 +407,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public int IndexOf(T find)
 	{
-		if (this.left == null)
-		{
-			// Leaf
-			return this.data.Span.IndexOf(find);
-		}
-		else
+		if (this.IsNode)
 		{
 			// Node
 			var i = this.left.IndexOf(find);
@@ -423,6 +421,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			{
 				return this.left.Length + i;
 			}
+		}
+		else
+		{
+			// Leaf
+			return this.data.Span.IndexOf(find);
 		}
 
 		return -1;
@@ -609,7 +612,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	private struct Enumerator : IEnumerator<T>
 	{
-		private Rope<T> rope;
+		private readonly Rope<T> rope;
 		private int index;
 		public Enumerator(Rope<T> rope)
 		{
@@ -623,13 +626,12 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 		public void Dispose()
 		{
-			this.index = -1;
-			this.rope = null;
+			this.index = -2;
 		}
 
 		public bool MoveNext()
 		{
-			if (this.rope == null)
+			if (this.index == -2)
 			{
 				throw new ObjectDisposedException(nameof(Enumerator));
 			}
