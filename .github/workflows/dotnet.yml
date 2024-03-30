@@ -1,9 +1,5 @@
 # This workflow will build a .NET project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
 name: .NET
 
 on:
@@ -29,3 +25,9 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Package for Nuget
+      run: dotnet pack
+    - name: Publish Nuget to GitHub registry
+      run: dotnet nuget push ./src/Rope/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
