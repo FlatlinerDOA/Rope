@@ -263,13 +263,22 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public static implicit operator Rope<T> (ReadOnlySpan<T> a) => new Rope<T>(a.ToArray());
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
+	/// <summary>
+	/// Determines how unbalanced the ropes binary tree is and then rebalances if necessary.
+	/// </summary>
+	/// <remarks>
+	/// https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf
+	/// | p. 1319 - We define the depth of a leaf to be 0, and the depth of a concatenation to be
+	/// | one plus the maximum depth of its children. Let Fn be the nth Fibonacci number.
+	/// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
+	/// | of depth 1 must have length at least 2.
+	/// 
+	/// MaxDepth is limited to 46 based on reasons.
+	//// </remarks>
+
+	/// <returns>A balanced tree or the original rope if not out of range.</returns>
 	public Rope<T> Balanced()
 	{
-		// https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf
-		// | p. 1319 - We define the depth of a leaf to be 0, and the depth of a concatenation to be
-		// | one plus the maximum depth of its children. Let Fn be the nth Fibonacci number.
-		// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
-		// | of depth 1 must have length at least 2.
 		var balanced = this.Depth <= 46 && this.Length > DepthToFibonnaciPlusTwo[this.Depth];
 		if (!balanced)
 		{
@@ -544,6 +553,103 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		
 		return typeof(T).Name + " x " + this.Depth;
 	}
+
+	/// <summary>
+	/// Attempts to insert the given item in the correct sorted position, based on the comparer.
+	/// NOTE: Due to potential fragmentation from InsertSorted, balancing is enforced.
+	/// </summary>
+	/// <typeparam name="TComparer">The comparer to use to sort with.</typeparam>
+	/// <param name="item"></param>
+	/// <param name="comparer"></param>
+	/// <returns>A new rope already balanced if necessary.</returns>
+	public Rope<T> InsertSorted<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+	{
+		var index = ~this.BinarySearch(item, comparer);
+		var left = this.Slice(0, index);
+		var right = this.Slice(index);
+		var insert = new Rope<T>(new[] { item });
+		return new Rope<T>(new Rope<T>(left, insert), right).Balanced();
+	}
+
+	/// <summary>
+    /// Searches a slice of the sorted <see cref="Rope{T}"/> for a specified value using the specified <typeparamref name="TComparer"/> generic type.
+	/// </summary>
+	/// <typeparam name="TComparer">A type that implements <see cref="IComparer{T}"/>.</typeparam>
+	/// <param name="item">The item to search for or compare to the desired insert location.</param>
+	/// <param name="comparer">The comparer to used to find the correct index.</param>
+	/// <returns>
+	/// The zero-based index of value in the sorted rope, if value is found; otherwise,
+	///  a negative number that is the bitwise complement of the index of the next element
+	///  that is larger than value or, if there is no larger element, the bitwise complement
+	///  of the Rope.Length.
+	/// </returns>
+    public int BinarySearch<TComparer>(int index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
+    {
+		var offset = this.Slice(index, count).BinarySearch(item, comparer);
+        return index + offset;
+    }
+
+	/// <summary>
+    /// Searches an entire sorted <see cref="Rope{T}"/> for a specified value using the specified TComparer generic type.
+	/// </summary>
+	/// <typeparam name="TComparer">A type that implements <see cref="IComparer{T}"/>.</typeparam>
+	/// <param name="item">The item to search for or compare to the desired insert location.</param>
+	/// <param name="comparer">The comparer to used to find the correct index.</param>
+	/// <returns>
+	/// The zero-based index of value in the sorted rope, if value is found; otherwise,
+	///  a negative number that is the bitwise complement of the index of the next element
+	///  that is larger than value or, if there is no larger element, the bitwise complement
+	///  of the Rope.Length.
+	/// </returns>
+    public int BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+    {
+		if (this.IsNode)
+		{
+			var r = this.right.BinarySearch(item, comparer);
+			if (r != -1)
+			{
+				return this.left.Length + r;
+			}
+
+			var l = this.left.BinarySearch(item, comparer);
+			return l;
+		}
+		else
+		{
+        	return MemoryExtensions.BinarySearch(this.data.Span, item, comparer);
+		}
+    }
+
+	/// <summary>
+    /// Searches an entire sorted <see cref="Rope{T}"/> for a specified value using the specified TComparer generic type.
+	/// </summary>
+	/// <typeparam name="TComparer">A type that implements <see cref="IComparer{T}"/>.</typeparam>
+	/// <param name="item">The item to search for or compare to the desired insert location.</param>
+	/// <param name="comparer">The comparer to used to find the correct index.</param>
+	/// <returns>
+	/// The zero-based index of value in the sorted rope, if value is found; otherwise,
+	///  a negative number that is the bitwise complement of the index of the next element
+	///  that is larger than value or, if there is no larger element, the bitwise complement
+	///  of the Rope.Length.
+	/// </returns>
+    public int BinarySearch(T item)
+    {
+		if (this.IsNode)
+		{
+			var r = this.right.BinarySearch(item, Comparer<T>.Default);
+			if (r != -1)
+			{
+				return this.left.Length + r;
+			}
+
+			var l = this.left.BinarySearch(item, Comparer<T>.Default);
+			return l;
+		}
+		else
+		{
+        	return MemoryExtensions.BinarySearch(this.data.Span, item, Comparer<T>.Default);
+		}
+    }
 
 	public ReadOnlyMemory<T> ToMemory()
 	{

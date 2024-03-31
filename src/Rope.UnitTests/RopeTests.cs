@@ -9,6 +9,8 @@ using System.Linq;
 [TestClass]
 public sealed class RopeTests
 {
+	private static readonly Rope<int> EvenNumbers = Enumerable.Range(0, 2048).Where(i => i % 2 == 0).ToRope();
+
     [TestMethod]
     public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
 
@@ -110,4 +112,33 @@ public sealed class RopeTests
 	[TestMethod]
 	public void CreateVeryLargeRope() => Assert.IsTrue(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).SequenceEqual(new Rope<char>(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).ToArray())));
 
+	[TestMethod]
+	public void BinarySearchIntRopeLeftHalf() => Assert.AreEqual(5, EvenNumbers.BinarySearch(10));
+
+	[TestMethod]
+	public void BinarySearchIntRopeLeftHalfMissingGivesTwosComplementForInsertion() => Assert.AreEqual(6, ~EvenNumbers.BinarySearch(11));
+
+	[TestMethod]
+	public void BinarySearchIntRopeRightHalf() => Assert.AreEqual(1020 / 2, EvenNumbers.BinarySearch(1020));
+
+	[TestMethod]
+	public void BinarySearchIntRopeRightHalfMissingGivesTwosComplementForInsertion() => Assert.AreEqual((2021 / 2) + 1, ~EvenNumbers.BinarySearch(2021));
+
+	[TestMethod]
+	public void BinarySearchIntRopeLength() => Assert.AreEqual(1024, ~EvenNumbers.ToRope().BinarySearch(2048));
+
+	[TestMethod]
+	public void BinarySearchIntNegative() => Assert.AreEqual(-1, Enumerable.Range(0, 1024).ToRope().BinarySearch(-10));
+
+	[TestMethod]
+	public void InsertSortedEmpty() => Assert.IsTrue(Rope<int>.Empty.InsertSorted(1, Comparer<int>.Default).SequenceEqual(new[] { 1 }));
+
+	[TestMethod]
+	public void InsertSorted() => Assert.IsTrue(new[] { 0, 1, 3, 4, 5 }.ToRope().InsertSorted(2, Comparer<int>.Default).SequenceEqual(new[] { 0, 1, 2, 3, 4, 5 }));
+
+	[TestMethod]
+	public void InsertSortedStart() => Assert.IsTrue(new[] { 0, 1, 2, 3, 4, 5 }.ToRope().InsertSorted(-1, Comparer<int>.Default).SequenceEqual(new[] { -1, 0, 1, 2, 3, 4, 5 }));
+
+	[TestMethod]
+	public void InsertSortedEnd() => Assert.IsTrue(new[] { 0, 1, 2, 3, 4, 5 }.ToRope().InsertSorted(6, Comparer<int>.Default).SequenceEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }));
 }
