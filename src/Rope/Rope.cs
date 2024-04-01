@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -14,14 +15,23 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 {
 	public const int MaxTreeDepth = 46;
 
-	public const int MaxLeafLength = (32 * 1024) - 2;
+	public const int LargeObjectHeapBytes = 85_000 - 24;
 
+	/// <summary>
+	/// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
+	/// </summary>
+	public static readonly int MaxLeafLength = LargeObjectHeapBytes / Unsafe.SizeOf<T>();
+
+	// Defines the empty leaf.
 	public static readonly Rope<T> Empty = new Rope<T>();
 
 	private static readonly double phi = (1 + Math.Sqrt(5)) / 2;
 
 	private static readonly double phiDiv = (2 * phi - 1);
 
+	/// <summary>
+	/// Defines the minimum lengths the leaves should be in relation to the depth of the tree.
+	/// </summary>
 	private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, MaxTreeDepth).Select(d => Fibonnaci(d) + 2).ToArray();	
 
 	/// <summary>Left slice of the raw buffer</summary>
@@ -33,31 +43,37 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <summary>Data is the raw underlying buffer, or a cached copy of the ToMemory call (for efficiency).</summary>
 	private readonly ReadOnlyMemory<T> data;
 
+	/// <summary>
+	/// Creates a new instance of Rope{T}.
+	/// </summary>
 	public Rope()
 	{
+		// Empty rope is just a leaf node.
 		this.data = ReadOnlyMemory<T>.Empty;
 		this.Depth = 0;
 	}
 
+	/// <summary>
+	/// Creates a new instance of Rope{T}.
+	/// </summary>
+	/// <param name="data">The data to wrap in a leaf node.</param>
 	public Rope(ReadOnlyMemory<T> data)
 	{
-		// if (data.Length <= MaxLeafLength)
-		// {
-
-		// This is a leaf
+		// NOTE: Previously we would split the rope immediately, it has been determined through benchmarking that
+		// this is only really necessary when performing edits. In most cases it is best to just wrap the memory
+		// and then decide how to split that memory, based on the edit required.
+		
+		// Always initialize a leaf node when given memory directly.
 		this.data = data;
 		this.Depth = 0;
-		// }
-		// else
-		// {
-		// 	// This is a binary tree node
-		// 	var half = (int)data.Length / 2;
-		// 	this.left = new Rope<T>(data.Slice(0, half));
-		// 	this.right = new Rope<T>(data.Slice(half, data.Length - half));
-		// 	this.data = data;
-		// }
 	}
 
+	/// <summary>
+	/// Creates a new instance of Rope{T}.
+	/// </summary>
+	/// <param name="left">The left child node.</param>
+	/// <param name="right">The right child node.</param>
+	/// <exception cref="ArgumentNullException">Thrown if either the left or right node is null.</exception>
 	public Rope(Rope<T> left, Rope<T> right)
 	{
 		if (left == null)
@@ -112,20 +128,44 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	
 	public T this[int index] => this.ElementAt(index);
 
+	/// <summary>
+	/// Gets the left or prefix branch of the rope. May be null if this is a leaf node.
+	/// </summary>
 	public Rope<T>? Left => this.left;
 
+	/// <summary>
+	/// Gets the right or suffix branch of the rope. May be null if this is a leaf node.
+	/// </summary>
 	public Rope<T>? Right => this.right;
 
+	/// <summary>
+	/// Gets a value indicating whether this is a Node and Left and Right will be non-null, 
+	/// otherwise it is a leaf and just wraps a slice of read only memory.
+	/// </summary>
 	[MemberNotNullWhen(true, nameof(this.left))]
 	[MemberNotNullWhen(true, nameof(this.right))]
-	public bool IsNode => this.left != null && this.right != null;
+	[MemberNotNullWhen(true, nameof(this.Left))]
+	[MemberNotNullWhen(true, nameof(this.Right))]
+	public bool IsNode => this.Depth > 0;
 
 	public int Weight => this.left?.Length ?? this.data.Length;
 
+	/// <summary>
+	/// Gets the length of the rope in terms of the number of elements it contains.
+	/// </summary>
 	public int Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
 
+	/// <summary>
+	/// Gets the maximum depth of the tree, returns 0 if this is a leaf.
+	/// </summary>
 	public int Depth { get; }
 
+	/// <summary>
+	/// Gets the element at the specified index.
+	/// </summary>
+	/// <param name="index"></param>
+	/// <returns>The element at the specified index.</returns>
+	/// <exception cref="ArgumentOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
 	public T ElementAt(int index)
 	{
 		if (this.left == null) 
@@ -146,6 +186,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		throw new ArgumentOutOfRangeException(nameof(index));
 	}
 
+	/// <summary>
+	/// Gets an enumerable of slices of this rope, splitting by the given separator element.
+	/// </summary>
+	/// <param name="separator">The element to separate by, this element will never be included in the returned sequence.</param>
+	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
 	public IEnumerable<Rope<T>> Split(T separator)
 	{
 		Rope<T> remainder = this;
@@ -167,6 +212,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		while (i != -1);
 	}
 
+	/// <summary>
+	/// Gets an enumerable of slices of this rope, splitting by the given separator sequence.
+	/// </summary>
+	/// <param name="separator">The sequence of elements to separate by, this sequenece will never be included in the returned sequence.</param>
+	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
 	public IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator)
 	{
 		Rope<T> remainder = this;
@@ -188,6 +238,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		while (i != -1);
 	}
 
+	/// <summary>
+	/// Splits a rope in two to pieces a left and a right half at the specified index.
+	/// </summary>
+	/// <param name="i"></param>
+	/// <returns></returns>
 	public (Rope<T> Left, Rope<T> Right) SplitAt(int i)
 	{
 		if (this.IsNode)
@@ -215,29 +270,62 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return (new Rope<T>(this.data.Slice(0, i)), new Rope<T>(this.data.Slice(i)));
 	}
 
-	public Rope<T> Insert(int i, ReadOnlyMemory<T> s)
+	/// <summary>
+	/// Inserts a sequence of elements at the given index.
+	/// </summary>
+	/// <param name="index">The index to insert at.</param>
+	/// <param name="items">The items to insert at the given index.</param>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
+	public Rope<T> Insert(int index, ReadOnlyMemory<T> items)
 	{
-		return this.Insert(i, new Rope<T>(s));
+		return this.Insert(index, new Rope<T>(items));
 	}
 
-	public Rope<T> Insert(int i, Rope<T> s)
+	/// <summary>
+	/// Inserts a sequence of elements at the given index.
+	/// </summary>
+	/// <param name="index">The index to insert at.</param>
+	/// <param name="items">The items to insert at the given index.</param>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
+	public Rope<T> Insert(int index, Rope<T> items)
 	{
-		if (i > this.Length)
+		if (index > this.Length)
 		{
-			throw new ArgumentOutOfRangeException(nameof(i));
+			throw new ArgumentOutOfRangeException(nameof(index));
 		}
 
-		var (left, right) = this.SplitAt(i);
-		return new Rope<T>(left, new Rope<T>(s, right));
+		var (left, right) = this.SplitAt(index);
+		return new Rope<T>(left, new Rope<T>(items, right));
 	}
 
+	/// <summary>
+	/// Removes a subset of elements for a given range.
+	/// </summary>
+	/// <param name="start">The start index to remove from.</param>
+	/// <param name="length">The number of items to be removed.</param>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
 	public Rope<T> Remove(int start, int length)
 	{
+		if (length == 0)
+		{
+			return this;
+		}
+
 		return new Rope<T>(this.Slice(0, start), this.Slice(start + length));
 	}
 
+	/// <summary>
+	/// Removes a subset of elements for a given range.
+	/// </summary>
+	/// <param name="start">The start index to remove from.</param>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
 	public Rope<T> Remove(int start)
 	{
+		if (start == 0)
+		{
+			return this;
+		}
+
 		return this.Slice(start, this.Length - start);
 	}
 
@@ -275,7 +363,28 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
 	/// <summary>
-	/// Determines how unbalanced the ropes binary tree is and then rebalances if necessary.
+	/// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
+	/// </summary>
+	/// <returns>A balanced tree or the original rope if not out of range.</returns>
+	public Rope<T> Balanced()
+	{
+		if (!this.IsBalanced)
+		{
+			if (this.IsNode && this.Length > MaxLeafLength)
+			{
+				// Recursively balance if we are already very long.
+				return new Rope<T>(this.Left.Balanced(), this.Right.Balanced());
+			}
+			
+			// If short enough brute force rebalance into a leaf.
+			return new Rope<T>(this.ToMemory());
+		}
+
+		return this;
+	}
+
+	/// <summary>
+	/// Determines if this rope's binary tree is unbalanced.
 	/// </summary>
 	/// <remarks>
 	/// https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf
@@ -283,30 +392,16 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// | one plus the maximum depth of its children. Let Fn be the nth Fibonacci number.
 	/// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
 	/// | of depth 1 must have length at least 2.
-	/// 
-	/// MaxDepth is limited to 46 based on reasons.
 	//// </remarks>
-
-	/// <returns>A balanced tree or the original rope if not out of range.</returns>
-	public Rope<T> Balanced()
-	{
-		var balanced = this.Depth < DepthToFibonnaciPlusTwo.Length && this.Length > DepthToFibonnaciPlusTwo[this.Depth];
-		if (!balanced)
-		{
-			// Brute force rebalance, could be done faster.
-			return new Rope<T>(this.ToMemory());
-		}
-
-		return this;
-	}
+	public bool IsBalanced => this.IsNode ?
+		this.Depth < DepthToFibonnaciPlusTwo.Length ?
+			this.Length > DepthToFibonnaciPlusTwo[this.Depth] : 
+			this.Left.IsBalanced && this.Right.IsBalanced :
+		true;
 
 	private static int Fibonnaci(int n)
 	{
-		if (n > MaxTreeDepth)
-		{
-			// Overflow
-			return int.MaxValue;
-		}
+		n = Math.Min(n, MaxTreeDepth);
 
 		// Binet's Formula - https://en.wikipedia.org/wiki/Fibonacci_number#Closed-form_expression
 		return (int)((Math.Pow(phi, n) - Math.Pow(-phi, -n)) / phiDiv);
@@ -355,9 +450,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return n;
 	}
 
+	/// <summary>
+	/// Copies the rope into a new single contiguous array of elements.
+	/// </summary>
+	/// <returns>A new array filled with the .</returns>
 	public T[] ToArray()
 	{
-		if (this.left is null || this.right is null)
+		if (!this.IsNode)
 		{
 			return this.data.ToArray();
 		}
@@ -369,23 +468,33 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return result;
 	}
 	
+	/// <summary>
+	/// Copies the rope into the specified memory buffer.
+	/// </summary>
+	/// <param name="other">The target to copy to.</param>
 	public void CopyTo(Memory<T> other)
 	{
-		if (this.left is null || this.right is null)
-		{
-			// Leaf node so copy memory.
-			this.data.CopyTo(other);
-		}
-		else
+		if (this.IsNode)
 		{
 			// Binary tree so copy each half.
 			this.left.CopyTo(other);
 			this.right.CopyTo(other.Slice(this.left.Length));
 		}
+		else
+		{
+			// Leaf node so copy memory.
+			this.data.CopyTo(other);
+		}
 	}
 	
+	/// <summary>
+	/// Finds the index of a subset of the rope
+	/// </summary>
+	/// <param name="find"></param>
+	/// <returns></returns>
 	public int IndexOf(Rope<T> find)
 	{
+		// TODO: Improve this, performing a copy on search, this is very naive.
 		return this.IndexOf(find.ToMemory());
 	}
 

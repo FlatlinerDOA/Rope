@@ -32,9 +32,14 @@ Console.WriteLine(words.First().ToString());
 // Warning: Concatenating a string to a Rope<char> converts to a string (allocating memory).
 string text2 = text + " My second favourite text";
 
-// Better: This makes a new rope out of the other two ropes, no string allocations.
+// Better: This makes a new rope out of the other two ropes, no string allocations or copies.
 Rope<char> text3 = text + " My second favourite text".ToRope();
 
+// Value-like equivalence.
+"test".ToRope() == ("te".ToRope() + "st".ToRope());
+"test".ToRope().GetHashCode() == ("te".ToRope() + "st".ToRope()).GetHashCode();
+
+// 
 ```
 
 ## Comparison with StringBuilder
@@ -48,30 +53,39 @@ A comparison could be drawn between a Rope and a StringBuilder as they use a ver
 |Thread safe| ✅ |❌|
 |Copy free insertion| ✅ |✅|
 |Copy free splitting| ✅ |❌|
-|UTF8 strings| ✅ |❌|
+|UTF-8 strings (Rope&lt;byte&gt;)| ✅ |❌|
+|UTF-32 strings (Rope&lt;Rune&gt;)| ✅ |❌|
+|Structural invariant GetHashCode| ✅ |❌|
+|Structural invariant Equals| ✅ |❌|
 
 
 ### Performance and Memory Allocation Comparison
 
-Working with a string of length - 32644 characters. - MaxLeafLength = 64kb, Max Depth = 46
+Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max Depth = 46
 
-| Method                   | IterationCount | Mean             | Error           | StdDev          | Median           | Gen0       | Gen1       | Gen2       | Allocated   |
-|------------------------- |--------------- |-----------------:|----------------:|----------------:|-----------------:|-----------:|-----------:|-----------:|------------:|
-| StringBuilderAppend      | 10             |      35,464.3 ns |     1,236.52 ns |     3,607.00 ns |      34,138.1 ns |    42.9688 |    31.1890 |          - |    721160 B |
-| RopeAppend               | 10             |         909.4 ns |         4.22 ns |         3.74 ns |         909.2 ns |     0.0362 |          - |          - |       616 B |
-| StringBuilderInsert      | 10             |      23,586.3 ns |       569.68 ns |     1,661.79 ns |      23,441.0 ns |    42.9688 |    27.3438 |          - |    721160 B |
-| RopeInsert               | 10             |       1,912.5 ns |        19.74 ns |        18.46 ns |       1,915.3 ns |     0.1659 |          - |          - |      2800 B |
-| StringBuilderSplitConcat | 10             |      23,259.0 ns |       765.85 ns |     2,246.11 ns |      22,986.0 ns |    23.4680 |    11.7188 |          - |    393720 B |
-| RopeSplitConcat          | 10             |         627.5 ns |        12.46 ns |        21.16 ns |         625.0 ns |     0.2003 |          - |          - |      3360 B |
-| StringBuilderAppend      | 100            |     424,026.9 ns |    15,058.49 ns |    43,926.31 ns |     420,691.4 ns |   394.5313 |   382.3242 |          - |   6621560 B |
-| RopeAppend               | 100            |   3,788,876.6 ns |    69,073.37 ns |    64,611.27 ns |   3,795,896.9 ns |   496.0938 |   496.0938 |   496.0938 |  12644474 B |
-| StringBuilderInsert      | 100            |     402,212.6 ns |    11,030.96 ns |    32,002.81 ns |     399,662.2 ns |   394.5313 |   378.9063 |          - |   6621560 B |
-| RopeInsert               | 100            |     153,401.2 ns |       922.11 ns |       862.54 ns |     153,175.8 ns |     1.4648 |          - |          - |     28000 B |
-| StringBuilderSplitConcat | 100            |     182,440.9 ns |     3,226.08 ns |     2,859.84 ns |     182,958.8 ns |   199.9512 |    99.8535 |          - |   3347160 B |
-| RopeSplitConcat          | 100            |       5,903.0 ns |        34.10 ns |        31.89 ns |       5,903.3 ns |     2.0065 |          - |          - |     33600 B |
-| StringBuilderAppend      | 1000           |  23,812,058.1 ns |   463,404.49 ns |   799,349.98 ns |  23,832,889.1 ns |  5437.5000 |  5406.2500 |  1625.0000 |  65637636 B |
-| RopeAppend               | 1000           | 167,322,273.8 ns | 1,923,747.06 ns | 1,705,351.66 ns | 167,967,016.7 ns | 17666.6667 | 17666.6667 | 17666.6667 | 870805045 B |
-| StringBuilderInsert      | 1000           |  25,097,010.5 ns |   501,208.08 ns | 1,454,095.52 ns |  25,410,140.6 ns |  5437.5000 |  5406.2500 |  1625.0000 |  65627392 B |
-| RopeInsert               | 1000           |  14,747,672.0 ns |    31,837.03 ns |    29,780.37 ns |  14,743,734.4 ns |    15.6250 |          - |          - |    280006 B |
-| StringBuilderSplitConcat | 1000           |   1,413,954.7 ns |    14,469.64 ns |    11,296.95 ns |   1,411,454.4 ns |  1962.8906 |   494.1406 |   125.0000 |  32881603 B |
-| RopeSplitConcat          | 1000           |      59,257.5 ns |       813.76 ns |       721.38 ns |      59,193.0 ns |    20.0806 |          - |          - |    336000 B |
+| Method                            | Edits | Mean                 | Error             | StdDev            | Gen0      | Gen1      | Gen2      | Allocated  |
+|---------------------------------- |--------------- |---------------------:|------------------:|------------------:|----------:|----------:|----------:|-----------:|
+| **StringBuilderConstructionOverhead** | **10**             |             **7.809 ns** |         **0.0550 ns** |         **0.0515 ns** |    **0.0062** |         **-** |         **-** |      **104 B** |
+| RopeConstructionOverhead          | 10             |             3.859 ns |         0.0901 ns |         0.1073 ns |    0.0033 |         - |         - |       56 B |
+| StringBuilderAppend               | 10             |        40,534.935 ns |       810.3675 ns |     2,148.9796 ns |   42.9688 |   31.1890 |         - |   721160 B |
+| RopeAppend                        | 10             |           317.650 ns |         1.3256 ns |         1.2399 ns |    0.0367 |         - |         - |      616 B |
+| StringBuilderInsert               | 10             |        43,459.897 ns |     1,221.2060 ns |     3,600.7536 ns |   42.9688 |   27.3438 |         - |   721160 B |
+| RopeInsert                        | 10             |           781.521 ns |         9.3612 ns |         8.7565 ns |    0.1669 |         - |         - |     2800 B |
+| StringBuilderSplitConcat          | 10             |        28,432.049 ns |       416.0166 ns |       324.7984 ns |   23.4680 |   11.7188 |         - |   393720 B |
+| RopeSplitConcat                   | 10             |           493.856 ns |         4.8706 ns |         4.3176 ns |    0.2003 |         - |         - |     3360 B |
+| **StringBuilderConstructionOverhead** | **100**            |             **7.938 ns** |         **0.1647 ns** |         **0.1540 ns** |    **0.0062** |         **-** |         **-** |      **104 B** |
+| RopeConstructionOverhead          | 100            |             3.956 ns |         0.0993 ns |         0.1220 ns |    0.0033 |         - |         - |       56 B |
+| StringBuilderAppend               | 100            |       454,065.647 ns |    16,428.4540 ns |    48,439.6672 ns |  394.5313 |  382.3242 |         - |  6621560 B |
+| RopeAppend                        | 100            |       957,533.053 ns |     9,832.7415 ns |     9,197.5525 ns |    7.8125 |         - |         - |   144816 B |
+| StringBuilderInsert               | 100            |       515,805.869 ns |    12,467.5560 ns |    36,368.4461 ns |  394.5313 |  378.9063 |         - |  6621560 B |
+| RopeInsert                        | 100            |        50,168.761 ns |       136.7082 ns |       127.8769 ns |    1.6479 |         - |         - |    28000 B |
+| StringBuilderSplitConcat          | 100            |       248,479.532 ns |     5,598.8172 ns |    16,508.2389 ns |  199.7070 |   99.6094 |         - |  3347160 B |
+| RopeSplitConcat                   | 100            |         5,015.996 ns |        98.0012 ns |       143.6490 ns |    2.0065 |         - |         - |    33600 B |
+| **StringBuilderConstructionOverhead** | **1000**           |             **8.208 ns** |         **0.1241 ns** |         **0.1100 ns** |    **0.0062** |         **-** |         **-** |      **104 B** |
+| RopeConstructionOverhead          | 1000           |             3.755 ns |         0.0921 ns |         0.1983 ns |    0.0033 |         - |         - |       56 B |
+| StringBuilderAppend               | 1000           |    23,822,775.472 ns |   474,466.0536 ns |   879,453.2527 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65637900 B |
+| RopeAppend                        | 1000           | 1,475,919,300.000 ns | 2,928,700.4503 ns | 2,596,216.6654 ns | 1000.0000 |         - |         - | 26428816 B |
+| StringBuilderInsert               | 1000           |    24,622,036.938 ns |   551,434.5412 ns | 1,625,917.1864 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65627902 B |
+| RopeInsert                        | 1000           |     6,350,752.604 ns |    92,691.0537 ns |    86,703.2692 ns |   15.6250 |         - |         - |   280003 B |
+| StringBuilderSplitConcat          | 1000           |     1,990,366.980 ns |    56,738.8359 ns |   167,295.7379 ns | 1962.8906 |  494.1406 |  125.0000 | 32881603 B |
+| RopeSplitConcat                   | 1000           |        54,579.363 ns |       872.4714 ns |       773.4232 ns |   20.0806 |         - |         - |   336000 B |

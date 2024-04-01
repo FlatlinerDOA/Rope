@@ -10,6 +10,8 @@ using System.Linq;
 public sealed class RopeTests
 {
 	private static readonly Rope<int> EvenNumbers = Enumerable.Range(0, 2048).Where(i => i % 2 == 0).ToRope();
+	
+	private static readonly Rope<char> LargeText = Enumerable.Range(0, 32 * 1024).Select(i => (char)(36 + i % 24)).ToRope();
 
     [TestMethod]
     public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
@@ -145,4 +147,22 @@ public sealed class RopeTests
 
 	[TestMethod]
 	public void InsertSortedEnd() => Assert.IsTrue(new[] { 0, 1, 2, 3, 4, 5 }.ToRope().InsertSorted(6, Comparer<int>.Default).SequenceEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }));
+
+	[TestMethod]
+	public void StructuralHashCodeEquivalence() => Assert.AreEqual("test".ToRope().GetHashCode(), ("te".ToRope() + "st".ToRope()).GetHashCode());
+
+	[TestMethod]
+	public void StructuralEqualsEquivalence() => Assert.AreEqual("test".ToRope(), "te".ToRope() + "st".ToRope());
+
+	[TestMethod]
+	public void LargeAppend()
+	{
+		var s = new Rope<char>();
+		for (int i = 0; i < 1000; i++)
+		{
+			s += LargeText;
+		}
+
+		Assert.AreEqual(s.Length,  LargeText.Length * 1000);
+	}
 }

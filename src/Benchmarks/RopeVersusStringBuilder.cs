@@ -1,13 +1,12 @@
 ﻿using System;
-using System.Runtime.Intrinsics.X86;
 using System.Text;
-using BenchmarkDotNet;
 using BenchmarkDotNet.Attributes;
 using Rope;
+
 namespace Benchmarks
 {
     [MemoryDiagnoser]
-    public class StringBuilderVersusRope
+    public class RopeVersusStringBuilder
     {
         public const string LoremIpsum = """
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc quis elit felis. Aenean efficitur pellentesque eros, vel pretium metus tempor a. Pellentesque volutpat mauris mi, ut tempor quam pretium ut. Quisque varius luctus congue. Nullam rutrum ante non erat finibus consequat. Vivamus congue nisi eget metus elementum consequat. Praesent aliquam efficitur sem eu lobortis. Nunc interdum turpis vitae nulla egestas malesuada. Quisque eu sapien ornare, dignissim nisl nec, feugiat dui. Curabitur ullamcorper pulvinar dui, at tempus ligula pretium scelerisque. Suspendisse convallis sollicitudin risus, porttitor molestie felis condimentum nec. Cras egestas ante ac ex placerat, at volutpat dui sollicitudin.
@@ -112,8 +111,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
 """;
 
         [Params(10, 100, 1000)]
-        public int IterationCount;
-
+        public int EditCount;
 
         [Benchmark]
         public void StringBuilderConstructionOverhead()
@@ -131,7 +129,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         public void StringBuilderAppend()
         {
             var s = new StringBuilder(LoremIpsum);
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s.Append(LoremIpsum);
             }
@@ -144,7 +142,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         {
             var lorem = LoremIpsum.ToRope();
             var s = lorem;
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s += lorem;
             }
@@ -156,7 +154,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         public void StringBuilderInsert()
         {
             var s = new StringBuilder(LoremIpsum);
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s.Insert(321, LoremIpsum);
             }
@@ -169,7 +167,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         {
             var lorem = LoremIpsum.ToRope();
             var s = lorem;
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s = s.Insert(321, lorem);
             }
@@ -181,7 +179,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         public void StringBuilderSplitConcat()
         {
             var s = new StringBuilder(LoremIpsum);
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s.Remove(321, s.Length - 322); //  =  new StringBuilder(s.ToString()[..321]);
                 s.Append(LoremIpsum);
@@ -195,7 +193,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         {
             var lorem = LoremIpsum.ToRope();
             var s = lorem;
-            for (int i = 0; i < IterationCount; i++)
+            for (int i = 0; i < EditCount; i++)
             {
                 s = s[..321];
                 s = s + lorem;
