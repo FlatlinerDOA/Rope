@@ -494,9 +494,102 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <returns></returns>
 	public int IndexOf(Rope<T> find)
 	{
-		// TODO: Improve this, performing a copy on search, this is very naive.
-		return this.IndexOf(find.ToMemory());
+		if (this.IsNode)
+		{
+			// We may have a fun boundary condition here. 
+			var comparer = EqualityComparer<T>.Default;
+			if (find.IsNode)
+			{
+				// Try and find in left half
+				var index = this.left.IndexOf(find);
+				if (index != -1)
+				{
+					return index;
+				}
+
+				var startIndex = Math.Max(0, this.left.Length + 1 - find.Length);
+
+				// Check in the 'left' array for a starting match that could spill over to 'right'
+				for (int i = startIndex; i < left.Length; i++)
+				{
+					bool match = true;
+					for (int j = 0; j < find.Length && match; j++)
+					{
+						if (i + j < left.Length)
+						{
+							match = comparer.Equals(this.left[i + j], find[j]);
+						}
+						else
+						{
+							match = comparer.Equals(this.right[i + j - left.Length], find[j]);
+						}
+					}
+
+					if (match)
+					{
+						return i;
+					}
+				}
+
+
+				index = this.right.IndexOf(find);
+				if (index != -1)
+				{
+					return this.left.Length + index;
+				}
+				
+				return -1;
+			}
+
+			// This is a node, but leaf is memory, we have to go element by element.
+			ReadOnlySpan<T> findSpan = find.data.Span;
+			
+			// Check in the 'left' array for a starting match that could spill over to 'right'
+			for (int i = 0; i < this.left.Length; i++)
+			{
+				bool match = true;
+				for (int j = 0; j < findSpan.Length && match; j++)
+				{
+					if (i + j < left.Length)
+					{
+						match = comparer.Equals(this.left[i + j], findSpan[j]);
+					}
+					else
+					{
+						match = comparer.Equals(this.right[i + j - left.Length], findSpan[j]);
+					}
+				}
+
+				if (match)
+				{
+					return i;
+				}
+			}
+
+			// Check in the 'right' array, but only if the 'find' can be fully contained within 'right'
+			for (int i = 0; i <= right.Length - findSpan.Length; i++)
+			{
+				bool match = true;
+				for (int j = 0; j < find.Length; j++)
+				{
+					match = match && comparer.Equals(right[i + j], find[j]);
+				}
+
+				if (match)
+				{
+					return this.left.Length + i;
+				}
+			}
+
+			// Indicate that no match was found
+			return -1;
+		}
+		else 
+		{
+			return this.data.Span.IndexOf(find.data.Span);
+		}
 	}
+
 
 	public int IndexOf(Rope<T> find, int offset)
 	{
@@ -599,11 +692,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 		if (this.IsNode || find.IsNode)
 		{
+			var comparer = EqualityComparer<T>.Default;
 			var fend = find.Length - 1; // End position of find.
 			var matched = false;
-			for (int i = (this.Length - 1) - offset; i >= 0; i--)
+			var start = this.Length - 1 - offset;
+			for (int i = start; i >= 0; i--)
 			{
-				if (find[fend].Equals(this[i]))
+				if (comparer.Equals(this[i], find[fend]))
 				{
 					matched = true;
 					fend--;

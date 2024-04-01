@@ -23,6 +23,12 @@ public sealed class RopeTests
 	public void IndexOf() => Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
 
 	[TestMethod]
+	public void IndexOfInOverlap() => Assert.AreEqual(4, ("abcdef".ToRope() + "ghijklm".ToRope()).IndexOf("efgh".ToRope()));
+
+	[TestMethod]
+	public void IndexOfInRight() => Assert.AreEqual(6, ("abcdef".ToRope() + "ghijklm".ToRope()).IndexOf("ghi".ToRope()));
+
+	[TestMethod]
 	public void IndexOfAfter() => Assert.AreEqual("abc abc".IndexOf('c', 3), "abc abc".ToRope().IndexOf('c', 3));
 
 	[TestMethod]
