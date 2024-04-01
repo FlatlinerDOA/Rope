@@ -5,7 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
@@ -13,7 +12,9 @@ using System.Diagnostics.CodeAnalysis;
 /// </summary>
 public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 {
-	public const int MaxLeafLength = 1024;
+	public const int MaxTreeDepth = 46;
+
+	public const int MaxLeafLength = (32 * 1024) - 2;
 
 	public static readonly Rope<T> Empty = new Rope<T>();
 
@@ -21,7 +22,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	private static readonly double phiDiv = (2 * phi - 1);
 
-	private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, 46).Select(d => Fibonnaci(d) + 2).ToArray();	
+	private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, MaxTreeDepth).Select(d => Fibonnaci(d) + 2).ToArray();	
 
 	/// <summary>Left slice of the raw buffer</summary>
 	private readonly Rope<T>? left;
@@ -35,23 +36,26 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public Rope()
 	{
 		this.data = ReadOnlyMemory<T>.Empty;
+		this.Depth = 0;
 	}
 
 	public Rope(ReadOnlyMemory<T> data)
 	{
-		if (data.Length <= MaxLeafLength)
-		{
-			// This is a leaf
-			this.data = data;
-		}
-		else
-		{
-			// This is a binary tree node
-			var half = (int)data.Length / 2;
-			this.left = new Rope<T>(data.Slice(0, half));
-			this.right = new Rope<T>(data.Slice(half, data.Length - half));
-			this.data = data;
-		}
+		// if (data.Length <= MaxLeafLength)
+		// {
+
+		// This is a leaf
+		this.data = data;
+		this.Depth = 0;
+		// }
+		// else
+		// {
+		// 	// This is a binary tree node
+		// 	var half = (int)data.Length / 2;
+		// 	this.left = new Rope<T>(data.Slice(0, half));
+		// 	this.right = new Rope<T>(data.Slice(half, data.Length - half));
+		// 	this.data = data;
+		// }
 	}
 
 	public Rope(Rope<T> left, Rope<T> right)
@@ -72,11 +76,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			if (!left.IsNode)
 			{
 				this.data = left.data;
+				this.Depth = 0;
 			}
 			else
 			{
 				this.left = left.left;
-				this.right = left.right;			
+				this.right = left.right;
+				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
 			}
 		}
 		else if (left.Length == 0)
@@ -84,19 +90,24 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			if (!right.IsNode)
 			{
 				this.data = right.data;
+				this.Depth = 0;
 			}
 			else
 			{
 				this.left = right.left;
 				this.right = right.right;
+				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
 			}
+
 		}
 		else
 		{
 			this.left = left;
 			this.right = right;
 			this.data = ReadOnlyMemory<T>.Empty;
+			this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
 		}
+
 	}
 	
 	public T this[int index] => this.ElementAt(index);
@@ -113,7 +124,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public int Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
 
-	public int Depth => this.IsNode ? Math.Max(this.left.Depth, this.right.Depth) + 1 : 0;
+	public int Depth { get; }
 
 	public T ElementAt(int index)
 	{
@@ -279,7 +290,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <returns>A balanced tree or the original rope if not out of range.</returns>
 	public Rope<T> Balanced()
 	{
-		var balanced = this.Depth <= 46 && this.Length > DepthToFibonnaciPlusTwo[this.Depth];
+		var balanced = this.Depth < DepthToFibonnaciPlusTwo.Length && this.Length > DepthToFibonnaciPlusTwo[this.Depth];
 		if (!balanced)
 		{
 			// Brute force rebalance, could be done faster.
@@ -291,7 +302,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	private static int Fibonnaci(int n)
 	{
-		if (n > 46)
+		if (n > MaxTreeDepth)
 		{
 			// Overflow
 			return int.MaxValue;
@@ -351,10 +362,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return this.data.ToArray();
 		}
 
-		var sb = new T[this.left.Length + this.right.Length];
-		this.left.CopyTo(sb.AsMemory());
-		this.right.CopyTo(sb.AsMemory().Slice(this.left.Length));
-		return sb;
+		// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
+		var result =  GC.AllocateUninitializedArray<T>(this.left.Length + this.right.Length);  
+		this.left.CopyTo(result.AsMemory());
+		this.right.CopyTo(result.AsMemory().Slice(this.left.Length));
+		return result;
 	}
 	
 	public void CopyTo(Memory<T> other)

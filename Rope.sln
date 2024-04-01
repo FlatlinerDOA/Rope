@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope", "src\Rope\Rope.cspro
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope.UnitTests", "src\Rope.UnitTests\Rope.UnitTests.csproj", "{35153F9F-F594-47B3-AB3F-D6BC42C769F7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "src\Benchmarks\Benchmarks.csproj", "{F120DA12-DA4F-4CD0-B822-0277D15277B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,9 +28,14 @@ Global
 		{35153F9F-F594-47B3-AB3F-D6BC42C769F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{35153F9F-F594-47B3-AB3F-D6BC42C769F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{35153F9F-F594-47B3-AB3F-D6BC42C769F7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F120DA12-DA4F-4CD0-B822-0277D15277B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F120DA12-DA4F-4CD0-B822-0277D15277B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F120DA12-DA4F-4CD0-B822-0277D15277B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F120DA12-DA4F-4CD0-B822-0277D15277B0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{3CE3DF51-C1BD-4064-A139-571F00171DEB} = {CD854E5F-2FC7-4116-9508-740030F5E97D}
 		{35153F9F-F594-47B3-AB3F-D6BC42C769F7} = {CD854E5F-2FC7-4116-9508-740030F5E97D}
+		{F120DA12-DA4F-4CD0-B822-0277D15277B0} = {CD854E5F-2FC7-4116-9508-740030F5E97D}
 	EndGlobalSection
 EndGlobal

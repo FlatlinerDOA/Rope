@@ -91,13 +91,17 @@ public sealed class RopeTests
 
 	[TestMethod]
 	[ExpectedException(typeof(ArgumentNullException))]
-	public void ArgumentNullLeft() => new Rope<char>(null, Rope<char>.Empty);	
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+    public void ArgumentNullLeft() => new Rope<char>(null, Rope<char>.Empty);
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
-	[TestMethod]
+    [TestMethod]
 	[ExpectedException(typeof(ArgumentNullException))]
-	public void ArgumentNullRight() => new Rope<char>(Rope<char>.Empty, null);	
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+    public void ArgumentNullRight() => new Rope<char>(Rope<char>.Empty, null);
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
-	[TestMethod]
+    [TestMethod]
 	public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
 
 	[TestMethod]
