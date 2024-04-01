@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Diagnostics.Metrics;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -89,41 +90,46 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		
 		if (right.Length == 0)
 		{
-			if (!left.IsNode)
-			{
-				this.data = left.data;
-				this.Depth = 0;
-			}
-			else
-			{
-				this.left = left.left;
-				this.right = left.right;
-				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
-			}
-		}
+            if (left.IsNode)
+            {
+                this.left = left.left;
+                this.right = left.right;
+                this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+            }
+            else
+            {
+                this.data = left.data;
+                this.Depth = 0;
+            }
+        }
 		else if (left.Length == 0)
 		{
-			if (!right.IsNode)
-			{
-				this.data = right.data;
-				this.Depth = 0;
-			}
-			else
-			{
-				this.left = right.left;
-				this.right = right.right;
-				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
-			}
-
-		}
+            if (right.IsNode)
+            {
+                this.left = right.left;
+                this.right = right.right;
+                this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+            }
+            else
+            {
+                this.data = right.data;
+                this.Depth = 0;
+            }
+        }
 		else
 		{
+			this.data = ReadOnlyMemory<T>.Empty;
 			this.left = left;
 			this.right = right;
-			this.data = ReadOnlyMemory<T>.Empty;
-			this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+			this.Depth = Math.Max(left.Depth, right.Depth) + 1;
+			// if (newDepth > MaxTreeDepth)
+			// {
+			// 	// This is the only point at which we are actually increasing the depth beyond the limit, this is where a re-balance may be necessary.
+			// 	this.left = left.Balanced();
+			// 	this.right = right.Balanced();
+			// 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
+			// }
 		}
-
 	}
 	
 	public T this[int index] => this.ElementAt(index);
@@ -148,6 +154,9 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	[MemberNotNullWhen(true, nameof(this.Right))]
 	public bool IsNode => this.Depth > 0;
 
+	/// <summary>
+	/// Gets the length of the left Node if this is a node (the split-point essentially), otherwise the length of the data. 
+	/// </summary>
 	public int Weight => this.left?.Length ?? this.data.Length;
 
 	/// <summary>
@@ -168,22 +177,22 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <exception cref="ArgumentOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
 	public T ElementAt(int index)
 	{
-		if (this.left == null) 
+		if (this.IsNode)
 		{
-			return this.data.Slice(index).Span[0];
-		}
-		
-		if (this.Weight <= index && this.right is not null && this.right.Length != 0)
-		{
-			return this.right.ElementAt(index - this.Weight);
+			if (this.Weight <= index && this.right.Length != 0)
+			{
+				return this.right.ElementAt(index - this.Weight);
+			}
+
+			if (this.left.Length != 0)
+			{
+				return this.left.ElementAt(index);
+			}
+
+			throw new ArgumentOutOfRangeException(nameof(index));
 		}
 
-		if (this.left is not null && this.left.Length != 0)
-		{
-			return this.left.ElementAt(index);
-		}
-
-		throw new ArgumentOutOfRangeException(nameof(index));
+		return this.data.Span[index];
 	}
 
 	/// <summary>
@@ -341,7 +350,12 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return source;
 		}
 
-		return new Rope<T>(this, source).Balanced();
+		if (this.Depth >= MaxTreeDepth)
+		{
+			return new Rope<T>(this.Balanced(), source);
+		}
+		
+		return new Rope<T>(this, source);
 	}
 
 	public Rope<T> Slice(int start)
@@ -362,6 +376,10 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public static implicit operator Rope<T> (ReadOnlySpan<T> a) => new Rope<T>(a.ToArray());
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
+  	private static readonly Meter meter = new Meter("rope");
+
+    private static readonly Counter<int> rebalances = meter.CreateCounter<int>($"rope.{typeof(T).Name}.rebalances");
+
 	/// <summary>
 	/// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
 	/// </summary>
@@ -370,6 +388,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	{
 		if (!this.IsBalanced)
 		{
+			rebalances.Add(1);
 			if (this.IsNode && this.Length > MaxLeafLength)
 			{
 				// Recursively balance if we are already very long.
@@ -395,7 +414,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	//// </remarks>
 	public bool IsBalanced => this.IsNode ?
 		this.Depth < DepthToFibonnaciPlusTwo.Length ?
-			this.Length > DepthToFibonnaciPlusTwo[this.Depth] : 
+			this.Length >= DepthToFibonnaciPlusTwo[this.Depth] : 
 			this.Left.IsBalanced && this.Right.IsBalanced :
 		true;
 
@@ -456,16 +475,17 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <returns>A new array filled with the .</returns>
 	public T[] ToArray()
 	{
-		if (!this.IsNode)
+		if (this.IsNode)
 		{
-			return this.data.ToArray();
+			// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
+			var result = GC.AllocateUninitializedArray<T>(this.left.Length + this.right.Length);
+			var mem = result.AsMemory();
+			this.left.CopyTo(mem);
+			this.right.CopyTo(mem.Slice(this.left.Length));
+			return result;
 		}
 
-		// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
-		var result =  GC.AllocateUninitializedArray<T>(this.left.Length + this.right.Length);  
-		this.left.CopyTo(result.AsMemory());
-		this.right.CopyTo(result.AsMemory().Slice(this.left.Length));
-		return result;
+		return this.data.ToArray();
 	}
 	
 	/// <summary>
@@ -869,12 +889,12 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public ReadOnlyMemory<T> ToMemory()
 	{
-		if (this.left == null)
+		if (this.IsNode)
 		{
-			return this.data;
+			return this.ToArray().AsMemory();
 		}
 		
-		return this.ToArray().AsMemory();
+		return this.data;
 	}
 
 	public bool Equals(Rope<T>? other)
@@ -889,22 +909,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return false;
 		}
 		
-		if (this.left == null && other.left == null)
-		{
-			return this.data.Span.IndexOf(other.data.Span) == 0 && this.data.Length == other.data.Length;
-		}
-		else
-		{
-			for (int i = 0; i < this.Length; i++)
-			{
-				if (!this.ElementAt(i).Equals(other.ElementAt(i)))
-				{
-					return false;
-				}
-			}
-		}
-		
-		return true;
+		return this.IndexOf(other) == 0;
 	}
 	
 	public override int GetHashCode()
