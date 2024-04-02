@@ -46,6 +46,9 @@ public sealed class RopeTests
 	public void IndexOf() => Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
 
 	[TestMethod]
+	public void IndexOfRopeAfter() => Assert.AreEqual("abc abc".IndexOf("bc", 2), "abc abc".ToRope().IndexOf("bc".ToRope(), 2));
+
+	[TestMethod]
 	public void IndexOfInOverlap() => Assert.AreEqual(4, ("abcdef".ToRope() + "ghijklm".ToRope()).IndexOf("efgh".ToRope()));
 
 	[TestMethod]
@@ -55,7 +58,13 @@ public sealed class RopeTests
 	public void IndexOfAfter() => Assert.AreEqual("abc abc".IndexOf('c', 3), "abc abc".ToRope().IndexOf('c', 3));
 
 	[TestMethod]
-	public void ConcattedIndexOf() => Assert.AreEqual("abc abc".IndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).IndexOf("bc".AsMemory(), 2));
+	public void ConcattedIndexOf() => Assert.AreEqual("abc def".IndexOf('d'), ("ab".ToRope() + "c def".ToRope()).IndexOf('d'));
+
+	[TestMethod]
+	public void ConcattedIndexOfMemory() => Assert.AreEqual("abc abc".IndexOf("bc "), ("ab".ToRope() + "c abc".ToRope()).IndexOf("bc ".AsMemory()));
+
+	[TestMethod]
+	public void ConcattedIndexOfAfter() => Assert.AreEqual("abc abc".IndexOf("bc ", 1), ("ab".ToRope() + "c abc".ToRope()).IndexOf("bc ".AsMemory(), 1));
 
 	[TestMethod]
 	public void EndsWith() => Assert.IsTrue("n".ToRope().EndsWith("n".ToRope()));
@@ -74,6 +83,9 @@ public sealed class RopeTests
 
 	[TestMethod]
 	public void StartsWith() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".ToRope()));
+
+	[TestMethod]
+	public void StartsWithMemory() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".AsMemory()));
 
 	[TestMethod]
 	public void NotStartsWith() => Assert.IsFalse("dabcd".ToRope().StartsWith("ab".ToRope()));
@@ -154,6 +166,43 @@ public sealed class RopeTests
 		var b = "I'm sorry Dave, I can't do that.".ToRope();
 		Assert.AreEqual("I'm sorry Dave, I can't do that.".Length, a.CommonSuffixLength(b));
 	}
+
+	[TestMethod]
+	public void ReplaceElement()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();		
+		Assert.AreEqual("I'm_sorry_Dave,_I_can't_do_that.", a.Replace(' ', '_').ToString());
+	}
+
+	[TestMethod]
+	public void RemoveZeroLengthDoesNothing()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
+		Assert.AreSame(a, a.Remove(10, 0));
+	}
+
+	[TestMethod]
+	public void RemoveAtTailDoesNothing()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
+		Assert.AreSame(a, a.Remove(a.Length));
+	}
+
+	[TestMethod]
+	[ExpectedException(typeof(ArgumentOutOfRangeException))]
+	public void RemoveBeyondTailArgumentOutOfRangeException()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
+		Assert.AreSame(a, a.Remove(a.Length + 1));
+	}
+
+	[TestMethod]
+	[ExpectedException(typeof(IndexOutOfRangeException))]
+    public void EmptyElementAtIndexOutOfRangeException() => Rope<char>.Empty.ElementAt(0);
+
+	[TestMethod]
+	[ExpectedException(typeof(IndexOutOfRangeException))]
+    public void PartitionedElementAtIndexOutOfRangeException() => ("abc".ToRope() + "def".ToRope()).ElementAt(6);
 
 	[TestMethod]
 	[ExpectedException(typeof(ArgumentNullException))]

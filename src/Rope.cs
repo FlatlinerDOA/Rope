@@ -214,7 +214,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="index"></param>
 	/// <returns>The element at the specified index.</returns>
-	/// <exception cref="ArgumentOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
+	/// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
 	public T ElementAt(int index)
 	{
 		if (this.IsNode)
@@ -229,7 +229,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 				return this.left.ElementAt(index);
 			}
 
-			throw new ArgumentOutOfRangeException(nameof(index));
+			throw new IndexOutOfRangeException(nameof(index));
 		}
 
 		return this.data.Span[index];
@@ -289,7 +289,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <summary>
 	/// Splits a rope in two to pieces a left and a right half at the specified index.
 	/// </summary>
-	/// <param name="i"></param>
+	/// <param name="i">The index to split the two halves at.</param>
+	/// <exception cref="ArgumentOutOfRangeException">Thrown if index to split at is out of range.</exception>
 	/// <returns></returns>
 	public (Rope<T> Left, Rope<T> Right) SplitAt(int i)
 	{
@@ -339,7 +340,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	{
 		if (index > this.Length)
 		{
-			throw new ArgumentOutOfRangeException(nameof(index));
+			throw new IndexOutOfRangeException(nameof(index));
 		}
 
 		var (left, right) = this.SplitAt(index);
@@ -351,12 +352,18 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="start">The start index to remove from.</param>
 	/// <param name="length">The number of items to be removed.</param>
+	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
 	public Rope<T> Remove(int start, int length)
 	{
 		if (length == 0)
 		{
 			return this;
+		}
+
+		if (start == 0 && length == this.Length)
+		{
+			return Empty;
 		}
 
 		return new Rope<T>(this.Slice(0, start), this.Slice(start + length));
@@ -366,8 +373,17 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// Removes the tail range of elements from a given starting index (Alias for Slice).
 	/// </summary>
 	/// <param name="start">The start index to remove from.</param>
+	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	public Rope<T> Remove(int start) => this.Slice(start, this.Length - start);
+	public Rope<T> Remove(int start)
+	{
+		if (start == this.Length) 
+		{
+			return this;
+		}
+
+		return this.Slice(start, this.Length - start);	
+	}
 
 	/// <summary>
 	/// Concatenates two sequences together into a single sequence.
@@ -690,30 +706,18 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public int IndexOf(ReadOnlyMemory<T> find)
+	public int IndexOf(ReadOnlyMemory<T> find) 
 	{
 		if (this.IsNode)
 		{
-			// Node
-			var i = this.left.IndexOf(find);
-			if (i != -1)
-			{
-				return i;
-			}
-
-			i = this.right.IndexOf(find);
-			if (i != -1)
-			{
-				return this.left.Length + i;
-			}
+			// Use the complicated logic.
+			return this.IndexOf(new Rope<T>(find));
 		}
 		else
 		{
-			// Leaf
+			// Leaf is quick and easy.
 			return this.data.Span.IndexOf(find.Span);
 		}
-		
-		return -1;
 	}
 
 	public int IndexOf(T find)
