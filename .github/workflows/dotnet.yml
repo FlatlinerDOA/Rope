@@ -27,7 +27,7 @@ jobs:
       run: dotnet test --no-build --verbosity normal
     - name: Package for Nuget
       run: dotnet pack
-    - name: Publish Nuget to GitHub registry
-      run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+    #- name: Publish Nuget to GitHub registry
+    #  run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
+    #  env:
+    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
