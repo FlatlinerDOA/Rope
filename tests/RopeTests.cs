@@ -3,7 +3,6 @@ namespace Rope.UnitTests;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using System.Linq;
 
 [TestClass]
@@ -12,6 +11,30 @@ public sealed class RopeTests
 	private static readonly Rope<int> EvenNumbers = Enumerable.Range(0, 2048).Where(i => i % 2 == 0).ToRope();
 	
 	private static readonly Rope<char> LargeText = Enumerable.Range(0, 32 * 1024).Select(i => (char)(36 + i % 24)).ToRope();
+
+	[TestMethod]
+    public void ElementIndexerBeforeBreak() => Assert.AreEqual("this is a test"[3], ("this".ToRope() + " is a test.".ToRope())[3]);
+
+	[TestMethod]
+    public void ElementIndexerAfterBreak() => Assert.AreEqual("this is a test"[4], ("this".ToRope() + " is a test.".ToRope())[4]);
+
+	[TestMethod]
+    public void RangeIndexer() => Assert.AreEqual("this is a test."[3..8].ToRope(), ("this".ToRope() + " is a test.".ToRope())[3..8]);
+
+	[TestMethod]
+    public void RangeEndIndexer() => Assert.AreEqual("this is a test."[3..^3].ToRope(), ("this".ToRope() + " is a test.".ToRope())[3..^3]);
+
+    [TestMethod]
+    public void SplitBySingleElement() => Assert.IsTrue("this is a test of the things I split by.".ToRope().Split(' ').Select(c => c.ToString()).SequenceEqual("this is a test of the things I split by.".Split(' ')));
+
+    [TestMethod]
+    public void SplitBySingleElementNotFound() => Assert.IsTrue("this is a test of the things I split by.".ToRope().Split('_').Select(c => c.ToString()).SequenceEqual(new[] { "this is a test of the things I split by." }));
+
+    [TestMethod]
+    public void SplitBySingleElementAtEnd() => Assert.IsTrue("this is a test of the things I split by.".ToRope().Split('.').Select(c => c.ToString()).SequenceEqual("this is a test of the things I split by.".Split('.')));
+
+    [TestMethod]
+    public void SplitBySequence() => Assert.IsTrue("this  is  a  test  of  the  things  I  split  by.".ToRope().Split("  ".AsMemory()).Select(c => c.ToString()).SequenceEqual("this  is  a  test  of  the  things  I  split  by.".Split("  ")));
 
     [TestMethod]
     public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
@@ -74,6 +97,9 @@ public sealed class RopeTests
 	public void ConcatAndEnumerateChars() => Assert.IsTrue(("The ghosts say ".ToRope() + "boo dee boo".ToRope()).SequenceEqual("The ghosts say boo dee boo"));
 
 	[TestMethod]
+	public void ConcatAndEnumerateObjects() => Assert.IsTrue(((IEnumerable)("The ghosts say ".ToRope() + "boo dee boo".ToRope())).Cast<char>().SequenceEqual("The ghosts say boo dee boo"));
+
+	[TestMethod]
 	public void ImplicitFromArray()
 	{
 		var chars = new[] { 'I', '\'', 'm', ' ', 's', 'o', 'r', 'r', 'y', ' ', 'D', 'a', 'v', 'e', '.' };
@@ -84,9 +110,25 @@ public sealed class RopeTests
 	[TestMethod]
 	public void CommonPrefixLength()
 	{
-		var a = "I'm sorry Dave, I can't do that".ToRope();
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
 		var b = "I'm sorry Janine, I can't do that for you.".ToRope();
 		Assert.AreEqual("I'm sorry ".Length, a.CommonPrefixLength(b));
+	}
+
+	[TestMethod]
+	public void CommonPrefixLengthPartioned()
+	{
+		var a = "I'm".ToRope() + " sorry Dave, I can't do that.".ToRope();
+		var b = "I'm sor".ToRope() + "ry Janine, I can't do that for you.".ToRope();
+		Assert.AreEqual("I'm sorry ".Length, a.CommonPrefixLength(b));
+	}
+
+	[TestMethod]
+	public void CommonPrefixLengthEqual()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
+		var b = "I'm sorry Dave, I can't do that.".ToRope();
+		Assert.AreEqual("I'm sorry Dave, I can't do that.".Length, a.CommonPrefixLength(b));
 	}
 
 	[TestMethod]
@@ -95,6 +137,22 @@ public sealed class RopeTests
 		var a = "I'm sorry Dave, I can't do that".ToRope();
 		var b = "I'm sorry Janine, I can't do that".ToRope();
 		Assert.AreEqual("e, I can't do that".Length, a.CommonSuffixLength(b));
+	}
+
+	[TestMethod]
+	public void CommonSuffixLengthPartitioned()
+	{
+		var a = "I'm sorry Dave, I can't ".ToRope() + "do that".ToRope();
+		var b = "I'm sorry Janine, I can't do".ToRope() + " that".ToRope();
+		Assert.AreEqual("e, I can't do that".Length, a.CommonSuffixLength(b));
+	}
+
+	[TestMethod]
+	public void CommonSuffixLengthEqual()
+	{
+		var a = "I'm sorry Dave, I can't do that.".ToRope();
+		var b = "I'm sorry Dave, I can't do that.".ToRope();
+		Assert.AreEqual("I'm sorry Dave, I can't do that.".Length, a.CommonSuffixLength(b));
 	}
 
 	[TestMethod]
@@ -170,5 +228,30 @@ public sealed class RopeTests
 		}
 
 		Assert.AreEqual(s.Length,  LargeText.Length * 1000);
+	}
+
+	[TestMethod]
+	public void InsertRope() 
+	{
+		var s = LargeText;
+		for (int i = 0; i < 1000; i++)
+		{
+			s = s.Insert(LargeText.Length / 2, LargeText);
+		}
+
+		Assert.AreEqual(LargeText.Length * 1001, s.Length);
+	}
+	
+	[TestMethod]
+	public void InsertMemory() 
+	{
+		var memory = LargeText.ToMemory();
+		var s = LargeText;
+		for (int i = 0; i < 1000; i++)
+		{
+			s = s.Insert(memory.Length / 2, memory);
+		}
+
+		Assert.AreEqual(memory.Length * 1001, s.Length);
 	}
 }

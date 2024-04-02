@@ -19,6 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Rope\Rope.csproj" />
+    <ProjectReference Include="..\src\Rope.csproj" />
   </ItemGroup>
 </Project>

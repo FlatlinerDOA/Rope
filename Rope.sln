@@ -5,11 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CD854E5F-2FC7-4116-9508-740030F5E97D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope", "src\Rope\Rope.csproj", "{3CE3DF51-C1BD-4064-A139-571F00171DEB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope", "src\Rope.csproj", "{3CE3DF51-C1BD-4064-A139-571F00171DEB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope.UnitTests", "src\Rope.UnitTests\Rope.UnitTests.csproj", "{35153F9F-F594-47B3-AB3F-D6BC42C769F7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rope.UnitTests", "tests\Rope.UnitTests.csproj", "{35153F9F-F594-47B3-AB3F-D6BC42C769F7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "src\Benchmarks\Benchmarks.csproj", "{F120DA12-DA4F-4CD0-B822-0277D15277B0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "benchmarks\Benchmarks.csproj", "{F120DA12-DA4F-4CD0-B822-0277D15277B0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

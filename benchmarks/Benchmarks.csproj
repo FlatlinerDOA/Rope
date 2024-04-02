@@ -17,6 +17,6 @@
     <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.13.12" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Rope\Rope.csproj" />
+    <ProjectReference Include="..\src\Rope.csproj" />
   </ItemGroup>
 </Project>
