@@ -879,7 +879,12 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <returns>A new rope already balanced if necessary.</returns>
 	public Rope<T> InsertSorted<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
 	{
-		var index = ~this.BinarySearch(item, comparer);
+		var index = this.BinarySearch(item, comparer);
+		if (index < 0)
+		{ 
+			index = ~index;
+		}
+		
 		var left = this.Slice(0, index);
 		var right = this.Slice(index);
 		var insert = new Rope<T>(new[] { item });

@@ -303,4 +303,16 @@ public sealed class RopeTests
 
 		Assert.AreEqual(memory.Length * 1001, s.Length);
 	}
+
+	[TestMethod]
+	public void InsertSortedLargeFloatList()
+	{
+		var random = new Random(42);
+		var rope = new Rope<float>();
+		var comparer = Comparer<float>.Default;
+		foreach (var rank in Enumerable.Range(0, 65000).Select(s => random.NextSingle()))
+		{
+			rope = rope.InsertSorted(rank, comparer);
+		}		
+	}
 }
