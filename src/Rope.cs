@@ -14,8 +14,14 @@ using System.Diagnostics.Metrics;
 /// </summary>
 public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 {
+	/// <summary>
+	/// Maximum tree depth allowed.
+	/// </summary>
 	public const int MaxTreeDepth = 46;
 
+	/// <summary>
+	/// Maximum number of bytes before the GC basically chucks our buffers on the garbage heap.
+	/// </summary>
 	public const int LargeObjectHeapBytes = 85_000 - 24;
 
   	private static readonly Meter meter = new Meter("rope");
@@ -24,8 +30,17 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	/// <summary>
 	/// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
+	/// This is calculated to never require Large Object Heap allocations.
 	/// </summary>
 	public static readonly int MaxLeafLength = LargeObjectHeapBytes / Unsafe.SizeOf<T>();
+
+    /// <summary>
+    /// Gets the maximum number of elements any rope can have. 
+	/// For <see cref="byte"/> this is 5,979,654,405,241,176,064 bytes (5,311 petabytes).
+	/// For <see cref="char"/> this is 2,989,827,202,620,588,032 characters.
+	/// For <see cref="int"/> this is 1,494,913,601,310,294,016 ints.
+    /// </summary>
+    public static readonly long MaxLength = (long)Math.Pow(2, MaxTreeDepth) * (long)MaxLeafLength;
 
 	// Defines the empty leaf.
 	public static readonly Rope<T> Empty = new Rope<T>();
@@ -100,12 +115,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
                 this.left = left.left;
                 this.right = left.right;
                 this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
-
-				this.IsBalanced = this.IsNode ?
-					this.Depth < DepthToFibonnaciPlusTwo.Length ?
-						this.Length >= DepthToFibonnaciPlusTwo[this.Depth] : 
-						this.Left.IsBalanced && this.Right.IsBalanced :
-					true;
+                this.IsBalanced = this.CalculateIsBalanced();
 
             }
             else
@@ -122,12 +132,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
                 this.left = right.left;
                 this.right = right.right;
                 this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
-
-				this.IsBalanced = this.IsNode ?
-					this.Depth < DepthToFibonnaciPlusTwo.Length ?
-						this.Length >= DepthToFibonnaciPlusTwo[this.Depth] : 
-						this.Left.IsBalanced && this.Right.IsBalanced :
-					true;
+                this.IsBalanced = this.CalculateIsBalanced();
             }
             else
             {
@@ -142,23 +147,19 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			this.left = left;
 			this.right = right;
 			this.Depth = Math.Max(left.Depth, right.Depth) + 1;
-			this.IsBalanced = this.IsNode ?
-				this.Depth < DepthToFibonnaciPlusTwo.Length ?
-					this.Length >= DepthToFibonnaciPlusTwo[this.Depth] : 
-					this.Left.IsBalanced && this.Right.IsBalanced :
-				true;
+            this.IsBalanced = this.CalculateIsBalanced();
 
-			// if (newDepth > MaxTreeDepth)
-			// {
-			// 	// This is the only point at which we are actually increasing the depth beyond the limit, this is where a re-balance may be necessary.
-			// 	this.left = left.Balanced();
-			// 	this.right = right.Balanced();
-			// 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
-			// }
-		}
+            // if (newDepth > MaxTreeDepth)
+            // {
+            // 	// This is the only point at which we are actually increasing the depth beyond the limit, this is where a re-balance may be necessary.
+            // 	this.left = left.Balanced();
+            // 	this.right = right.Balanced();
+            // 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
+            // }
+        }
 	}
-	
-	public T this[int index] => this.ElementAt(index);
+
+    public T this[long index] => this.ElementAt(index);
 
 	/// <summary>
 	/// Gets a range of elements in the form of a new instance of <see cref="Rope{T}"/>.
@@ -169,7 +170,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	{
 		get
 		{
-			var (offset, length) = range.GetOffsetAndLength(this.Length);
+			var (offset, length) = range.GetOffsetAndLength((int)this.Length);
 			return this.Slice(offset, length);
 		}
 	}
@@ -197,15 +198,15 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <summary>
 	/// Gets the length of the left Node if this is a node (the split-point essentially), otherwise the length of the data. 
 	/// </summary>
-	public int Weight => this.left?.Length ?? this.data.Length;
+	public long Weight => this.left?.Length ?? this.data.Length;
 
 	/// <summary>
 	/// Gets the length of the rope in terms of the number of elements it contains.
 	/// </summary>
-	public int Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
+	public long Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
 
 	/// <summary>
-	/// Gets the maximum depth of the tree, returns 0 if this is a leaf.
+	/// Gets the maximum depth of the tree, returns 0 if this is a leaf, never exceeds <see cref="Rope{T}.MaxTreeDepth"/>.
 	/// </summary>
 	public int Depth { get; }
 
@@ -215,7 +216,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="index"></param>
 	/// <returns>The element at the specified index.</returns>
 	/// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
-	public T ElementAt(int index)
+	public T ElementAt(long index)
 	{
 		if (this.IsNode)
 		{
@@ -232,7 +233,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			throw new IndexOutOfRangeException(nameof(index));
 		}
 
-		return this.data.Span[index];
+		return this.data.Span[(int)index];
 	}
 
 	/// <summary>
@@ -245,7 +246,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		Rope<T> remainder = this;
 		do
 		{
-			int i = remainder.IndexOf(separator);
+			var i = remainder.IndexOf(separator);
 			if (i != -1)
 			{
 				yield return remainder.Slice(0, i);
@@ -270,7 +271,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		Rope<T> remainder = this;
 		do
 		{
-			int i = remainder.IndexOf(separator);
+			var i = remainder.IndexOf(separator);
 
 			if (i != -1)
 			{
@@ -292,7 +293,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="i">The index to split the two halves at.</param>
 	/// <exception cref="ArgumentOutOfRangeException">Thrown if index to split at is out of range.</exception>
 	/// <returns></returns>
-	public (Rope<T> Left, Rope<T> Right) SplitAt(int i)
+	public (Rope<T> Left, Rope<T> Right) SplitAt(long i)
 	{
 		if (this.IsNode)
 		{
@@ -316,7 +317,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			}
 		}
 
-		return (new Rope<T>(this.data.Slice(0, i)), new Rope<T>(this.data.Slice(i)));
+		return (new Rope<T>(this.data.Slice(0, (int)i)), new Rope<T>(this.data.Slice((int)i)));
 	}
 
 	/// <summary>
@@ -325,7 +326,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="index">The index to insert at.</param>
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
-	public Rope<T> Insert(int index, ReadOnlyMemory<T> items)
+	public Rope<T> Insert(long index, ReadOnlyMemory<T> items)
 	{
 		return this.Insert(index, new Rope<T>(items));
 	}
@@ -336,7 +337,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="index">The index to insert at.</param>
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
-	public Rope<T> Insert(int index, Rope<T> items)
+	public Rope<T> Insert(long index, Rope<T> items)
 	{
 		if (index > this.Length)
 		{
@@ -354,7 +355,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="length">The number of items to be removed.</param>
 	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
-	public Rope<T> Remove(int start, int length)
+	public Rope<T> Remove(long start, long length)
 	{
 		if (length == 0)
 		{
@@ -375,7 +376,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="start">The start index to remove from.</param>
 	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	public Rope<T> Remove(int start)
+	public Rope<T> Remove(long start)
 	{
 		if (start == this.Length) 
 		{
@@ -403,11 +404,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return source;
 		}
 
-		if (this.Depth >= MaxTreeDepth)
+		if (this.Depth >= 4)
 		{
-			return new Rope<T>(this.Balanced(), source);
+			return new Rope<T>(this, source).Balanced();
 		}
-		
+
 		return new Rope<T>(this, source);
 	}
 
@@ -416,7 +417,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="start">The start to select from.</param>
 	/// <returns>A new rope instance if start is non-zero, otherwise returns the original instance.</returns>
-	public Rope<T> Slice(int start)
+	public Rope<T> Slice(long start)
 	{
 		return this.Slice(start, this.Length - start);
 	}
@@ -427,7 +428,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="start">The start to select from.</param>
 	/// <param name="length">The number of elements to return.</param>
 	/// <returns>A new rope instance if the slice does not cover the entire sequence, otherwise returns the original instance.</returns>
-	public Rope<T> Slice(int start, int length)
+	public Rope<T> Slice(long start, long length)
 	{
 		if (start == 0 && length == this.Length)
 		{
@@ -469,17 +470,24 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <returns>A balanced tree or the original rope if not out of range.</returns>
 	public Rope<T> Balanced()
 	{
-		if (!this.IsBalanced)
-		{
+		if (!this.IsBalanced && this.IsNode)
+        {
 			rebalances.Add(1);
-			if (this.IsNode && this.Length > MaxLeafLength)
-			{
-				// Recursively balance if we are already very long.
-				return new Rope<T>(this.Left.Balanced(), this.Right.Balanced());
-			}
-			
-			// If short enough brute force rebalance into a leaf.
-			return new Rope<T>(this.ToMemory());
+			if (this.Depth == 1 && this.Length > MaxLeafLength)
+            {
+                // If long enough to subdivide into extended leaves
+				var (left, right) = this.SplitAt(MaxLeafLength);
+                return new Rope<T>(new Rope<T>(left.ToMemory()), new Rope<T>(right.ToMemory()));
+            }
+
+            if (this.Length <= MaxLeafLength)
+            {
+                // If short enough brute force rebalance into a single leaf.
+                return new Rope<T>(this.ToMemory());
+            }
+
+			// Recursively balance if we are already very long.
+			return new Rope<T>(this.Left.Balanced(), this.Right.Balanced());
 		}
 
 		return this;
@@ -510,7 +518,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="other">The other sequence to compare shared prefix length.</param>
 	/// <returns>A number greater than or equal to the length of the shortest of the two sequences.</returns>
-	public int CommonPrefixLength(Rope<T> other)
+	public long CommonPrefixLength(Rope<T> other)
 	{
 		if (!this.IsNode && !other.IsNode)
 		{
@@ -522,7 +530,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
 		var n = Math.Min(this.Length, other.Length);
-		for (int i = 0; i < n; i++)
+		for (long i = 0; i < n; i++)
 		{
 			if (!this.ElementAt(i).Equals(other.ElementAt(i)))
 			{
@@ -538,11 +546,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="other">Other sequence to compare against.</param>
 	/// <returns>The number of characters common to the end of each sequence.</returns>
-	public int CommonSuffixLength(Rope<char> other)
+	public long CommonSuffixLength(Rope<char> other)
 	{
 		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
 		var n = Math.Min(this.Length, other.Length);
-		for (int i = 1; i <= n; i++)
+		for (var i = 1; i <= n; i++)
 		{
 			if (!this.ElementAt(this.Length - i).Equals(other.ElementAt(other.Length - i)))
 			{
@@ -562,10 +570,10 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		if (this.IsNode)
 		{
 			// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
-			var result = GC.AllocateUninitializedArray<T>(this.left.Length + this.right.Length);
+			var result = GC.AllocateUninitializedArray<T>((int)(this.left.Length + this.right.Length));
 			var mem = result.AsMemory();
 			this.left.CopyTo(mem);
-			this.right.CopyTo(mem.Slice(this.left.Length));
+			this.right.CopyTo(mem.Slice((int)this.left.Length));
 			return result;
 		}
 
@@ -582,7 +590,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		{
 			// Binary tree so copy each half.
 			this.left.CopyTo(other);
-			this.right.CopyTo(other.Slice(this.left.Length));
+			this.right.CopyTo(other.Slice((int)this.left.Length));
 		}
 		else
 		{
@@ -596,7 +604,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="find"></param>
 	/// <returns>A number greater than or equal to zero if the sub-sequence is found, otherwise returns -1.</returns>
-	public int IndexOf(Rope<T> find)
+	public long IndexOf(Rope<T> find)
 	{
 		if (this.IsNode)
 		{
@@ -614,7 +622,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 				var startIndex = Math.Max(0, this.left.Length + 1 - find.Length);
 
 				// Check in the 'left' array for a starting match that could spill over to 'right'
-				for (int i = startIndex; i < left.Length; i++)
+				for (var i = startIndex; i < left.Length; i++)
 				{
 					bool match = true;
 					for (int j = 0; j < find.Length && match; j++)
@@ -695,7 +703,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	}
 
 
-	public int IndexOf(Rope<T> find, int offset)
+	public long IndexOf(Rope<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -706,7 +714,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public int IndexOf(ReadOnlyMemory<T> find) 
+	public long IndexOf(ReadOnlyMemory<T> find) 
 	{
 		if (this.IsNode)
 		{
@@ -720,7 +728,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		}
 	}
 
-	public int IndexOf(T find)
+	public long IndexOf(T find)
 	{
 		if (this.IsNode)
 		{
@@ -746,7 +754,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public int IndexOf(T find, int offset)
+	public long IndexOf(T find, int offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -757,7 +765,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public int IndexOf(ReadOnlyMemory<T> find, int offset)
+	public long IndexOf(ReadOnlyMemory<T> find, int offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -772,7 +780,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
-	public int LastIndexOf(Rope<T> find, int offset = 0)
+	public long LastIndexOf(Rope<T> find, int offset = 0)
 	{
 		if (find.Length > this.Length - offset)
 		{
@@ -785,7 +793,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			var fend = find.Length - 1; // End position of find.
 			var matched = false;
 			var start = this.Length - 1 - offset;
-			for (int i = start; i >= 0; i--)
+			for (var i = start; i >= 0; i--)
 			{
 				if (comparer.Equals(this[i], find[fend]))
 				{
@@ -812,9 +820,9 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		}
 	}
 
-	public int LastIndexOf(ReadOnlyMemory<T> find, int offset = 0) => this.LastIndexOf(new Rope<T>(find), offset);
+	public long LastIndexOf(ReadOnlyMemory<T> find, int offset = 0) => this.LastIndexOf(new Rope<T>(find), offset);
 
-	public int LastIndexOf(T find, int offset = 0) => this.LastIndexOf(new Rope<T>(new[] { find }), offset);
+	public long LastIndexOf(T find, int offset = 0) => this.LastIndexOf(new Rope<T>(new[] { find }), offset);
 
 	public bool EndsWith(Rope<T> find)
 	{
@@ -839,7 +847,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	{
 		var accum = Empty;
 		var remainder = this;
-		var i = -1;
+		var i = -1L;
 		do
 		{
 			i = remainder.IndexOf(replace);
@@ -903,7 +911,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public int BinarySearch<TComparer>(int index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
+    public long BinarySearch<TComparer>(long index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
     {
 		var offset = this.Slice(index, count).BinarySearch(item, comparer);
         return index + offset;
@@ -921,7 +929,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public int BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+    public long BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
     {
 		if (this.IsNode)
 		{
@@ -952,7 +960,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public int BinarySearch(T item)
+    public long BinarySearch(T item)
     {
 		if (this.IsNode)
 		{
@@ -1034,7 +1042,16 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return new Enumerator(this);
 	}
 
-	private struct Enumerator : IEnumerator<T>
+    private bool CalculateIsBalanced()
+    {
+        return this.IsNode ?
+            this.Depth < DepthToFibonnaciPlusTwo.Length ?
+                this.Length >= DepthToFibonnaciPlusTwo[this.Depth] :
+                this.Left.IsBalanced && this.Right.IsBalanced :
+            true;
+    }
+
+    private struct Enumerator : IEnumerator<T>
 	{
 		private readonly Rope<T> rope;
 		private int index;
@@ -1068,5 +1085,5 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		{
 			this.index = -1;
 		}
-	}
+    }
 }

@@ -315,4 +315,25 @@ public sealed class RopeTests
 			rope = rope.InsertSorted(rank, comparer);
 		}		
 	}
+
+	[TestMethod]
+	public void AblationOfConstructionSizes()
+	{
+		var sequence = Enumerable.Range(0, 120000).Select(c => (char)((int)' ' + (c % 26))).ToList();
+		for (int chunkSize = 1; chunkSize < 1024; chunkSize+=10)
+		{
+			var rope = sequence.Chunk(chunkSize).Select(chunk => new Rope<char>(chunk.ToArray())).Aggregate(Rope<char>.Empty, (prev, next) => prev + next);
+			Assert.IsTrue(rope.SequenceEqual(sequence));
+		}
+	}
+
+	[TestMethod]
+	public void BalanceCheck()
+	{
+		// Fn+2;
+		Assert.IsFalse(
+			new Rope<char>(
+			new Rope<char>(new char[] { 'a', 'b', 'c', }),
+			new Rope<char>(new char[] { 'd' })).IsBalanced);
+	}
 }
