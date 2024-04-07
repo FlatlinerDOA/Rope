@@ -18,7 +18,7 @@ public class RopeVersusPriorityQueue
     [Benchmark]
     public void RopeInsertSortedLong() 
     {
-        var rope = new Rope<long>();
+        var rope = Rope<long>.Empty;
         var comparer = Comparer<long>.Default;
         for (int i = 0; i < RandomLongs.Length; i++)
         {
@@ -39,7 +39,7 @@ public class RopeVersusPriorityQueue
     [Benchmark]
     public void RopeInsertSortedFloat() 
     {
-        var rope = new Rope<float>();
+        var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
         for (int i = 0; i < RandomFloats.Length; i++)
         {

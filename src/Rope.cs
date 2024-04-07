@@ -24,6 +24,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	public const int LargeObjectHeapBytes = 85_000 - 24;
 
+	/// <summary>
+	/// Defines the maximum depth descrepancy between left and right to cause a re-split of one side when balancing.
+	/// </summary>
+	public const int MaxDepthImbalance = 4;
+
   	private static readonly Meter meter = new Meter("rope");
 
     private static readonly Counter<int> rebalances = meter.CreateCounter<int>($"rope.{typeof(T).Name}.rebalances");
@@ -42,7 +47,9 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
     /// </summary>
     public static readonly long MaxLength = (long)Math.Pow(2, MaxTreeDepth) * (long)MaxLeafLength;
 
-	// Defines the empty leaf.
+	/// <summary>
+	/// Defines the Empty leaf.
+	/// </summary>
 	public static readonly Rope<T> Empty = new Rope<T>();
 
 	private static readonly double phi = (1 + Math.Sqrt(5)) / 2;
@@ -64,9 +71,9 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	private readonly ReadOnlyMemory<T> data;
 
 	/// <summary>
-	/// Creates a new instance of Rope{T}.
+	/// Creates a new instance of Rope{T}. Use Empty instead.
 	/// </summary>
-	public Rope()
+	private Rope()
 	{
 		// Empty rope is just a leaf node.
 		this.data = ReadOnlyMemory<T>.Empty;
@@ -307,13 +314,13 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			}
 			else if (i <= this.Weight)
 			{
-				var (a, b) = (this.left ?? Rope<T>.Empty).SplitAt(i);
-				return (a, new Rope<T>(b, this.right ?? Rope<T>.Empty));
+				var (newLeft, newRight) = this.left.SplitAt(i);
+				return (newLeft, new Rope<T>(newRight, this.right));
 			}
 			else
 			{
-				var (a, b) = (this.right ?? Rope<T>.Empty).SplitAt(i - this.Weight);
-				return (new Rope<T>(this.left ?? Rope<T>.Empty, a), b);
+				var (a, b) = this.right.SplitAt(i - this.Weight);
+				return (new Rope<T>(this.left, a), b);
 			}
 		}
 
@@ -404,12 +411,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			return source;
 		}
 
-		if (this.Depth >= 4)
-		{
-			return new Rope<T>(this, source).Balanced();
-		}
-
-		return new Rope<T>(this, source);
+		return new Rope<T>(this, source).Balanced();
 	}
 
 	/// <summary>
@@ -462,35 +464,48 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public static implicit operator Rope<T> (ReadOnlyMemory<T> a) => new Rope<T>(a);
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
-	public static explicit operator Rope<T> (ReadOnlySpan<T> a) => new Rope<T>(a.ToArray());
-
 	/// <summary>
 	/// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
 	/// </summary>
 	/// <returns>A balanced tree or the original rope if not out of range.</returns>
 	public Rope<T> Balanced()
 	{
-		if (!this.IsBalanced && this.IsNode)
-        {
-			rebalances.Add(1);
-			if (this.Depth == 1 && this.Length > MaxLeafLength)
-            {
-                // If long enough to subdivide into extended leaves
-				var (left, right) = this.SplitAt(MaxLeafLength);
-                return new Rope<T>(new Rope<T>(left.ToMemory()), new Rope<T>(right.ToMemory()));
-            }
-
-            if (this.Length <= MaxLeafLength)
-            {
-                // If short enough brute force rebalance into a single leaf.
-                return new Rope<T>(this.ToMemory());
-            }
-
-			// Recursively balance if we are already very long.
-			return new Rope<T>(this.Left.Balanced(), this.Right.Balanced());
+		// Early return if the tree is already balanced or not a node		
+    	if (!this.IsNode || this.IsBalanced)
+		{
+			return this;
 		}
 
-		return this;
+		rebalances.Add(1);
+
+		if (this.Length <= MaxLeafLength)
+		{
+			// If short enough brute force rebalance into a single leaf.
+			return new Rope<T>(this.ToMemory());
+		}
+
+		// Calculate the depth difference between left and right
+		var leftDepth = this.Left.Depth;
+		var rightDepth = this.Right.Depth;
+		var depthDiff = rightDepth - leftDepth;
+		
+		////Debug.Assert(depthDiff <= MaxTreeDepth, "This tree is way too deep?");
+		if (depthDiff > MaxDepthImbalance)
+		{
+			// Example: Right is deep (10), left is shallower (6) -> +4 imbalance
+			var (newLeftPart, newRightPart) = this.Right.SplitAt(this.Right.Length / 2);
+        	return new Rope<T>(new Rope<T>(this.Left, newLeftPart).Balanced(), newRightPart.Balanced());
+		}
+		else if (depthDiff < -MaxDepthImbalance)
+		{
+			// Example: Left is deep (10), Right is shallower (6) -> -4 imbalance
+			var (newLeftPart, newRightPart) = this.Left.SplitAt(this.Left.Length / 2);
+        	return new Rope<T>(newLeftPart.Balanced(), new Rope<T>(newRightPart, this.Right).Balanced());
+		}
+
+		// Recursively balance if we are already very long.
+        var (left, right) = this.SplitAt(this.Length / 2);
+        return new Rope<T>(left.Balanced(), right.Balanced());
 	}
 
 	/// <summary>
@@ -893,10 +908,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			index = ~index;
 		}
 		
-		var left = this.Slice(0, index);
-		var right = this.Slice(index);
+		var (left, right) = this.SplitAt(index);
+		// TODO: Common sorted prefix?
 		var insert = new Rope<T>(new[] { item });
-		return new Rope<T>(new Rope<T>(left, insert), right).Balanced();
+		return left + (insert + right);
+		////return new Rope<T>(new Rope<T>(left, insert), right).Balanced();
 	}
 
 	/// <summary>
@@ -1042,13 +1058,147 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return new Enumerator(this);
 	}
 
-    private bool CalculateIsBalanced()
+    public bool CalculateIsBalanced()
     {
         return this.IsNode ?
-            this.Depth < DepthToFibonnaciPlusTwo.Length ?
-                this.Length >= DepthToFibonnaciPlusTwo[this.Depth] :
-                this.Left.IsBalanced && this.Right.IsBalanced :
+            this.Depth < DepthToFibonnaciPlusTwo.Length && this.Length >= DepthToFibonnaciPlusTwo[this.Depth] :
             true;
+    }
+
+	/// <summary>
+	/// Constructs a new Rope from a series of leaves into a tree.
+	/// </summary>
+	/// <param name="leaves">The leaf nodes to construct into a tree.</param>
+	/// <returns>A new rope with the leaves specified.</returns>
+	public static Rope<T> Combine(Rope<Rope<T>> leaves) 
+	{
+		// Iteratively combine leaf nodes into a balanced tree
+		while (leaves.Length > 1)
+		{
+			Rope<Rope<T>> parents = Rope<Rope<T>>.Empty;
+			for (int i = 0; i < leaves.Length; i += 2)
+			{
+				// Combine two adjacent nodes into a parent node
+				if (i + 1 < leaves.Length)
+				{
+					parents += new Rope<T>(leaves[i], leaves[i + 1]);
+				}
+				else
+				{
+					// For an odd number of nodes, the last one is moved up without a pair
+					parents += leaves[i];
+				}
+			}
+
+			// Prepare for the next iteration
+			leaves = parents;
+		}
+
+		// The last remaining node is the root of the balanced tree
+		return leaves.Length > 0 ? leaves[0] : Rope<T>.Empty;
+	}
+
+	/// <summary>
+	/// Copies an enumerable sequence into a perfectly balanced binary tree.
+	/// </summary>
+	/// <typeparam name="T"></typeparam>
+	/// <param name="span"></param>
+	/// <returns>A new rope.</returns>
+    public static Rope<T> FromEnumerable(IEnumerable<T> items)
+    {
+		// Create leaf nodes by chunking the sequence.
+		var leaves = new Rope<Rope<T>>(
+			items.Chunk(MaxLeafLength)
+			.Select(array => new Rope<T>(array))
+			.ToArray());
+		
+		// Build a tree out of leaves.
+		return Combine(leaves);
+    }
+
+	/// <summary>
+	/// Copies a span into a perfectly balanced binary tree.
+	/// </summary>
+	/// <param name="items">Read only list of items to copy from</param>
+	/// <returns>A new rope or <see cref="Empty"/> if items is empty.</returns>
+    public static Rope<T> FromReadOnlyList(IReadOnlyList<T> items)
+    {
+		if (items.Count == 0)
+		{
+			return Rope<T>.Empty;
+		}
+
+		// Rope to hold all the constructed leaf nodes consecutively.
+    	var leaves = Rope<Rope<T>>.Empty;
+
+		// Create leaf nodes
+		for (int i = 0; i < items.Count; i += MaxLeafLength)
+		{
+			var length = Math.Min(MaxLeafLength, items.Count - i);
+			var memory = new T[length];
+			for (var offset = 0; offset < length; offset++)
+			{
+				memory[offset] = items[(int)(i + offset)];
+			}
+			
+			leaves += new Rope<T>(memory);
+		}
+
+		// Build a tree out of leaves.
+		return Combine(leaves);
+    }
+
+	/// <summary>
+	/// Copies a span into a perfectly balanced binary tree.
+	/// </summary>
+	/// <param name="span">The source items to read</param>
+	/// <returns>A new rope or <see cref="Empty"/> if the span is empty.</returns>
+    public static Rope<T> FromReadOnlySpan(ref ReadOnlySpan<T> span)
+    {
+		if (span.Length == 0)
+		{
+			return Rope<T>.Empty;
+		}
+
+		// Rope to hold all the constructed leaf nodes consecutively.
+    	var leaves = Rope<Rope<T>>.Empty;
+
+		// Create leaf nodes
+		for (int i = 0; i < span.Length; i += MaxLeafLength)
+		{
+			var length = Math.Min(MaxLeafLength, span.Length - i);
+			var array = span.Slice(i, length).ToArray();
+			leaves += new Rope<T>(array);
+		}
+
+		// Build a tree out of leaves.
+		return Combine(leaves);
+    }
+
+	/// <summary>
+	/// Creates a new subdivided rope tree without copying the memory. 
+	/// This is distinct from constructing a rope with new Rope{T}(memory) as this pre-subdivides the rope for editing.
+	/// </summary>
+	/// <param name="memory">The source memory to point to.</param>
+	/// <returns>A new rope or <see cref="Empty"/> if the memory is empty.</returns>
+    public static Rope<T> FromMemory(ReadOnlyMemory<T> memory)
+    {
+		if (memory.Length == 0)
+		{
+			return Rope<T>.Empty;
+		}
+
+		// Rope to hold all the constructed leaf nodes consecutively.
+    	var leaves = Rope<Rope<T>>.Empty;
+
+		// Create leaf nodes
+		for (int i = 0; i < memory.Length; i += MaxLeafLength)
+		{
+			var length = Math.Min(MaxLeafLength, memory.Length - i);
+			leaves += new Rope<T>(memory.Slice(i, length));
+		}
+
+		return Combine(leaves);
     }
 
     private struct Enumerator : IEnumerator<T>

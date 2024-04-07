@@ -41,79 +41,71 @@ Rope<char> text3 = text + " My second favourite text".ToRope();
 
 ```
 
-## Comparison with StringBuilder
-A comparison could be drawn between a Rope and a StringBuilder as they use a very similar technique for efficient edits.
+## Comparison with .NET Built in Types
+A comparison could be drawn between a Rope and a StringBuilder as they use a very similar technique for efficient edits. List{T} is included as a commonly used alternative.
 
-|Feature|Rope&lt;T&gt;|StringBuilder|
-|-------|-------------|-------------|
-|Efficient edits of strings (avoid double allocations)| ✅ |✅|
-|Supports items of any type| ✅ |❌|
-|Immutable edits| ✅ |❌|
-|Thread safe| ✅ |❌|
-|Copy free insertion| ✅ |✅|
-|Copy free splitting| ✅ |❌|
-|UTF-8 strings (Rope&lt;byte&gt;)| ✅ |❌|
-|UTF-32 strings (Rope&lt;Rune&gt;)| ✅ |❌|
-|Structural invariant GetHashCode| ✅ |❌|
-|Structural invariant Equals| ✅ |❌|
+|Feature|Rope&lt;T&gt;|StringBuilder|List{T}|
+|-------|-------------|-------------|-------|
+|Supports items of any type| ✅ |❌|✅|
+|Immutable edits| ✅ |❌|❌|
+|Thread safe| ✅ |❌|❌|
+|Copy free Append (avoid double allocations)| ✅ |✅|❌|
+|Copy free Insert| ✅ |✅|❌|
+|Copy free Remove| ✅ |❌|❌|
+|Copy free split| ✅ |❌|❌|
+|GC Friendly (No LOH, stays in Gen 0)| ✅ |❌|❌|
+|Value-like (Structural invariant GetHashCode and Equals)| ✅ |❌|❌|
+|More than 2 billion elements|✅ |❌|❌|
 
 
 ### Performance and Memory Allocation Comparison with StringBuilder
-
 Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max Depth = 46
 
-| Method                            | EditCount | Mean               | Error              | StdDev            | Gen0      | Gen1      | Gen2      | Allocated  |
-|---------------------------------- |---------- |-------------------:|-------------------:|------------------:|----------:|----------:|----------:|-----------:|
-| StringBuilderConstructionOverhead | 10        |           6.660 ns |          3.8446 ns |         0.2107 ns |    0.0062 |         - |         - |      104 B |
-| RopeConstructionOverhead          | 10        |           3.467 ns |         10.3511 ns |         0.5674 ns |    0.0033 |         - |         - |       56 B |
-| StringBuilderAppend               | 10        |      18,937.502 ns |     36,176.2486 ns |     1,982.9423 ns |   42.9688 |   31.2195 |         - |   721160 B |
-| RopeAppend                        | 10        |         326.512 ns |        105.4630 ns |         5.7808 ns |    0.0367 |         - |         - |      616 B |
-| StringBuilderInsert               | 10        |      22,208.297 ns |     20,717.6339 ns |     1,135.6034 ns |   42.9688 |   27.3438 |         - |   721160 B |
-| RopeInsert                        | 10        |       1,048.996 ns |         67.6687 ns |         3.7092 ns |    0.1659 |         - |         - |     2800 B |
-| StringBuilderSplitConcat          | 10        |      16,936.850 ns |      7,790.6697 ns |       427.0329 ns |   23.4680 |   11.7188 |         - |   393720 B |
-| RopeSplitConcat                   | 10        |         498.009 ns |        176.2005 ns |         9.6581 ns |    0.2003 |         - |         - |     3360 B |
-| StringBuilderConstructionOverhead | 100       |           6.393 ns |          0.8614 ns |         0.0472 ns |    0.0062 |         - |         - |      104 B |
-| RopeConstructionOverhead          | 100       |           3.065 ns |          1.4724 ns |         0.0807 ns |    0.0033 |         - |         - |       56 B |
-| StringBuilderAppend               | 100       |     265,767.204 ns |    110,624.5007 ns |     6,063.7022 ns |  394.5313 |  382.3242 |         - |  6621560 B |
-| RopeAppend                        | 100       |     775,989.095 ns |    239,236.3722 ns |    13,113.3528 ns |    7.8125 |         - |         - |   144816 B |
-| StringBuilderInsert               | 100       |     288,972.005 ns |     77,008.2196 ns |     4,221.0804 ns |  394.5313 |  378.9063 |         - |  6621560 B |
-| RopeInsert                        | 100       |      54,980.349 ns |      6,474.1330 ns |       354.8691 ns |    1.6479 |         - |         - |    28000 B |
-| StringBuilderSplitConcat          | 100       |     158,307.430 ns |    185,564.9036 ns |    10,171.4385 ns |  199.9512 |   99.8535 |         - |  3347160 B |
-| RopeSplitConcat                   | 100       |       5,244.930 ns |        777.7459 ns |        42.6309 ns |    2.0065 |         - |         - |    33600 B |
-| StringBuilderConstructionOverhead | 1000      |           6.375 ns |          2.9867 ns |         0.1637 ns |    0.0062 |         - |         - |      104 B |
-| RopeConstructionOverhead          | 1000      |           3.062 ns |          1.1840 ns |         0.0649 ns |    0.0033 |         - |         - |       56 B |
-| StringBuilderAppend               | 1000      |  23,347,470.833 ns | 25,992,020.2280 ns | 1,424,710.3348 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65637631 B |
-| RopeAppend                        | 1000      | 955,351,466.667 ns | 55,143,071.0173 ns | 3,022,577.7944 ns | 1000.0000 |         - |         - | 26428816 B |
-| StringBuilderInsert               | 1000      |  22,830,273.958 ns | 35,391,707.9669 ns | 1,939,938.9376 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65627647 B |
-| RopeInsert                        | 1000      |   6,440,357.292 ns |    769,839.8628 ns |    42,197.5206 ns |   15.6250 |         - |         - |   280003 B |
-| StringBuilderSplitConcat          | 1000      |   1,576,391.211 ns |    499,400.6799 ns |    27,373.8364 ns | 1962.8906 |  494.1406 |  125.0000 | 32881603 B |
-| RopeSplitConcat                   | 1000      |      49,510.901 ns |      2,645.9102 ns |       145.0313 ns |   20.0806 |         - |         - |   336000 B |
+| Method                            | EditCount | Mean              | Error           | StdDev            | Gen0      | Gen1      | Gen2      | Allocated  |
+|---------------------------------- |---------- |------------------:|----------------:|------------------:|----------:|----------:|----------:|-----------:|
+| StringBuilderConstructionOverhead | 10        |          6.287 ns |       0.0286 ns |         0.0267 ns |    0.0062 |         - |         - |      104 B |
+| **RopeConstructionOverhead**          | 10        |          **3.148 ns** |       0.0574 ns |         0.0509 ns |    0.0033 |         - |         - |       56 B |
+| StringBuilderAppend               | 10        |     18,435.239 ns |     155.9500 ns |       138.2456 ns |   42.9688 |   31.2195 |         - |   721160 B |
+| **RopeAppend**                        | 10        |        **320.256 ns** |       1.5778 ns |         1.4759 ns |    0.0367 |         - |         - |      616 B |
+| StringBuilderInsert               | 10        |     17,713.417 ns |     135.1035 ns |       119.7658 ns |   42.9688 |   27.3438 |         - |   721160 B |
+| **RopeInsert**                        | 10        |     **1,029.164 ns** |       4.6957 ns |         3.9211 ns |    0.1659 |         - |         - |     2800 B |
+| StringBuilderSplitConcat          | 10        |     17,309.279 ns |     174.0315 ns |       145.3242 ns |   23.4680 |   11.7188 |         - |   393720 B |
+| **RopeSplitConcat**                   | 10        |        **497.060 ns** |       5.6149 ns |         5.2522 ns |    0.2003 |         - |         - |     3360 B |
+| StringBuilderAppend               | 100       |    248,518.084 ns |   3,957.1789 ns |     3,507.9361 ns |  394.5313 |  382.5684 |         - |  6621560 B |
+| **RopeAppend**                        | 100       |    **101,534.844 ns** |     522.2283 ns |       488.4927 ns |    1.7090 |         - |         - |    28616 B |
+| StringBuilderInsert               | 100       |    266,237.113 ns |   2,442.1090 ns |     1,906.6381 ns |  394.5313 |  378.9063 |         - |  6621560 B |
+| **RopeInsert**                        | 100       |     **60,986.382 ns** |     618.3227 ns |       578.3795 ns |    1.5869 |         - |         - |    28000 B |
+| StringBuilderSplitConcat          | 100       |    150,194.484 ns |     853.9897 ns |       713.1201 ns |  199.9512 |   99.8535 |         - |  3347160 B |
+| **RopeSplitConcat**                   | 100       |      **4,954.985 ns** |      42.5025 ns |        39.7569 ns |    2.0065 |         - |         - |    33600 B |
+| **StringBuilderAppend**               | 1000      | **23,253,005.762 ns** | 455,215.5801 ns |   708,715.8160 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65637897 B |
+| RopeAppend                        | 1000      | 36,889,792.381 ns |  63,924.1700 ns |    59,794.7083 ns |   71.4286 |         - |         - |  1630469 B |
+| StringBuilderInsert               | 1000      | 23,970,615.375 ns | 504,814.8015 ns | 1,488,457.8320 ns | 5437.5000 | 5406.2500 | 1625.0000 | 65627392 B |
+| **RopeInsert**                        | 1000      |  **6,974,877.344 ns** |  35,621.1530 ns |    33,320.0486 ns |   15.6250 |         - |         - |   280003 B |
+| StringBuilderSplitConcat          | 1000      |  1,370,860.798 ns |   9,566.2053 ns |     8,480.1918 ns | 1962.8906 |  494.1406 |  125.0000 | 32881603 B |
+| **RopeSplitConcat**                   | 1000      |     **49,529.921 ns** |     305.8306 ns |       286.0741 ns |   20.0806 |         - |         - |   336000 B |
+
 
 ### Performance and Memory Allocation Comparison with List&lt;T&gt;
 
-| Method                   | EditCount | Mean                 | Error                 | StdDev              | Gen0      | Gen1      | Gen2      | Allocated   |
-|------------------------- |---------- |---------------------:|----------------------:|--------------------:|----------:|----------:|----------:|------------:|
-| ListConstructionOverhead | 10        |             2.056 ns |             0.5388 ns |           0.0295 ns |    0.0019 |         - |         - |        32 B |
-| RopeConstructionOverhead | 10        |             3.409 ns |            12.4648 ns |           0.6832 ns |    0.0033 |         - |         - |        56 B |
-| ListAppend               | 10        |       616,994.108 ns |     1,001,260.0613 ns |      54,882.4426 ns |  499.0234 |  499.0234 |  499.0234 |   2036400 B |
-| RopeAppend               | 10        |           315.757 ns |            13.0887 ns |           0.7174 ns |    0.0367 |         - |         - |       616 B |
-| ListInsert               | 10        |       706,230.827 ns |       533,914.1540 ns |      29,265.6364 ns |  499.0234 |  499.0234 |  499.0234 |   2036400 B |
-| RopeInsert               | 10        |         1,040.191 ns |            52.7603 ns |           2.8920 ns |    0.1659 |         - |         - |      2800 B |
-| ListSplitConcat          | 10        |        40,739.286 ns |        17,913.1578 ns |         981.8806 ns |   41.6260 |   41.6260 |   41.6260 |    197134 B |
-| RopeSplitConcat          | 10        |           489.633 ns |            87.2746 ns |           4.7838 ns |    0.2003 |         - |         - |      3360 B |
-| ListConstructionOverhead | 100       |             2.536 ns |             9.2355 ns |           0.5062 ns |    0.0019 |         - |         - |        32 B |
-| RopeConstructionOverhead | 100       |             3.230 ns |             3.3654 ns |           0.1845 ns |    0.0033 |         - |         - |        56 B |
-| ListAppend               | 100       |     4,514,265.625 ns |     1,902,140.1530 ns |     104,262.7203 ns |  742.1875 |  742.1875 |  742.1875 |  16748870 B |
-| RopeAppend               | 100       |       763,204.329 ns |       274,428.0687 ns |      15,042.3285 ns |    7.8125 |         - |         - |    144816 B |
-| ListInsert               | 100       |    10,058,506.771 ns |     3,884,354.5719 ns |     212,914.5813 ns |  734.3750 |  734.3750 |  734.3750 |  16748871 B |
-| RopeInsert               | 100       |        55,784.001 ns |         6,018.0238 ns |         329.8682 ns |    1.6479 |         - |         - |     28000 B |
-| ListSplitConcat          | 100       |       130,900.138 ns |        19,537.7403 ns |       1,070.9295 ns |   41.5039 |   41.5039 |   41.5039 |    197134 B |
-| RopeSplitConcat          | 100       |         4,849.854 ns |           254.8449 ns |          13.9689 ns |    2.0065 |         - |         - |     33600 B |
-| ListConstructionOverhead | 1000      |             2.181 ns |             0.6160 ns |           0.0338 ns |    0.0019 |         - |         - |        32 B |
-| RopeConstructionOverhead | 1000      |             3.662 ns |             4.7910 ns |           0.2626 ns |    0.0033 |         - |         - |        56 B |
-| ListAppend               | 1000      |    38,171,446.154 ns |    64,503,216.0755 ns |   3,535,638.9295 ns | 3923.0769 | 3923.0769 | 3923.0769 | 134448581 B |
-| RopeAppend               | 1000      |   992,371,966.667 ns |   172,595,767.5594 ns |   9,460,556.4183 ns | 1000.0000 |         - |         - |  26428816 B |
-| ListInsert               | 1000      | 1,694,145,733.333 ns | 4,669,673,708.1417 ns | 255,960,573.0516 ns | 3000.0000 | 3000.0000 | 3000.0000 | 134448640 B |
-| RopeInsert               | 1000      |     6,539,033.073 ns |       663,740.5566 ns |      36,381.8596 ns |   15.6250 |         - |         - |    280003 B |
-| ListSplitConcat          | 1000      |     1,035,388.086 ns |        62,229.0122 ns |       3,410.9821 ns |   41.0156 |   41.0156 |   41.0156 |    197135 B |
-| RopeSplitConcat          | 1000      |        52,198.216 ns |        28,657.5458 ns |       1,570.8168 ns |   20.0806 |         - |         - |    336000 B |
+| Method                   | EditCount | Mean                 | Error              | StdDev             | Median               | Gen0      | Gen1      | Gen2      | Allocated   |
+|------------------------- |---------- |---------------------:|-------------------:|-------------------:|---------------------:|----------:|----------:|----------:|------------:|
+| **ListConstructionOverhead** | 10        |             **2.055 ns** |          0.0171 ns |          0.0152 ns |             2.053 ns |    0.0019 |         - |         - |        32 B |
+| RopeConstructionOverhead | 10        |             4.251 ns |          0.0569 ns |          0.0532 ns |             4.247 ns |    0.0033 |         - |         - |        56 B |
+| ListAppend               | 10        |       639,685.241 ns |     12,731.1602 ns |     36,116.1824 ns |       657,253.125 ns |  499.0234 |  499.0234 |  499.0234 |   2036400 B |
+| **RopeAppend**               | 10        |           **314.925 ns** |          1.9199 ns |          1.7959 ns |           315.212 ns |    0.0367 |         - |         - |       616 B |
+| ListInsert               | 10        |       697,516.366 ns |     13,947.9572 ns |     33,951.2555 ns |       710,541.309 ns |  499.0234 |  499.0234 |  499.0234 |   2036400 B |
+| **RopeInsert**               | 10        |         **1,035.850 ns** |          5.2297 ns |          4.8919 ns |         1,036.755 ns |    0.1659 |         - |         - |      2800 B |
+| ListSplitConcat          | 10        |        40,894.141 ns |        808.1061 ns |      1,393.9433 ns |        40,832.120 ns |   41.6260 |   41.6260 |   41.6260 |    197134 B |
+| **RopeSplitConcat**          | 10        |           **495.887 ns** |          3.2931 ns |          3.0803 ns |           496.075 ns |    0.2003 |         - |         - |      3360 B |
+| ListAppend               | 100       |     4,327,239.819 ns |     86,425.0487 ns |    200,303.1922 ns |     4,335,406.250 ns |  742.1875 |  742.1875 |  742.1875 |  16748870 B |
+| **RopeAppend**               | 100       |        **99,975.470 ns** |        354.2195 ns |        295.7894 ns |       100,077.271 ns |    1.7090 |         - |         - |     28616 B |
+| ListInsert               | 100       |     9,642,900.684 ns |    184,668.9310 ns |    181,369.5827 ns |     9,663,835.156 ns |  734.3750 |  734.3750 |  734.3750 |  16748871 B |
+| **RopeInsert**               | 100       |        **56,575.275 ns** |        334.5869 ns |        312.9728 ns |        56,558.954 ns |    1.6479 |         - |         - |     28000 B |
+| ListSplitConcat          | 100       |       130,613.880 ns |      1,357.2378 ns |      1,269.5611 ns |       130,283.618 ns |   41.5039 |   41.5039 |   41.5039 |    197134 B |
+| **RopeSplitConcat**          | 100       |         **4,976.573 ns** |         42.9692 ns |         40.1934 ns |         4,988.638 ns |    2.0065 |         - |         - |     33600 B |
+| ListAppend               | 1000      |    35,500,738.500 ns |    720,812.8811 ns |  2,125,333.0432 ns |    35,504,653.571 ns | 3928.5714 | 3928.5714 | 3928.5714 | 134448581 B |
+| **RopeAppend**               | 1000      |    **33,409,155.556 ns** |     85,742.3985 ns |     80,203.4927 ns |    33,411,353.333 ns |   66.6667 |         - |         - |   1523339 B |
+| ListInsert               | 1000      | 1,384,004,000.000 ns | 13,382,115.3563 ns | 11,174,672.4015 ns | 1,385,487,300.000 ns | 3000.0000 | 3000.0000 | 3000.0000 | 134448640 B |
+| **RopeInsert**               | 1000      |     **6,832,976.615 ns** |     80,962.1713 ns |     75,732.0653 ns |     6,874,546.875 ns |   15.6250 |         - |         - |    280003 B |
+| ListSplitConcat          | 1000      |     1,028,210.003 ns |      3,725.0938 ns |      3,302.1986 ns |     1,027,935.254 ns |   41.0156 |   41.0156 |   41.0156 |    197135 B |
+| **RopeSplitConcat**          | 1000      |        **50,068.350 ns** |        279.3499 ns |        261.3041 ns |        50,064.090 ns |   20.0806 |         - |         - |    336000 B |

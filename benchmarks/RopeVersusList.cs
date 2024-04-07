@@ -115,16 +115,10 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
     public int EditCount;
 
     [Benchmark]
-    public void ListConstructionOverhead()
-    {
-        new List<char>();
-    }
+    public void ListConstructionOverhead() => new List<char>();
 
     [Benchmark]
-    public void RopeConstructionOverhead()
-    {
-        new Rope<char>();
-    }
+    public void RopeConstructionOverhead() => new Rope<char>(ReadOnlyMemory<char>.Empty);
 
     [Benchmark]
     public void ListAppend()

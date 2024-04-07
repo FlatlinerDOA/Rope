@@ -3,14 +3,27 @@ namespace Rope.UnitTests;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 [TestClass]
 public sealed class RopeTests
 {
-	private static readonly Rope<int> EvenNumbers = Enumerable.Range(0, 2048).Where(i => i % 2 == 0).ToRope();
+	private static Rope<int> EvenNumbers;
 	
-	private static readonly Rope<char> LargeText = Enumerable.Range(0, 32 * 1024).Select(i => (char)(36 + i % 24)).ToRope();
+	private static Rope<char> LargeText;
+
+	public RopeTests()
+	{
+        Trace.Listeners.Add(new ConsoleTraceListener());
+	}
+
+	[ClassInitialize]	  
+  	public static void OneTimeSetup(TestContext context)
+  	{
+		EvenNumbers = Enumerable.Range(0, 2048).Where(i => i % 2 == 0).ToRope();
+		LargeText = Enumerable.Range(0, 32 * 1024).Select(i => (char)(36 + i % 24)).ToRope();
+	}	
 
 	[TestMethod]
     public void ElementIndexerBeforeBreak() => Assert.AreEqual("this is a test"[3], ("this".ToRope() + " is a test.".ToRope())[3]);
@@ -38,6 +51,9 @@ public sealed class RopeTests
 
     [TestMethod]
     public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
+
+    [TestMethod]
+    public void LastIndexOfElement() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
 
 	[TestMethod]
 	public void ConcattedLastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
@@ -68,6 +84,9 @@ public sealed class RopeTests
 
 	[TestMethod]
 	public void EndsWith() => Assert.IsTrue("n".ToRope().EndsWith("n".ToRope()));
+
+	[TestMethod]
+	public void EndsWithMemory() => Assert.IsTrue("testing".ToRope().EndsWith("ing".AsMemory()));
 
 	[TestMethod]
 	public void NotEndsWith() => Assert.IsFalse("ny ".ToRope().EndsWith("n".ToRope()));
@@ -202,6 +221,10 @@ public sealed class RopeTests
 
 	[TestMethod]
 	[ExpectedException(typeof(IndexOutOfRangeException))]
+    public void NodeElementAtIndexOutOfRangeException() => ("abc".ToRope() + "def".ToRope()).ElementAt(6);
+
+	[TestMethod]
+	[ExpectedException(typeof(IndexOutOfRangeException))]
     public void PartitionedElementAtIndexOutOfRangeException() => ("abc".ToRope() + "def".ToRope()).ElementAt(6);
 
 	[TestMethod]
@@ -226,10 +249,13 @@ public sealed class RopeTests
 	public void EmptyRopeEqualsEmptyRope() => Assert.IsTrue(Rope<char>.Empty.Equals(Rope<char>.Empty));
 
 	[TestMethod]
-	public void EmptyRopeEqualsNewEmptyRope() => Assert.IsTrue(Rope<char>.Empty.Equals(new Rope<char>()));
+	public void CreateVeryLargeRopeFromArray() => Assert.IsTrue(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).SequenceEqual(new Rope<char>(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).ToArray())));
 
 	[TestMethod]
-	public void CreateVeryLargeRope() => Assert.IsTrue(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).SequenceEqual(new Rope<char>(Enumerable.Range(0, Rope<char>.MaxLeafLength * 4).Select(i => i.ToString()[0]).ToArray())));
+	public void CreateVeryLargeRopeToRope() => Assert.IsTrue(Enumerable.Range(0, Rope<int>.MaxLeafLength * 40).SequenceEqual(Enumerable.Range(0, Rope<int>.MaxLeafLength * 40).ToRope()));
+
+	[TestMethod]
+	public void CreateVeryLargeRopeFromListToRope() => Assert.IsTrue(Enumerable.Range(0, Rope<int>.MaxLeafLength * 40).SequenceEqual(Enumerable.Range(0, Rope<int>.MaxLeafLength * 40).ToList().ToRope()));
 
 	[TestMethod]
 	public void BinarySearchIntRopeLeftHalf() => Assert.AreEqual(5, EvenNumbers.BinarySearch(10));
@@ -268,9 +294,49 @@ public sealed class RopeTests
 	public void StructuralEqualsEquivalence() => Assert.AreEqual("test".ToRope(), "te".ToRope() + "st".ToRope());
 
 	[TestMethod]
+	public void CombineRopeOfRopes()
+	{
+		var ropeOfRopes = new[] { "te".ToRope(), "st".ToRope() }.ToRope();
+		var actual = ropeOfRopes.Combine();
+		Assert.AreEqual("test".ToRope(), actual);
+	}
+
+	[TestMethod]
+	public void ConstructWithRightEmpty()
+	{
+		var actual = new Rope<char>("test".ToRope(), Rope<char>.Empty);
+		Assert.IsFalse(actual.IsNode);
+		Assert.AreEqual("test".ToRope(), actual);
+	}
+
+	[TestMethod]
+	public void ConstructWithRightEmptyLeftNode()
+	{
+		var actual = new Rope<char>("te".ToRope() + "st".ToRope(), Rope<char>.Empty);
+		Assert.IsTrue(actual.IsNode);
+		Assert.AreEqual("test".ToRope(), actual);
+	}
+
+	[TestMethod]
+	public void ConstructWithLeftEmpty()
+	{
+		var actual = new Rope<char>(Rope<char>.Empty, "test".ToRope());
+		Assert.IsFalse(actual.IsNode);
+		Assert.AreEqual("test".ToRope(), actual);
+	}
+
+	[TestMethod]
+	public void ConstructWithLeftEmptyRightNode()
+	{
+		var actual = new Rope<char>(Rope<char>.Empty, "te".ToRope() + "st".ToRope());
+		Assert.IsTrue(actual.IsNode);
+		Assert.AreEqual("test".ToRope(), actual);
+	}
+
+	[TestMethod]
 	public void LargeAppend()
 	{
-		var s = new Rope<char>();
+		var s = Rope<char>.Empty;
 		for (int i = 0; i < 1000; i++)
 		{
 			s += LargeText;
@@ -308,7 +374,7 @@ public sealed class RopeTests
 	public void InsertSortedLargeFloatList()
 	{
 		var random = new Random(42);
-		var rope = new Rope<float>();
+		var rope = Rope<float>.Empty;
 		var comparer = Comparer<float>.Default;
 		foreach (var rank in Enumerable.Range(0, 65000).Select(s => random.NextSingle()))
 		{
@@ -319,8 +385,8 @@ public sealed class RopeTests
 	[TestMethod]
 	public void AblationOfConstructionSizes()
 	{
-		var sequence = Enumerable.Range(0, 120000).Select(c => (char)((int)' ' + (c % 26))).ToList();
-		for (int chunkSize = 1; chunkSize < 1024; chunkSize+=10)
+		var sequence = Enumerable.Range(0, 12000).Select(c => (char)((int)'9' + (c % 26))).ToList();
+		for (int chunkSize = 1; chunkSize < 100; chunkSize += 1)
 		{
 			var rope = sequence.Chunk(chunkSize).Select(chunk => new Rope<char>(chunk.ToArray())).Aggregate(Rope<char>.Empty, (prev, next) => prev + next);
 			Assert.IsTrue(rope.SequenceEqual(sequence));
@@ -328,12 +394,41 @@ public sealed class RopeTests
 	}
 
 	[TestMethod]
+	public void AblationOfSplitAt()
+	{
+		var sequence = Enumerable.Range(0, 1200).Select(c => (char)((int)'9' + (c % 26))).ToList();
+		for (int chunkSize = 1; chunkSize < 100; chunkSize += 1)
+		{
+			var rope = sequence.Chunk(chunkSize).Select(chunk => new Rope<char>(chunk.ToArray())).Aggregate(Rope<char>.Empty, (prev, next) => prev + next);
+			for	(int splitPoint = 0; splitPoint < rope.Length; splitPoint++)
+			{
+				var (left, right) = rope.SplitAt(splitPoint);
+				Assert.AreEqual(splitPoint, left.Length);
+				Assert.AreEqual(rope.Length - splitPoint, right.Length);
+			}
+		}
+	}
+
+	[TestMethod]
 	public void BalanceCheck()
 	{
+		var unbalancedRope = new Rope<char>(
+				new Rope<char>(new char[] { 'a' }),
+				new Rope<char>(
+					new Rope<char>(new char[] { 'b' }),
+					new Rope<char>(
+						new Rope<char>(new char[] { 'c' }),
+						new Rope<char>(
+							new Rope<char>(new char[] { 'd' }),
+							new Rope<char>(new Rope<char>(new char[] { 'e' }), new Rope<char>(new char[] { 'f' }))))));
+		
 		// Fn+2;
-		Assert.IsFalse(
-			new Rope<char>(
-			new Rope<char>(new char[] { 'a', 'b', 'c', }),
-			new Rope<char>(new char[] { 'd' })).IsBalanced);
+		Assert.IsFalse(unbalancedRope.IsBalanced);
+		
+		var balanced = unbalancedRope.Balanced();
+		Assert.IsTrue(balanced.IsBalanced);
+		
+		// Flattened
+		Assert.AreEqual(balanced.Depth, 0);
 	}
 }
