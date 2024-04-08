@@ -164,7 +164,7 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
         var s = lorem;
         for (int i = 0; i < EditCount; i++)
         {
-            s = s.Insert(321, lorem);
+            s = s.InsertRange(321, lorem);
         }
 
         ////s.ToString();

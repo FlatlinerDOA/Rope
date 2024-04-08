@@ -9,9 +9,11 @@ using System.Linq;
 [TestClass]
 public sealed class RopeTests
 {
-	private static Rope<int> EvenNumbers;
-	
-	private static Rope<char> LargeText;
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    private static Rope<int> EvenNumbers;
+
+    private static Rope<char> LargeText;
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
 	public RopeTests()
 	{
@@ -116,7 +118,7 @@ public sealed class RopeTests
 	public void AdditionOperatorSingleElement() => Assert.AreEqual("Lorem ipsum", ("Lorem ipsu".ToRope() + 'm').ToString());
 
 	[TestMethod]
-	public void ConcatRopes() => Assert.AreEqual("Lorem ipsum", "Lorem ".ToRope().Concat("ipsum".ToRope()).ToString());
+	public void ConcatRopes() => Assert.AreEqual("Lorem ipsum", "Lorem ".ToRope().AddRange("ipsum".ToRope()).ToString());
 
 	[TestMethod]
 	public void Replace() => Assert.AreEqual("The ghosts say boo dee boo", "The ghosts say doo dee doo".ToRope().Replace("doo".AsMemory(), "boo".AsMemory()).ToString());		
@@ -197,14 +199,14 @@ public sealed class RopeTests
 	public void RemoveZeroLengthDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(10, 0));
+		Assert.AreSame(a, a.RemoveRange(10, 0));
 	}
 
 	[TestMethod]
 	public void RemoveAtTailDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(a.Length));
+		Assert.AreSame(a, a.RemoveRange(a.Length));
 	}
 
 	[TestMethod]
@@ -212,7 +214,7 @@ public sealed class RopeTests
 	public void RemoveBeyondTailArgumentOutOfRangeException()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(a.Length + 1));
+		Assert.AreSame(a, a.RemoveRange(a.Length + 1));
 	}
 
 	[TestMethod]
@@ -351,7 +353,7 @@ public sealed class RopeTests
 		var s = LargeText;
 		for (int i = 0; i < 1000; i++)
 		{
-			s = s.Insert(LargeText.Length / 2, LargeText);
+			s = s.InsertRange(LargeText.Length / 2, LargeText);
 		}
 
 		Assert.AreEqual(LargeText.Length * 1001, s.Length);
@@ -364,7 +366,7 @@ public sealed class RopeTests
 		var s = LargeText;
 		for (int i = 0; i < 1000; i++)
 		{
-			s = s.Insert(memory.Length / 2, memory);
+			s = s.InsertRange(memory.Length / 2, memory);
 		}
 
 		Assert.AreEqual(memory.Length * 1001, s.Length);

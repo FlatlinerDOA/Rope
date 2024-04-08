@@ -8,11 +8,13 @@ using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Diagnostics.Metrics;
+using System.Collections.Immutable;
+using System.Diagnostics.Contracts;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
-public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
+public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T> where T : IEquatable<T>
 {
 	/// <summary>
 	/// Maximum tree depth allowed.
@@ -213,6 +215,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	public long Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
 
 	/// <summary>
+	/// Gets a value indicating whether this rope is empty.
+	/// </summary>
+	public bool IsEmpty => this.Length == 0;
+
+	/// <summary>
 	/// Gets the maximum depth of the tree, returns 0 if this is a leaf, never exceeds <see cref="Rope{T}.MaxTreeDepth"/>.
 	/// </summary>
 	public int Depth { get; }
@@ -223,6 +230,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="index"></param>
 	/// <returns>The element at the specified index.</returns>
 	/// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
+	[Pure]
 	public T ElementAt(long index)
 	{
 		if (this.IsNode)
@@ -248,6 +256,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="separator">The element to separate by, this element will never be included in the returned sequence.</param>
 	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
+	[Pure]
 	public IEnumerable<Rope<T>> Split(T separator)
 	{
 		Rope<T> remainder = this;
@@ -273,6 +282,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="separator">The sequence of elements to separate by, this sequenece will never be included in the returned sequence.</param>
 	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
+	[Pure]
 	public IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator)
 	{
 		Rope<T> remainder = this;
@@ -300,6 +310,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="i">The index to split the two halves at.</param>
 	/// <exception cref="ArgumentOutOfRangeException">Thrown if index to split at is out of range.</exception>
 	/// <returns></returns>
+	[Pure]
 	public (Rope<T> Left, Rope<T> Right) SplitAt(long i)
 	{
 		if (this.IsNode)
@@ -328,14 +339,41 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	}
 
 	/// <summary>
-	/// Inserts a sequence of elements at the given index.
+	/// Replaces a single element at the given index.
+	/// </summary>
+	/// <param name="index">The index to insert at.</param>
+	/// <param name="item">The item to replace with at the given index.</param>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the item included as a replacement.</returns>
+	[Pure]
+	public Rope<T> SetItem(long index, T item)
+	{
+		var (left, right) = this.SplitAt(index);		
+		return new Rope<T>(left, new Rope<T>(new[] { item }, right.Slice(1))).Balanced();
+	}
+
+
+	/// <summary>
+	/// Inserts a single element at the given index.
 	/// </summary>
 	/// <param name="index">The index to insert at.</param>
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
-	public Rope<T> Insert(long index, ReadOnlyMemory<T> items)
+	[Pure]
+	public Rope<T> Insert(long index, T item)
 	{
-		return this.Insert(index, new Rope<T>(items));
+		return this.InsertRange(index, new Rope<T>(new[] { item }.AsMemory()));
+	}
+
+	/// <summary>
+	/// Inserts a sequence of elements at the given index.
+	/// </summary>
+	/// <param name="index">The index to insert at.</param>
+	/// <param name="items">The items to insert at the given index.</param>
+	/// <returns>A new instance of the full <see cref="Rope{T}"/> with the the items added at the specified index.</returns>
+	[Pure]
+	public Rope<T> InsertRange(long index, ReadOnlyMemory<T> items)
+	{
+		return this.InsertRange(index, new Rope<T>(items));
 	}
 
 	/// <summary>
@@ -344,7 +382,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="index">The index to insert at.</param>
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
-	public Rope<T> Insert(long index, Rope<T> items)
+	[Pure]
+	public Rope<T> InsertRange(long index, Rope<T> items)
 	{
 		if (index > this.Length)
 		{
@@ -362,7 +401,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="length">The number of items to be removed.</param>
 	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
-	public Rope<T> Remove(long start, long length)
+	[Pure]
+	public Rope<T> RemoveRange(long start, long length)
 	{
 		if (length == 0)
 		{
@@ -383,7 +423,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="start">The start index to remove from.</param>
 	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	public Rope<T> Remove(long start)
+	[Pure]
+	public Rope<T> RemoveRange(long start)
 	{
 		if (start == this.Length) 
 		{
@@ -394,24 +435,52 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	}
 
 	/// <summary>
-	/// Concatenates two sequences together into a single sequence.
-	/// Performance note: This may attempt to perform a balancing if tree depth exceeds maximum tree depth.
+	/// Removes the tail range of elements from a given starting index (Alias for Slice).
 	/// </summary>
-	/// <param name="source">The source rope to append to this rope.</param>
-	/// <returns></returns>
-	public Rope<T> Concat(Rope<T> source)
+	/// <param name="start">The start index to remove from.</param>
+	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
+	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
+	[Pure]
+	public Rope<T> RemoveAt(long index)
 	{
-		if (source.Length == 0)
+		if (index == this.Length) 
+		{
+			return this;
+		}
+
+		var (left, right) = this.SplitAt(index);
+		return new Rope<T>(left, right.Slice(1));
+	}
+
+	/// <summary>
+	/// Adds an item to the end of the rope.
+	/// Performance note: This may attempt to perform a balancing.
+	/// </summary>
+	/// <param name="items">The item to append to this rope.</param>
+	/// <returns>A new rope that is the concatenation of the current sequence and the specified item.</returns>
+	[Pure]
+	public Rope<T> Add(T item) => this.AddRange(new[] { item });
+
+	/// <summary>
+	/// Concatenates two sequences together into a single sequence.
+	/// Performance note: This may attempt to perform a balancing.
+	/// </summary>
+	/// <param name="items">The items to append to this rope.</param>
+	/// <returns>A new rope that is the concatenation of the current sequence and the specified items.</returns>
+	[Pure]
+	public Rope<T> AddRange(Rope<T> items)
+	{
+		if (items.Length == 0)
 		{
 			return this;
 		}
 
 		if (this.Length == 0)
 		{
-			return source;
+			return items;
 		}
 
-		return new Rope<T>(this, source).Balanced();
+		return new Rope<T>(this, items).Balanced();
 	}
 
 	/// <summary>
@@ -419,6 +488,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="start">The start to select from.</param>
 	/// <returns>A new rope instance if start is non-zero, otherwise returns the original instance.</returns>
+	[Pure]
 	public Rope<T> Slice(long start)
 	{
 		return this.Slice(start, this.Length - start);
@@ -430,6 +500,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="start">The start to select from.</param>
 	/// <param name="length">The number of elements to return.</param>
 	/// <returns>A new rope instance if the slice does not cover the entire sequence, otherwise returns the original instance.</returns>
+	[Pure]
 	public Rope<T> Slice(long start, long length)
 	{
 		if (start == 0 && length == this.Length)
@@ -447,7 +518,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="a">The first sequence.</param>
 	/// <param name="b">The second sequence.</param>
 	/// <returns>A new rope instance concatenating the two sequences.</returns>
-	public static Rope<T> operator +(Rope<T> a, Rope<T> b) => a.Concat(b);
+	[Pure]
+	public static Rope<T> operator +(Rope<T> a, Rope<T> b) => a.AddRange(b);
 
 	/// <summary>
 	/// Appends an element to the existing instance.
@@ -455,19 +527,24 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="a">The first sequence.</param>
 	/// <param name="b">The second element to append to the sequence.</param>
 	/// <returns>A new rope instance concatenating the two sequences.</returns>
-	public static Rope<T> operator +(Rope<T> a, T b) => a.Concat(new Rope<T>(new T[] { b }.AsMemory()));
+	[Pure]
+	public static Rope<T> operator +(Rope<T> a, T b) => a.Add(b);
 
 	/// <summary>
 	/// Implicitly converts a read only memory sequence into a rope.
 	/// </summary>
 	/// <param name="a">A section of memory to wrap in a rope instance.</param>
+	[Pure]
 	public static implicit operator Rope<T> (ReadOnlyMemory<T> a) => new Rope<T>(a);
+	
+	[Pure]
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
 	/// <summary>
 	/// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
 	/// </summary>
 	/// <returns>A balanced tree or the original rope if not out of range.</returns>
+	[Pure]
 	public Rope<T> Balanced()
 	{
 		// Early return if the tree is already balanced or not a node		
@@ -520,7 +597,11 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	//// </remarks>
 	public bool IsBalanced { get; }
 
-	private static int Fibonnaci(int n)
+    public int Count => (int)this.Length;
+
+    public T this[int index] => this[(long)index];
+
+    private static int Fibonnaci(int n)
 	{
 		n = Math.Min(n, MaxTreeDepth);
 
@@ -533,6 +614,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="other">The other sequence to compare shared prefix length.</param>
 	/// <returns>A number greater than or equal to the length of the shortest of the two sequences.</returns>
+	[Pure]
 	public long CommonPrefixLength(Rope<T> other)
 	{
 		if (!this.IsNode && !other.IsNode)
@@ -561,6 +643,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="other">Other sequence to compare against.</param>
 	/// <returns>The number of characters common to the end of each sequence.</returns>
+	[Pure]
 	public long CommonSuffixLength(Rope<char> other)
 	{
 		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
@@ -580,6 +663,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// Copies the rope into a new single contiguous array of elements.
 	/// </summary>
 	/// <returns>A new array filled with the contents of the sequence.</returns>
+	[Pure]
 	public T[] ToArray()
 	{
 		if (this.IsNode)
@@ -613,42 +697,36 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 			this.data.CopyTo(other);
 		}
 	}
-	
+		
+	[Pure]
+	public long IndexOf(Rope<T> find) => this.IndexOf(find, EqualityComparer<T>.Default);
+
 	/// <summary>
 	/// Finds the index of a subset of the rope
 	/// </summary>
 	/// <param name="find"></param>
 	/// <returns>A number greater than or equal to zero if the sub-sequence is found, otherwise returns -1.</returns>
-	public long IndexOf(Rope<T> find)
+	[Pure]
+	public long IndexOf<TEqualityComparer>(Rope<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
 	{
-		if (this.IsNode)
+		if (!this.IsNode)
 		{
-			// We may have a fun boundary condition here. 
-			var comparer = EqualityComparer<T>.Default;
-			if (find.IsNode)
+			var dataSpan = this.data.Span;
+			if (object.ReferenceEquals(EqualityComparer<T>.Default, comparer))
 			{
-				// Try and find in left half
-				var index = this.left.IndexOf(find);
-				if (index != -1)
-				{
-					return index;
-				}
-
-				var startIndex = Math.Max(0, this.left.Length + 1 - find.Length);
-
-				// Check in the 'left' array for a starting match that could spill over to 'right'
-				for (var i = startIndex; i < left.Length; i++)
+				return dataSpan.IndexOf(find.data.Span);
+			}
+			else
+			{
+				// Check in the 'data' array for a starting match that could spill over to 'right'
+				for (var i = 0; i < dataSpan.Length; i++)
 				{
 					bool match = true;
-					for (int j = 0; j < find.Length && match; j++)
+					for (var j = 0; j < find.Length && match; j++)
 					{
-						if (i + j < left.Length)
+						if (i + j < dataSpan.Length)
 						{
-							match = comparer.Equals(this.left[i + j], find[j]);
-						}
-						else
-						{
-							match = comparer.Equals(this.right[i + j - left.Length], find[j]);
+							match = comparer.Equals(dataSpan[(int)(i + j)], find[j]);
 						}
 					}
 
@@ -658,32 +736,35 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 					}
 				}
 
-
-				index = this.right.IndexOf(find);
-				if (index != -1)
-				{
-					return this.left.Length + index;
-				}
-				
 				return -1;
 			}
+		}
 
-			// This is a node, but leaf is memory, we have to go element by element.
-			ReadOnlySpan<T> findSpan = find.data.Span;
-			
+		// We may have a fun boundary condition here. 
+		if (find.IsNode)
+		{
+			// Try and find in left half
+			var index = this.left.IndexOf(find, comparer);
+			if (index != -1)
+			{
+				return index;
+			}
+
+			var startIndex = Math.Max(0, this.left.Length + 1 - find.Length);
+
 			// Check in the 'left' array for a starting match that could spill over to 'right'
-			for (int i = 0; i < this.left.Length; i++)
+			for (var i = startIndex; i < left.Length; i++)
 			{
 				bool match = true;
-				for (int j = 0; j < findSpan.Length && match; j++)
+				for (int j = 0; j < find.Length && match; j++)
 				{
 					if (i + j < left.Length)
 					{
-						match = comparer.Equals(this.left[i + j], findSpan[j]);
+						match = comparer.Equals(this.left[i + j], find[j]);
 					}
 					else
 					{
-						match = comparer.Equals(this.right[i + j - left.Length], findSpan[j]);
+						match = comparer.Equals(this.right[i + j - left.Length], find[j]);
 					}
 				}
 
@@ -693,31 +774,61 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 				}
 			}
 
-			// Check in the 'right' array, but only if the 'find' can be fully contained within 'right'
-			for (int i = 0; i <= right.Length - findSpan.Length; i++)
-			{
-				bool match = true;
-				for (int j = 0; j < find.Length; j++)
-				{
-					match = match && comparer.Equals(right[i + j], find[j]);
-				}
 
-				if (match)
+			index = this.right.IndexOf(find, comparer);
+			if (index != -1)
+			{
+				return this.left.Length + index;
+			}
+			
+			return -1;
+		}
+
+		// This is a node, but leaf is memory, we have to go element by element.
+		ReadOnlySpan<T> findSpan = find.data.Span;
+		
+		// Check in the 'left' array for a starting match that could spill over to 'right'
+		for (int i = 0; i < this.left.Length; i++)
+		{
+			bool match = true;
+			for (int j = 0; j < findSpan.Length && match; j++)
+			{
+				if (i + j < left.Length)
 				{
-					return this.left.Length + i;
+					match = comparer.Equals(this.left[i + j], findSpan[j]);
+				}
+				else
+				{
+					match = comparer.Equals(this.right[i + j - left.Length], findSpan[j]);
 				}
 			}
 
-			// Indicate that no match was found
-			return -1;
+			if (match)
+			{
+				return i;
+			}
 		}
-		else 
+
+		// Check in the 'right' array, but only if the 'find' can be fully contained within 'right'
+		for (int i = 0; i <= this.right.Length - findSpan.Length; i++)
 		{
-			return this.data.Span.IndexOf(find.data.Span);
+			bool match = true;
+			for (int j = 0; j < find.Length; j++)
+			{
+				match = match && comparer.Equals(right[i + j], find[j]);
+			}
+
+			if (match)
+			{
+				return this.left.Length + i;
+			}
 		}
+
+		// Indicate that no match was found
+		return -1;
 	}
 
-
+	[Pure]
 	public long IndexOf(Rope<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
@@ -729,6 +840,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
+	[Pure]
 	public long IndexOf(ReadOnlyMemory<T> find) 
 	{
 		if (this.IsNode)
@@ -743,6 +855,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		}
 	}
 
+	[Pure]
 	public long IndexOf(T find)
 	{
 		if (this.IsNode)
@@ -769,7 +882,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public long IndexOf(T find, int offset)
+	[Pure]
+	public long IndexOf(T find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -780,7 +894,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
-	public long IndexOf(ReadOnlyMemory<T> find, int offset)
+	[Pure]
+	public long IndexOf(ReadOnlyMemory<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -791,11 +906,14 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return -1;
 	}
 
+	[Pure]
 	public bool StartsWith(Rope<T> find) => this.IndexOf(find) == 0;
 
+	[Pure]
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
-	public long LastIndexOf(Rope<T> find, int offset = 0)
+	[Pure]
+	public long LastIndexOf(Rope<T> find, long offset = 0)
 	{
 		if (find.Length > this.Length - offset)
 		{
@@ -831,20 +949,24 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		else
 		{
 			// Finding a Leaf within another leaf.
-			return this.data.Span.Slice(0, this.data.Span.Length - offset).LastIndexOf(find.data.Span);
+			return this.data.Span.Slice(0, (int)(this.data.Length - offset)).LastIndexOf(find.data.Span);
 		}
 	}
 
+	[Pure]
 	public long LastIndexOf(ReadOnlyMemory<T> find, int offset = 0) => this.LastIndexOf(new Rope<T>(find), offset);
 
+	[Pure]
 	public long LastIndexOf(T find, int offset = 0) => this.LastIndexOf(new Rope<T>(new[] { find }), offset);
 
+	[Pure]
 	public bool EndsWith(Rope<T> find)
 	{
 		var i = this.LastIndexOf(find); 
 		return i != -1 && i == this.Length - find.Length;
 	}
 
+	[Pure]
 	public bool EndsWith(ReadOnlyMemory<T> find) => this.EndsWith(new Rope<T>(find));
 
 	/// <summary>
@@ -853,12 +975,14 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="replace">The element to find.</param>
 	/// <param name="with">The element to replace with.</param>
 	/// <returns>A new rope with the replacements made.</returns>
+	[Pure]
 	public Rope<T> Replace(T replace, T with)
 	{
-		return this.Replace(new[] { replace }.AsMemory(), new[] { with });
+		return this.Replace(new[] { replace }, new[] { with });
 	}
 
-	public Rope<T> Replace(ReadOnlyMemory<T> replace, ReadOnlyMemory<T> with)
+	[Pure]
+	public Rope<T> Replace(Rope<T> replace, Rope<T> with)
 	{
 		var accum = Empty;
 		var remainder = this;
@@ -878,10 +1002,32 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return accum;
 	}
 
+	[Pure]
+	public Rope<T> Replace<TEqualityComparer>(Rope<T> replace, Rope<T> with, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+	{
+		var accum = Empty;
+		var remainder = this;
+		var i = -1L;
+		do
+		{
+			i = remainder.IndexOf(replace, comparer);
+			if (i != -1)
+			{
+				accum += remainder.Slice(0, i);
+				accum += with;
+				remainder = remainder.Slice(i + replace.Length);
+			}
+		}
+		while (i != -1);
+		accum += remainder;
+		return accum;
+	}
+
 	/// <summary>
 	/// Converts this to a string representation (if <typeparamref name="T"/> is a <see cref="char"/> a string of the contents is returned.)
 	/// </summary>
 	/// <returns>A string representation of the sequence.</returns>
+	[Pure]
 	public override string ToString()
 	{
 		if (this is Rope<char> rc)
@@ -900,6 +1046,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <param name="item">The item to be inserted.</param>
 	/// <param name="comparer">The comparer used to find the appropriate place to insert.</param>
 	/// <returns>A new rope already balanced if necessary.</returns>
+	[Pure]
 	public Rope<T> InsertSorted<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
 	{
 		var index = this.BinarySearch(item, comparer);
@@ -927,7 +1074,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public long BinarySearch<TComparer>(long index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
+    [Pure]
+	public long BinarySearch<TComparer>(long index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
     {
 		var offset = this.Slice(index, count).BinarySearch(item, comparer);
         return index + offset;
@@ -945,7 +1093,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public long BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+    [Pure]
+	public long BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
     {
 		if (this.IsNode)
 		{
@@ -976,7 +1125,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	///  that is larger than value or, if there is no larger element, the bitwise complement
 	///  of the Rope.Length.
 	/// </returns>
-    public long BinarySearch(T item)
+    [Pure]
+	public long BinarySearch(T item)
     {
 		if (this.IsNode)
 		{
@@ -999,6 +1149,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// Gets the memory representation of this sequence, may allocate a new array if this instance is a tree.
 	/// </summary>
 	/// <returns>Read only memory of the rope.</returns>
+	[Pure]
 	public ReadOnlyMemory<T> ToMemory()
 	{
 		if (this.IsNode)
@@ -1014,6 +1165,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="other">The other sequence to compare to</param>
 	/// <returns>true if both instances hold the same sequence, otherwise false.</returns>
+	[Pure]
 	public bool Equals(Rope<T>? other)
 	{
 		if (ReferenceEquals(other, null))
@@ -1033,6 +1185,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// Gets the content representative hash code of this rope's first element and it's length.
 	/// </summary>
 	/// <returns>A hash code that represents the contents of the sequence, not the instance.</returns>
+	[Pure]
 	public override int GetHashCode()
 	{
 		// AC: Combines first element hash with rope length; This allows two sequences that have 
@@ -1058,7 +1211,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		return new Enumerator(this);
 	}
 
-    public bool CalculateIsBalanced()
+    [Pure]
+	private bool CalculateIsBalanced()
     {
         return this.IsNode ?
             this.Depth < DepthToFibonnaciPlusTwo.Length && this.Length >= DepthToFibonnaciPlusTwo[this.Depth] :
@@ -1070,6 +1224,7 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="leaves">The leaf nodes to construct into a tree.</param>
 	/// <returns>A new rope with the leaves specified.</returns>
+	[Pure]
 	public static Rope<T> Combine(Rope<Rope<T>> leaves) 
 	{
 		// Iteratively combine leaf nodes into a balanced tree
@@ -1104,7 +1259,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// <typeparam name="T"></typeparam>
 	/// <param name="span"></param>
 	/// <returns>A new rope.</returns>
-    public static Rope<T> FromEnumerable(IEnumerable<T> items)
+    [Pure]
+	public static Rope<T> FromEnumerable(IEnumerable<T> items)
     {
 		// Create leaf nodes by chunking the sequence.
 		var leaves = new Rope<Rope<T>>(
@@ -1121,7 +1277,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="items">Read only list of items to copy from</param>
 	/// <returns>A new rope or <see cref="Empty"/> if items is empty.</returns>
-    public static Rope<T> FromReadOnlyList(IReadOnlyList<T> items)
+    [Pure]
+	public static Rope<T> FromReadOnlyList(IReadOnlyList<T> items)
     {
 		if (items.Count == 0)
 		{
@@ -1153,7 +1310,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="span">The source items to read</param>
 	/// <returns>A new rope or <see cref="Empty"/> if the span is empty.</returns>
-    public static Rope<T> FromReadOnlySpan(ref ReadOnlySpan<T> span)
+    [Pure]
+	public static Rope<T> FromReadOnlySpan(ref ReadOnlySpan<T> span)
     {
 		if (span.Length == 0)
 		{
@@ -1181,7 +1339,8 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 	/// </summary>
 	/// <param name="memory">The source memory to point to.</param>
 	/// <returns>A new rope or <see cref="Empty"/> if the memory is empty.</returns>
-    public static Rope<T> FromMemory(ReadOnlyMemory<T> memory)
+    [Pure]
+	public static Rope<T> FromMemory(ReadOnlyMemory<T> memory)
     {
 		if (memory.Length == 0)
 		{
@@ -1199,6 +1358,64 @@ public sealed record Rope<T> : IEnumerable<T> where T : IEquatable<T>
 		}
 
 		return Combine(leaves);
+    }
+
+    IImmutableList<T> IImmutableList<T>.Add(T value) => this.Add(value);
+
+    public IImmutableList<T> AddRange(IEnumerable<T> items) => this.AddRange(items.ToRope());
+
+    public IImmutableList<T> Clear() => Rope<T>.Empty;
+
+    int IImmutableList<T>.IndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
+	{
+		throw new NotImplementedException();
+	}
+
+    IImmutableList<T> IImmutableList<T>.Insert(int index, T element)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.InsertRange(int index, IEnumerable<T> items)
+    {
+        throw new NotImplementedException();
+    }
+
+    int IImmutableList<T>.LastIndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.Remove(T value, IEqualityComparer<T>? equalityComparer)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.RemoveAll(Predicate<T> match)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.RemoveAt(int index)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.RemoveRange(IEnumerable<T> items, IEqualityComparer<T>? equalityComparer)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.RemoveRange(int index, int count)
+    {
+        throw new NotImplementedException();
+    }
+
+    IImmutableList<T> IImmutableList<T>.Replace(T oldValue, T newValue, IEqualityComparer<T>? equalityComparer) => this.Replace(new[] { oldValue }, new[] { newValue }, equalityComparer ?? EqualityComparer<T>.Default);
+
+    IImmutableList<T> IImmutableList<T>.SetItem(int index, T value)
+    {
+        throw new NotImplementedException();
     }
 
     private struct Enumerator : IEnumerator<T>
