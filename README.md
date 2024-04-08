@@ -1,5 +1,7 @@
 # Rope
 
+![logo](https://raw.githubusercontent.com/FlatlinerDOA/Rope/master/logo.png)
+
 [![Build Status](https://github.com/FlatlinerDOA/Rope/actions/workflows/dotnet.yml/badge.svg)](https://github.com/FlatlinerDOA/Rope/actions)
 [![License](https://img.shields.io/github/license/FlatlinerDOA/Rope.svg)](https://github.com/FlatlinerDOA/Rope/LICENSE)
 
@@ -16,6 +18,11 @@ Where a b-tree has every node in the tree storing a single entry, a rope contain
 A rope of depth n is considered balanced if its length is at least Fn+2.
 
 **Note:** This implementation of Rope&lt;T&gt; has a hard-coded upper-bound depth of 46 added to the heuristic from the paper. As this seemed to be optimal for my workloads, your mileage may vary.
+
+
+## License and Acknowledgements
+Licensed MIT.
+Portions of this code are Apache 2.0 License where nominated.
 
 ## Example Usage
 ```csharp
