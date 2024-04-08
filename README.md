@@ -1,6 +1,6 @@
 # Rope
 
-![logo](https://raw.githubusercontent.com/FlatlinerDOA/Rope/master/logo.png)
+![logo](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/logo.png)
 
 [![Build Status](https://github.com/FlatlinerDOA/Rope/actions/workflows/dotnet.yml/badge.svg)](https://github.com/FlatlinerDOA/Rope/actions)
 [![License](https://img.shields.io/github/license/FlatlinerDOA/Rope.svg)](https://github.com/FlatlinerDOA/Rope/LICENSE)
