@@ -52,7 +52,22 @@ public sealed class RopeTests
     public void SplitBySequence() => Assert.IsTrue("this  is  a  test  of  the  things  I  split  by.".ToRope().Split("  ".AsMemory()).Select(c => c.ToString()).SequenceEqual("this  is  a  test  of  the  things  I  split  by.".Split("  ")));
 
     [TestMethod]
-    public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
+    public void LastIndexOf()
+	{
+		Assert.AreEqual("abc abc".LastIndexOf("c", 2), "abc abc".ToRope().LastIndexOf("c".ToRope(), 2));
+		Assert.AreEqual("abc abc".LastIndexOf("c", 6), "abc abc".ToRope().LastIndexOf("c".ToRope(), 6));
+		Assert.AreEqual("ABC".LastIndexOf("B", 0), "ABC".ToRope().LastIndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".LastIndexOf("B", 1), "ABC".ToRope().LastIndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".LastIndexOf("C", 2), "ABC".ToRope().LastIndexOf("C".ToRope(), 2));
+
+		Assert.AreEqual("ABC".LastIndexOf("B", 0), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".LastIndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).ToRope().LastIndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".LastIndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).ToRope().LastIndexOf("C".ToRope(), 2));
+
+	}
+
+    [TestMethod]
+    public void LastIndexOfOverlap() => Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
 
     [TestMethod]
     public void LastIndexOfElement() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
@@ -104,6 +119,9 @@ public sealed class RopeTests
 
 	[TestMethod]
 	public void StartsWith() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".ToRope()));
+
+	[TestMethod]
+	public void NotStartsWithPartitioned() => Assert.IsFalse(new Rope<char>("cde".ToRope(), "f".ToRope()).StartsWith(new Rope<char>("cdf".ToRope(), "g".ToRope())));
 
 	[TestMethod]
 	public void StartsWithMemory() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".AsMemory()));
@@ -243,6 +261,18 @@ public sealed class RopeTests
 
     [TestMethod]
 	public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
+
+	[TestMethod]
+	public void StringEqualsOperator() => Assert.IsTrue("abc".ToRope() == "abc".ToRope());
+
+	[TestMethod]
+	public void StructuralEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() == "ab".ToRope() + "c".ToRope());
+
+	[TestMethod]
+	public void StringNotEqualsOperator() => Assert.IsTrue("abc".ToRope() != "abbc".ToRope());
+
+	[TestMethod]
+	public void StructuralNotEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() != "ab".ToRope() + "bc".ToRope());
 
 	[TestMethod]
 	public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals(null));

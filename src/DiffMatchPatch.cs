@@ -718,9 +718,9 @@ public class diff_match_patch
         return chars.ToString();
     }
 
-    protected (string, string, List<string>) diff_linesToChars_pure(string text1, string text2)
+    protected (string Text1Encoded, string Text2Encoded, List<string> Lines) diff_linesToChars_pure(string text1, string text2)
     {
-        var (a, b, c) = diff_linesToChars_pure(text1.AsMemory(), text2.AsMemory());
+        var (a, b, c) = diff_linesToChars_pure(text1.ToRope(), text2.ToRope());
         return (a.ToString(), b.ToString(), c.Select(f => f.ToString()).ToList());
     }
 
@@ -733,7 +733,7 @@ public class diff_match_patch
      *     encoded text2 and the List of unique strings.  The zeroth element
      *     of the List of unique strings is intentionally blank.
      */
-    protected (Rope<char>, Rope<char>, Rope<Rope<char>>) diff_linesToChars_pure(Rope<char> text1, Rope<char> text2)
+    protected (Rope<char> Text1Encoded, Rope<char> Text2Encoded, Rope<Rope<char>> Lines) diff_linesToChars_pure(Rope<char> text1, Rope<char> text2)
     {
         var lineArray = Rope<Rope<char>>.Empty;
         var lineHash = ImmutableDictionary<Rope<char>, int>.Empty;
@@ -742,7 +742,7 @@ public class diff_match_patch
 
         // "\x00" is a valid character, but various debuggers don't like it.
         // So we'll insert a junk entry to avoid generating a null character.
-        lineArray.Add(Rope<char>.Empty);
+        lineArray = lineArray.Add(Rope<char>.Empty);
 
         // Allocate 2/3rds of the space for text1, the rest for text2.
         (var chars1, lineArray, lineHash) = diff_linesToCharsMunge_pure(text1, lineArray, lineHash, 40000);
@@ -763,27 +763,24 @@ public class diff_match_patch
     {
         long lineStart = 0;
         long lineEnd = -1;
-        Rope<char> line = Rope<char>.Empty;
-        Rope<char> chars = Rope<char>.Empty;
+        var line = Rope<char>.Empty;
+        var chars = Rope<char>.Empty;
+
         // Walk the text, pulling out a Substring for each line.
         // text.split('\n') would would temporarily double our memory footprint.
         // Modifying text would create many large strings to garbage collect.
         while (lineEnd < text.Length - 1)
         {
-            lineEnd = text.Slice(lineStart).IndexOf('\n');
+            lineEnd = text.IndexOf('\n', lineStart);
             if (lineEnd == -1)
             {
                 lineEnd = text.Length - 1;
             }
-            else
-            {
-                lineEnd += lineStart;
-            }
-            line = text.JavaSubstring(lineStart, lineEnd + 1);
 
+            line = text.JavaSubstring(lineStart, lineEnd + 1);
             if (lineHash.ContainsKey(line))
             {
-                chars = chars.Add((char)lineHash[line]);
+                chars = chars.Add((char)(int)lineHash[line]);
             }
             else
             {
@@ -838,7 +835,7 @@ public class diff_match_patch
             text = Rope<char>.Empty;
             for (int j = 0; j < diff.Text.Length; j++)
             {
-                text= text.AddRange(lineArray[diff.Text[j]]);
+                text = text.AddRange(lineArray[(int)diff.Text[j]]);
             }
 
             result = result.Add(new(diff.Operation, text));
@@ -847,6 +844,7 @@ public class diff_match_patch
         return result;
     }
 
+    [Pure]
     public int diff_commonPrefix(string text1, string text2) => diff_commonPrefix(text1.ToRope(), text2.ToRope());
 
     /**
@@ -855,17 +853,21 @@ public class diff_match_patch
      * @param text2 Second string.
      * @return The number of characters common to the start of each string.
      */
+    [Pure]
     public int diff_commonPrefix(Rope<char> text1, Rope<char> text2) => (int)text1.CommonPrefixLength(text2);
-    //	  // Performance analysis: https://neil.fraser.name/news/2007/10/09/
-    //      int n = Math.Min(text1.Length, text2.Length);
-    //      for (int i = 0; i < n; i++) {
-    //        if (text1[i] != text2[i]) {
-    //          return i;
-    //        }
-    //      }
-    //      return n;
-    //    }
+    // {
+    // 	  // Performance analysis: https://neil.fraser.name/news/2007/10/09/
+    //       var n = Math.Min(text1.Length, text2.Length);
+    //       for (int i = 0; i < n; i++) {
+    //         if (text1[i] != text2[i]) {
+    //           return i;
+    //         }
+    //       }
 
+    //       return (int)n;
+    // }
+
+    [Pure]
     public int diff_commonSuffix(string text1, string text2) => diff_commonSuffix(text1.ToRope(), text2.ToRope());
 
     /**
@@ -874,25 +876,25 @@ public class diff_match_patch
      * @param text2 Second string.
      * @return The number of characters common to the end of each string.
      */
+    [Pure]
     public int diff_commonSuffix(Rope<char> text1, Rope<char> text2) => (int)text1.CommonSuffixLength(text2);
     // {
     // 	// Performance analysis: https://neil.fraser.name/news/2007/10/09/
-    // 	var a = text1.Span;
-    // 	var b = text2.Span;
-    // 	int text1_length = a.Length;
-    // 	int text2_length = b.Length;
-    // 	int n = Math.Min(a.Length, b.Length);
+    // 	int text1_length = (int)text1.Length;
+    // 	int text2_length = (int)text2.Length;
+    // 	int n = Math.Min(text1_length, text2_length);
     // 	for (int i = 1; i <= n; i++)
     // 	{
-    // 		if (a[text1_length - i] != b[text2_length - i])
+    // 		if (text1[text1_length - i] != text2[text2_length - i])
     // 		{
     // 			return i - 1;
     // 		}
     // 	}
 
-    // 	return n;
+    //  	return n;
     // }
 
+    [Pure]
     protected int diff_commonOverlap(string text1, string text2) => diff_commonOverlap(text1.ToRope(), text2.ToRope());
     
 
@@ -903,6 +905,7 @@ public class diff_match_patch
      * @return The number of characters common to the end of the first
      *     string and the start of the second string.
      */
+    [Pure]
     protected int diff_commonOverlap(Rope<char> text1, Rope<char> text2)
     {
         // Cache the text lengths to prevent multiple calls.
@@ -925,7 +928,7 @@ public class diff_match_patch
 
         var text_length = Math.Min(text1_length, text2_length);
         // Quick check for the worst case.
-        if (text1.Equals(text2))
+        if (text1 == text2)
         {
             return (int)text_length;
         }
@@ -945,7 +948,7 @@ public class diff_match_patch
             }
 
             length += found;
-            if (found == 0 || text1.Slice(text_length - length).Equals(text2.Slice(0, length)))
+            if (found == 0 || text1.Slice(text_length - length) == text2.Slice(0, length))
             {
                 best = length;
                 length++;
@@ -963,9 +966,11 @@ public class diff_match_patch
      *     suffix of text1, the prefix of text2, the suffix of text2 and the
      *     common middle.  Or null if there was no match.
      */
-
+     
+    [Pure] 
     protected string[]? diff_halfMatch(string text1, string text2) => diff_halfMatch(text1.ToRope(), text2.ToRope())?.Select(p => p.ToString()).ToArray();
 
+    [Pure]
     protected Rope<char>[]? diff_halfMatch(Rope<char> text1, Rope<char> text2)
     {
         if (this.Diff_Timeout <= 0)
@@ -1026,6 +1031,7 @@ public class diff_match_patch
      *     suffix of longtext, the prefix of shorttext, the suffix of shorttext
      *     and the common middle.  Or null if there was no match.
      */
+    [Pure]
     private Rope<char>[] diff_halfMatchI(Rope<char> longtext, Rope<char> shorttext, long i)
     {
         // Start with a 1/4 length Substring at position i as a seed.
@@ -1036,7 +1042,7 @@ public class diff_match_patch
         var best_longtext_b = Rope<char>.Empty;
         var best_shorttext_a = Rope<char>.Empty;
         var best_shorttext_b = Rope<char>.Empty;
-        while (j < shorttext.Length && (j = shorttext.Slice(j + 1).IndexOf(seed)) != -1)
+        while (j < shorttext.Length && (j = shorttext.IndexOf(seed, j + 1)) != -1)
         {
             int prefixLength = diff_commonPrefix(longtext.Slice(i), shorttext.Slice(j));
             int suffixLength = diff_commonSuffix(longtext.Slice(0, i), shorttext.Slice(0, j));
@@ -1304,6 +1310,7 @@ public class diff_match_patch
      * @param two Second string.
      * @return The score.
      */
+    [Pure]
     private int diff_cleanupSemanticScore(Rope<char> one, Rope<char> two)
     {
         if (one.Length == 0 || two.Length == 0)
@@ -1365,11 +1372,13 @@ public class diff_match_patch
     public void diff_cleanupEfficiency(List<Diff> diffs)
     {
     }
+ 
     /**
- * Reduce the number of edits by eliminating operationally trivial
- * equalities.
- * @param diffs List of Diff objects.
- */
+    * Reduce the number of edits by eliminating operationally trivial
+    * equalities.
+    * @param diffs List of Diff objects.
+    */
+    [Pure]
     public Rope<Diff> diff_cleanupEfficiency_pure(Rope<Diff> diffs)
     {
         bool changes = false;
@@ -1634,6 +1643,7 @@ public class diff_match_patch
      * @param loc Location within text1.
      * @return Location within text2.
      */
+    [Pure]
     public long diff_xIndex(IEnumerable<Diff> diffs, long loc)
     {
         long chars1 = 0;
@@ -1678,6 +1688,7 @@ public class diff_match_patch
      * @param diffs List of Diff objects.
      * @return HTML representation.
      */
+    [Pure]
     public string diff_prettyHtml(IEnumerable<Diff> diffs)
     {
         var html = Rope<char>.Empty;
@@ -1716,6 +1727,7 @@ public class diff_match_patch
      * @param diffs List of Diff objects.
      * @return Source text.
      */
+    [Pure]
     public Rope<char> diff_text1(IReadOnlyList<Diff> diffs)
     {
         var text = Rope<char>.Empty;
@@ -1735,6 +1747,7 @@ public class diff_match_patch
      * @param diffs List of Diff objects.
      * @return Destination text.
      */
+    [Pure]
     public Rope<char> diff_text2(IReadOnlyList<Diff> diffs)
     {
         var text = Rope<char>.Empty;
@@ -1755,6 +1768,7 @@ public class diff_match_patch
      * @param diffs List of Diff objects.
      * @return Number of changes.
      */
+    [Pure]
     public long diff_levenshtein(Rope<Diff> diffs)
     {
         long levenshtein = 0;
@@ -1792,6 +1806,7 @@ public class diff_match_patch
      * @param diffs Array of Diff objects.
      * @return Delta text.
      */
+    [Pure]
     public Rope<char> diff_toDelta(Rope<Diff> diffs)
     {
         var text = Rope<char>.Empty;
@@ -1868,7 +1883,7 @@ public class diff_match_patch
                     int n;
                     try
                     {
-                        n = Convert.ToInt32(param);
+                        n = Convert.ToInt32(param.ToString());
                     }
                     catch (FormatException e)
                     {
@@ -1920,7 +1935,7 @@ public class diff_match_patch
 
 
     //  MATCH FUNCTIONS
-
+    [Pure]
     public int match_main(string text, string pattern, int loc) => (int)match_main(text.ToRope(), pattern.ToRope(), loc);
 
     /**
@@ -1931,6 +1946,7 @@ public class diff_match_patch
      * @param loc The location to search around.
      * @return Best match index or -1.
      */
+    [Pure]
     public long match_main(Rope<char> text, Rope<char> pattern, long loc)
     {
         // Check for null inputs not needed since null can't be passed in C#.
@@ -1966,8 +1982,10 @@ public class diff_match_patch
      * @param loc The location to search around.
      * @return Best match index or -1.
      */
+    [Pure]
     protected int match_bitap(string text,string pattern, int loc) => (int)match_bitap(text.ToRope(), pattern.ToRope(), loc);
 
+    [Pure]
     protected long match_bitap(Rope<char> text, Rope<char> pattern, long loc)
     {
         // assert (Match_MaxBits == 0 || pattern.Length <= Match_MaxBits)
@@ -2090,6 +2108,7 @@ public class diff_match_patch
      * @param pattern Pattern being sought.
      * @return Overall score for match (0.0 = good, 1.0 = bad).
      */
+    [Pure]
     private double match_bitapScore(long e, long x, long loc, Rope<char> pattern)
     {
         float accuracy = (float)e / pattern.Length;
@@ -2102,6 +2121,7 @@ public class diff_match_patch
         return accuracy + (proximity / (float)Match_Distance);
     }
 
+    [Pure]
     protected Dictionary<char, long> match_alphabet(string pattern) => match_alphabet(pattern.ToRope());
 
     /**
@@ -2109,6 +2129,7 @@ public class diff_match_patch
      * @param pattern The text to encode.
      * @return Hash of character locations.
      */
+    [Pure]
     protected Dictionary<char, long> match_alphabet(Rope<char> pattern)
     {
         Dictionary<char, long> s = new Dictionary<char, long>();        
@@ -2183,6 +2204,7 @@ public class diff_match_patch
         //      patch.length2 += prefix.Length + suffix.Length;
     }
 
+    [Pure]
     protected Patch patch_addContext_pure(Patch patch, Rope<char> text)
     {
         if (text.Length == 0)
@@ -2228,6 +2250,9 @@ public class diff_match_patch
         };
     }
 
+    [Pure]
+    public IEnumerable<Patch> patch_make(string text1, string text2) => patch_make(text1.ToRope(), text2.ToRope());
+
     /**
      * Compute a list of patches to turn text1 into text2.
      * A set of diffs will be computed.
@@ -2235,21 +2260,19 @@ public class diff_match_patch
      * @param text2 New text.
      * @return List of Patch objects.
      */
-    public IEnumerable<Patch> patch_make(string text1, string text2)
+    [Pure]
+    public IEnumerable<Patch> patch_make(Rope<char> text1, Rope<char> text2)
     {
-        var t1 = text1.ToRope();
-        var t2 = text2.ToRope();
-
         // Check for null inputs not needed since null can't be passed in C#.
         // No diffs provided, compute our own.
-        var diffs = diff_main(t1, t2, true);
+        var diffs = diff_main(text1, text2, true);
         if (diffs.Count > 2)
         {
             diffs = diff_cleanupSemantic_pure(diffs);
             diffs = diff_cleanupEfficiency_pure(diffs);
         }
 
-        return patch_make(t1, diffs);
+        return patch_make(text1, diffs);
     }
 
     /**
@@ -2258,6 +2281,7 @@ public class diff_match_patch
      * @param diffs Array of Diff objects for text1 to text2.
      * @return List of Patch objects.
      */
+    [Pure]
     public IEnumerable<Patch> patch_make(Rope<Diff> diffs)
     {
         // No origin string provided, compute our own.
@@ -2284,6 +2308,7 @@ public class diff_match_patch
      * @param diffs Array of Diff objects for text1 to text2.
      * @return List of Patch objects.
      */
+    [Pure]
     public IEnumerable<Patch> patch_make(Rope<char> text1, Rope<Diff> diffs)
     {
         // Check for null inputs not needed since null can't be passed in C#.
@@ -2381,7 +2406,12 @@ public class diff_match_patch
 		 * @return Two element Object array, containing the new text and an array of
 		 *      bool values.
 		 */
-    public (string Text, bool[] Applied) patch_apply(IEnumerable<Patch> patches, string text) => patch_apply(patches.ToList(), text);
+    [Pure]
+    public (string Text, bool[] Applied) patch_apply(IEnumerable<Patch> patches, string text)
+    {
+        var (result, applied) = patch_apply(patches.ToRope(), text.ToRope());
+        return (result.ToString(), applied);
+    }
 
     /**
      * Merge a set of patches onto the text.  Return a patched text, as well
@@ -2391,7 +2421,8 @@ public class diff_match_patch
      * @return Two element Object array, containing the new text and an array of
      *      bool values.
      */
-    public (Rope<char> Text, bool[] Applied) patch_apply(IReadOnlyList<Patch> patches, Rope<char> text)
+    [Pure]
+    public (Rope<char> Text, bool[] Applied) patch_apply(Rope<Patch> patches, Rope<char> text)
     {
         if (patches.Count == 0)
         {

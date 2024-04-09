@@ -23,7 +23,7 @@ public class diff_match_patchTest : diff_match_patch
 {
     public void diff_commonPrefixTest()
     {
-        // Detect any common suffix.
+        // Detect any common prefix.
         assertEquals("diff_commonPrefix: Null case.", 0, this.diff_commonPrefix("abc", "xyz"));
 
         assertEquals("diff_commonPrefix: Non-null case.", 4, this.diff_commonPrefix("1234abcdef", "1234xyz"));
@@ -49,6 +49,10 @@ public class diff_match_patchTest : diff_match_patch
         assertEquals("diff_commonOverlap: Whole case.", 3, this.diff_commonOverlap("abc", "abcd"));
 
         assertEquals("diff_commonOverlap: No overlap.", 0, this.diff_commonOverlap("123456", "abcd"));
+
+        assertEquals("diff_commonOverlap: No overlap #2.", 0, this.diff_commonOverlap("abcdef", "cdfg"));
+        
+        assertEquals("diff_commonOverlap: No overlap #3.", 0, this.diff_commonOverlap("cdfg", "abcdef"));
 
         assertEquals("diff_commonOverlap: Overlap.", 3, this.diff_commonOverlap("123456xxx", "xxxabcd"));
 
@@ -152,9 +156,9 @@ public class diff_match_patchTest : diff_match_patch
             new Diff(Operation.INSERT, "\u0002\u0001\u0002")
         });
         Rope<Rope<char>> tmpVector = Rope<Rope<char>>.Empty;
-        tmpVector.Add("".AsMemory());
-        tmpVector.Add("alpha\n".AsMemory());
-        tmpVector.Add("beta\n".AsMemory());
+        tmpVector = tmpVector.Add("".AsMemory());
+        tmpVector = tmpVector.Add("alpha\n".AsMemory());
+        tmpVector = tmpVector.Add("beta\n".AsMemory());
         diffs = this.diff_charsToLines_pure(diffs, tmpVector);
         assertEquals("diff_charsToLines: Shared lines.", new Rope<Diff>(new[] {
         new Diff(Operation.EQUAL, "alpha\nbeta\nalpha\n"),
@@ -162,35 +166,36 @@ public class diff_match_patchTest : diff_match_patch
 
         // More than 256 to reveal any 8-bit limitations.
         int n = 300;
-        tmpVector.Clear();
-        StringBuilder lineList = new StringBuilder();
-        StringBuilder charList = new StringBuilder();
+        tmpVector = tmpVector.Clear();
+        var lineList = Rope<char>.Empty;
+        var charList = Rope<char>.Empty;
         for (int i = 1; i < n + 1; i++)
         {
-            tmpVector.Add((i + "\n").AsMemory());
-            lineList.Append(i + "\n");
-            charList.Append(Convert.ToChar(i));
+            tmpVector = tmpVector.Add((i + "\n").AsMemory());
+            lineList = lineList.AddRange((i + "\n").AsMemory());
+            charList = charList.Add(Convert.ToChar(i));
         }
+
         assertEquals("Test initialization fail #3.", n, tmpVector.Count);
         string lines = lineList.ToString();
         string chars = charList.ToString();
         assertEquals("Test initialization fail #4.", n, chars.Length);
-        tmpVector.Insert(0, "".AsMemory());
+        tmpVector = tmpVector.Insert(0, "".AsMemory());
         diffs = new Rope<Diff>(new[] { new Diff(Operation.DELETE, chars) });
         diffs = this.diff_charsToLines_pure(diffs, tmpVector);
-        assertEquals("diff_charsToLines: More than 256.", new List<Diff>
-        {new Diff(Operation.DELETE, lines)}, diffs);
+        assertEquals("diff_charsToLines: More than 256.", new Rope<Diff>(new[] {new Diff(Operation.DELETE, lines)}), diffs);
 
         // More than 65536 to verify any 16-bit limitation.
-        lineList = new StringBuilder();
+        lineList = Rope<char>.Empty;
         for (int i = 0; i < 66000; i++)
         {
-            lineList.Append(i + "\n");
+            lineList = lineList.AddRange((i + "\n").AsMemory());
         }
+
         chars = lineList.ToString();
         var result = this.diff_linesToChars_pure(chars.AsMemory(), "".AsMemory());
-        diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, result.Item1) });
-        diffs = this.diff_charsToLines_pure(diffs, result.Item3);
+        diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, result.Text1Encoded) });
+        diffs = this.diff_charsToLines_pure(diffs, result.Lines);
         assertEquals("diff_charsToLines: More than 65536.", chars, diffs[0].Text.ToString());
     }
 
@@ -1169,9 +1174,14 @@ public class diff_match_patchTest : diff_match_patch
         }
     }
 
-    private static void assertEquals(string error_msg, string[] expected, string[] actual)
+    private static void assertEquals(string error_msg, string[] expected, string[]? actual)
     {
-        if (expected.Length != actual.Length)
+        if (actual is null)
+        {
+            throw new ArgumentNullException(nameof(actual));
+        }
+
+        if (expected.Length != actual.Length )
         {
             throw new ArgumentException(String.Format("assertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
@@ -1260,7 +1270,7 @@ public class diff_match_patchTest : diff_match_patch
         }
     }
 
-    private static void assertNull(string error_msg, object value)
+    private static void assertNull(string error_msg, object? value)
     {
         if (value != null)
         {

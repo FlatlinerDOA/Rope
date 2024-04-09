@@ -114,10 +114,10 @@ Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, e
     public int EditCount;
 
     [Benchmark]
-    public void StringBuilderConstructionOverhead() => new StringBuilder();
+    public void StringBuilderConstructionOverhead() => _ = new StringBuilder();
 
     [Benchmark]
-    public void RopeConstructionOverhead() => new Rope<char>(ReadOnlyMemory<char>.Empty);
+    public void RopeConstructionOverhead() => _ = new Rope<char>(ReadOnlyMemory<char>.Empty);
 
     [Benchmark]
     public void StringBuilderAppend()

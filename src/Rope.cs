@@ -14,7 +14,7 @@ using System.Diagnostics.Contracts;
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
-public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T> where T : IEquatable<T>
+public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
 	/// <summary>
 	/// Maximum tree depth allowed.
@@ -512,6 +512,12 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 		return head.SplitAt(start).Right;
 	}
 
+	[Pure]
+	public static bool operator ==(Rope<T> a, Rope<T> b) => Rope<T>.Equals(a, b);
+
+	[Pure]
+	public static bool operator !=(Rope<T> a, Rope<T> b) => !Rope<T>.Equals(a, b);
+
 	/// <summary>
 	/// Concatenates two rope instances together into a single sequence.
 	/// </summary>
@@ -709,62 +715,37 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 	[Pure]
 	public long IndexOf<TEqualityComparer>(Rope<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
 	{
+		if (find.Length > this.Length)
+		{
+			return -1;
+		}
+
+		if (find.Length == 0)
+		{
+			return 0;
+		}
+
 		if (!this.IsNode)
 		{
 			var dataSpan = this.data.Span;
-			if (object.ReferenceEquals(EqualityComparer<T>.Default, comparer))
+			if (!find.IsNode && object.ReferenceEquals(EqualityComparer<T>.Default, comparer))
 			{
 				return dataSpan.IndexOf(find.data.Span);
 			}
-			else
-			{
-				// Check in the 'data' array for a starting match that could spill over to 'right'
-				for (var i = 0; i < dataSpan.Length; i++)
-				{
-					bool match = true;
-					for (var j = 0; j < find.Length && match; j++)
-					{
-						if (i + j < dataSpan.Length)
-						{
-							match = comparer.Equals(dataSpan[(int)(i + j)], find[j]);
-						}
-					}
 
-					if (match)
-					{
-						return i;
-					}
-				}
-
-				return -1;
-			}
-		}
-
-		// We may have a fun boundary condition here. 
-		if (find.IsNode)
-		{
-			// Try and find in left half
-			var index = this.left.IndexOf(find, comparer);
-			if (index != -1)
-			{
-				return index;
-			}
-
-			var startIndex = Math.Max(0, this.left.Length + 1 - find.Length);
-
-			// Check in the 'left' array for a starting match that could spill over to 'right'
-			for (var i = startIndex; i < left.Length; i++)
+			// Check in the 'data' array for a starting match that could spill over to 'right'
+			for (var i = 0; i < dataSpan.Length; i++)
 			{
 				bool match = true;
-				for (int j = 0; j < find.Length && match; j++)
+				for (var j = 0; j < find.Length && match; j++)
 				{
-					if (i + j < left.Length)
+					if (i + j < dataSpan.Length)
 					{
-						match = comparer.Equals(this.left[i + j], find[j]);
+						match = comparer.Equals(dataSpan[(int)(i + j)], find[j]);
 					}
 					else
 					{
-						match = comparer.Equals(this.right[i + j - left.Length], find[j]);
+						match = false;
 					}
 				}
 
@@ -774,53 +755,27 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 				}
 			}
 
-
-			index = this.right.IndexOf(find, comparer);
-			if (index != -1)
-			{
-				return this.left.Length + index;
-			}
-			
 			return -1;
 		}
 
-		// This is a node, but leaf is memory, we have to go element by element.
-		ReadOnlySpan<T> findSpan = find.data.Span;
-		
-		// Check in the 'left' array for a starting match that could spill over to 'right'
-		for (int i = 0; i < this.left.Length; i++)
+		for (var i = 0; i < this.Length; i++)
 		{
 			bool match = true;
-			for (int j = 0; j < findSpan.Length && match; j++)
+			for (var j = 0; j < find.Length && match; j++)
 			{
-				if (i + j < left.Length)
+				if (i + j < this.Length)
 				{
-					match = comparer.Equals(this.left[i + j], findSpan[j]);
+					match = comparer.Equals(this[(int)(i + j)], find[j]);
 				}
 				else
 				{
-					match = comparer.Equals(this.right[i + j - left.Length], findSpan[j]);
+					match = false;
 				}
 			}
 
 			if (match)
 			{
 				return i;
-			}
-		}
-
-		// Check in the 'right' array, but only if the 'find' can be fully contained within 'right'
-		for (int i = 0; i <= this.right.Length - findSpan.Length; i++)
-		{
-			bool match = true;
-			for (int j = 0; j < find.Length; j++)
-			{
-				match = match && comparer.Equals(right[i + j], find[j]);
-			}
-
-			if (match)
-			{
-				return this.left.Length + i;
 			}
 		}
 
@@ -912,6 +867,12 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 	[Pure]
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="find"></param>
+	/// <param name="offset">The number of elements offset from the end of the sequence to start searching backwards from (Optional).</param>
+	/// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
 	[Pure]
 	public long LastIndexOf(Rope<T> find, long offset = 0)
 	{
@@ -920,27 +881,33 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 			return -1;
 		}
 
+		if (find.Length == 0)
+		{
+			return this.Length;
+		}
+
+
 		if (this.IsNode || find.IsNode)
 		{
 			var comparer = EqualityComparer<T>.Default;
-			var fend = find.Length - 1; // End position of find.
-			var matched = false;
-			var start = this.Length - 1 - offset;
-			for (var i = start; i >= 0; i--)
+			for (var i = offset; i >= 0; i--)
 			{
-				if (comparer.Equals(this[i], find[fend]))
+				var match = true;
+				for	(var j = find.Length - 1; j >= 0 && match; j--)
 				{
-					matched = true;
-					fend--;
-					if (fend < 0)
+					if (i + j >= 0)
 					{
-						return i;
+						match = comparer.Equals(this[i + j], find[j]);
+					}
+					else
+					{
+						match = false;
 					}
 				}
-				else if (matched)
+
+				if (match)
 				{
-					matched = false;
-					fend = find.Length - 1; // Start again
+					return i;
 				}
 			}
 			
@@ -949,7 +916,13 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 		else
 		{
 			// Finding a Leaf within another leaf.
-			return this.data.Span.Slice(0, (int)(this.data.Length - offset)).LastIndexOf(find.data.Span);
+			var i = this.data.Span.Slice(0, (int)offset + 1).LastIndexOf(find.data.Span);
+			if (i != -1)
+			{
+				return i;
+			}
+
+			return -1;
 		}
 	}
 
@@ -1160,6 +1133,26 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 		return this.data;
 	}
 
+	public override bool Equals(object? obj)
+	{
+		if (ReferenceEquals(obj, null))
+		{
+			return false;
+		}
+		
+		return obj is Rope<T> other && this.Equals(other);
+	}
+	
+	public static bool Equals(Rope<T>? a, Rope<T>? b) 
+	{
+		if (ReferenceEquals(a, null))
+		{
+			return ReferenceEquals(b, null);
+		}
+
+		return a.Equals(b);
+	}
+
 	/// <summary>
 	/// Gets a value indicating whether these two ropes are equivalent in terms of their content.
 	/// </summary>
@@ -1183,23 +1176,19 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 	
 	/// <summary>
 	/// Gets the content representative hash code of this rope's first element and it's length.
+	/// NOTE: Combines some of the elements in the hash along with the rope length; This allows two sequences that have 
+	/// different rope structures but the same representative string to have the same hash code.
+	/// Theory goes that as strings get longer their length is more likely to differ, 
+	/// shorter strings are fast to compare anyway.
 	/// </summary>
 	/// <returns>A hash code that represents the contents of the sequence, not the instance.</returns>
 	[Pure]
-	public override int GetHashCode()
+	public override int GetHashCode() => this.Length switch 
 	{
-		// AC: Combines first element hash with rope length; This allows two sequences that have 
-		// different rope structures but the same representative string to have the same hash code.
-		// Theory goes that as strings get longer their length is more likely to differ, 
-		// shorter strings are fast to compare anyway.
-		var stringHash = 0;
-		if (this.Length > 0)
-		{
-			stringHash = this.ElementAt(0).GetHashCode();
-		}
-		
-		return HashCode.Combine(stringHash, this.Length.GetHashCode());
-	}
+		> 256 => HashCode.Combine(this[0], this[this.Length / 2], this[this.Length - 1], this.Length),
+		> 0 => HashCode.Combine(this[0], this.Length),
+		_ => 0
+	};
 
 	public IEnumerator<T> GetEnumerator()
 	{
@@ -1360,63 +1349,65 @@ public sealed record Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<
 		return Combine(leaves);
     }
 
+	[Pure]
+    public Rope<T> Clear() => Rope<T>.Empty;
+
+	[Pure]
     IImmutableList<T> IImmutableList<T>.Add(T value) => this.Add(value);
 
-    public IImmutableList<T> AddRange(IEnumerable<T> items) => this.AddRange(items.ToRope());
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.AddRange(IEnumerable<T> items) => this.AddRange(items.ToRope());
 
-    public IImmutableList<T> Clear() => Rope<T>.Empty;
+	[Pure]
+	IImmutableList<T> IImmutableList<T>.Clear() => Rope<T>.Empty;
 
+	[Pure]
     int IImmutableList<T>.IndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
 	{
 		throw new NotImplementedException();
 	}
 
-    IImmutableList<T> IImmutableList<T>.Insert(int index, T element)
-    {
-        throw new NotImplementedException();
-    }
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.Insert(int index, T element) => this.Insert(index, element);
 
-    IImmutableList<T> IImmutableList<T>.InsertRange(int index, IEnumerable<T> items)
-    {
-        throw new NotImplementedException();
-    }
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.InsertRange(int index, IEnumerable<T> items) => this.InsertRange(index, items.ToArray());
 
+	[Pure]
     int IImmutableList<T>.LastIndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
     {
         throw new NotImplementedException();
     }
 
+	[Pure]
     IImmutableList<T> IImmutableList<T>.Remove(T value, IEqualityComparer<T>? equalityComparer)
     {
         throw new NotImplementedException();
     }
 
+	[Pure]
     IImmutableList<T> IImmutableList<T>.RemoveAll(Predicate<T> match)
     {
         throw new NotImplementedException();
     }
 
-    IImmutableList<T> IImmutableList<T>.RemoveAt(int index)
-    {
-        throw new NotImplementedException();
-    }
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.RemoveAt(int index) => this.RemoveAt((int)index);
 
+	[Pure]
     IImmutableList<T> IImmutableList<T>.RemoveRange(IEnumerable<T> items, IEqualityComparer<T>? equalityComparer)
     {
         throw new NotImplementedException();
     }
 
-    IImmutableList<T> IImmutableList<T>.RemoveRange(int index, int count)
-    {
-        throw new NotImplementedException();
-    }
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.RemoveRange(int index, int count) => this.RemoveRange((int)index, (int)count);
 
+	[Pure]
     IImmutableList<T> IImmutableList<T>.Replace(T oldValue, T newValue, IEqualityComparer<T>? equalityComparer) => this.Replace(new[] { oldValue }, new[] { newValue }, equalityComparer ?? EqualityComparer<T>.Default);
 
-    IImmutableList<T> IImmutableList<T>.SetItem(int index, T value)
-    {
-        throw new NotImplementedException();
-    }
+	[Pure]
+    IImmutableList<T> IImmutableList<T>.SetItem(int index, T value) => this.SetItem((int)index, value);
 
     private struct Enumerator : IEnumerator<T>
 	{
