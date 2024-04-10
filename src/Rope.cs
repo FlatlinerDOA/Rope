@@ -1,4 +1,5 @@
-﻿
+﻿// Copyright 2024 Andrew Chisholm (https://github.com/FlatlinerDOA)
+
 namespace Rope;
 
 using System;
@@ -867,47 +868,51 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	[Pure]
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
+
+	public long LastIndexOf(Rope<T> find) => this.LastIndexOf(find, this.Length);
+	
 	/// <summary>
-	/// 
+	/// Returns the last element index that matches the specified sub-sequence, working backwards from the startIndex (inclusive).
 	/// </summary>
-	/// <param name="find"></param>
-	/// <param name="offset">The number of elements offset from the end of the sequence to start searching backwards from (Optional).</param>
+	/// <param name="find">The sequence to find, if empty will return the startIndex + 1.</param>
+	/// <param name="startIndex">The starting index to start searching backwards from (Optional).</param>
 	/// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
 	[Pure]
-	public long LastIndexOf(Rope<T> find, long offset = 0)
+	public long LastIndexOf(Rope<T> find, long startIndex)
 	{
-		if (find.Length > this.Length - offset)
-		{
-			return -1;
-		}
-
 		if (find.Length == 0)
 		{
-			return this.Length;
+			// Adjust the return value to conform with .NET's behavior.
+			// If startIndex is within bounds, return startIndex + 1, ensuring it does not exceed the length of 'this'.
+			// Otherwise, return the length of 'this' as the next plausible index.
+			return Math.Min(startIndex + 1, this.Length);
 		}
-
 
 		if (this.IsNode || find.IsNode)
 		{
 			var comparer = EqualityComparer<T>.Default;
-			for (var i = offset; i >= 0; i--)
+			for (var i = startIndex; i >= 0; i--)
 			{
+				if (i + find.Length > this.Length) continue; // Skip if find exceeds bounds from i
+
 				var match = true;
-				for	(var j = find.Length - 1; j >= 0 && match; j--)
+				for (var j = find.Length - 1; j >= 0 && match; j--)
 				{
-					if (i + j >= 0)
+					// This check ensures we don't overshoot the bounds of 'this'
+					if (i + j < this.Length)
 					{
 						match = comparer.Equals(this[i + j], find[j]);
 					}
 					else
 					{
 						match = false;
+						break; // No need to continue if we're out of bounds
 					}
 				}
 
 				if (match)
 				{
-					return i;
+					return i; // Found the last occurrence
 				}
 			}
 			
@@ -916,7 +921,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		else
 		{
 			// Finding a Leaf within another leaf.
-			var i = this.data.Span.Slice(0, (int)offset + 1).LastIndexOf(find.data.Span);
+			var i = this.data.Span[..(int)Math.Min(startIndex + 1, this.Length)].LastIndexOf(find.data.Span);
 			if (i != -1)
 			{
 				return i;
@@ -927,10 +932,10 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public long LastIndexOf(ReadOnlyMemory<T> find, int offset = 0) => this.LastIndexOf(new Rope<T>(find), offset);
+	public long LastIndexOf(T find, int startIndex) => this.LastIndexOf(new Rope<T>(new[] { find }), startIndex);
 
 	[Pure]
-	public long LastIndexOf(T find, int offset = 0) => this.LastIndexOf(new Rope<T>(new[] { find }), offset);
+	public long LastIndexOf(T find) => this.LastIndexOf(new Rope<T>(new[] { find }));
 
 	[Pure]
 	public bool EndsWith(Rope<T> find)

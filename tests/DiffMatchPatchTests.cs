@@ -1,4 +1,5 @@
 
+using System.Diagnostics;
 using System.Text;
 
 ﻿/*
@@ -762,15 +763,17 @@ public class diff_match_patchTest : diff_match_patch
             a += a;
             b += b;
         }
-        DateTime startTime = DateTime.Now;
+        
+        var s = Stopwatch.StartNew();
         this.diff_main(a, b);
-        DateTime endTime = DateTime.Now;
+        s.Stop();
+        
         // Test that we took at least the timeout period.
-        assertTrue("diff_main: Timeout min.", new TimeSpan(((long)(this.Diff_Timeout * 1000)) * 10000) <= endTime - startTime);
+        assertTrue("diff_main: Timeout min.", TimeSpan.FromSeconds(this.Diff_Timeout) <= s.Elapsed);
         // Test that we didn't take forever (be forgiving).
         // Theoretically this test could fail very occasionally if the
         // OS task swaps or locks up for a second at the wrong moment.
-        assertTrue("diff_main: Timeout max.", new TimeSpan(((long)(this.Diff_Timeout * 1000)) * 10000 * 2) > endTime - startTime);
+        assertTrue("diff_main: Timeout max.", TimeSpan.FromSeconds(this.Diff_Timeout) * 2 > s.Elapsed);
         this.Diff_Timeout = 0;
 
         // Test the linemode speedup.

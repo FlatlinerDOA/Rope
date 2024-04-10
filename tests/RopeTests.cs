@@ -52,25 +52,35 @@ public sealed class RopeTests
     public void SplitBySequence() => Assert.IsTrue("this  is  a  test  of  the  things  I  split  by.".ToRope().Split("  ".AsMemory()).Select(c => c.ToString()).SequenceEqual("this  is  a  test  of  the  things  I  split  by.".Split("  ")));
 
     [TestMethod]
-    public void LastIndexOf()
+    public void LastIndexOfRopeWithStartIndex()
 	{
 		Assert.AreEqual("abc abc".LastIndexOf("c", 2), "abc abc".ToRope().LastIndexOf("c".ToRope(), 2));
 		Assert.AreEqual("abc abc".LastIndexOf("c", 6), "abc abc".ToRope().LastIndexOf("c".ToRope(), 6));
+		Assert.AreEqual("abc abc".LastIndexOf("c", 7), "abc abc".ToRope().LastIndexOf("c".ToRope(), 7));
 		Assert.AreEqual("ABC".LastIndexOf("B", 0), "ABC".ToRope().LastIndexOf("B".ToRope(), 0));
 		Assert.AreEqual("ABC".LastIndexOf("B", 1), "ABC".ToRope().LastIndexOf("B".ToRope(), 1));
 		Assert.AreEqual("ABC".LastIndexOf("C", 2), "ABC".ToRope().LastIndexOf("C".ToRope(), 2));
 
 		Assert.AreEqual("ABC".LastIndexOf("B", 0), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 0));
-		Assert.AreEqual("ABC".LastIndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).ToRope().LastIndexOf("B".ToRope(), 1));
-		Assert.AreEqual("ABC".LastIndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).ToRope().LastIndexOf("C".ToRope(), 2));
-
+		Assert.AreEqual("ABC".LastIndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".LastIndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("C".ToRope(), 2));
+		Assert.AreEqual("ab".LastIndexOf("ab", 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf("ab".ToRope(), 1));
+		Assert.AreEqual("ab".LastIndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 1));
+		Assert.AreEqual("ab".LastIndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2));
+		Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
 	}
 
     [TestMethod]
-    public void LastIndexOfOverlap() => Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
+    public void LastIndexOfElementWithStartIndex() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
 
     [TestMethod]
-    public void LastIndexOfElement() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
+    public void LastIndexOfElement()
+	{
+ 		Assert.AreEqual("abc abc".LastIndexOf('c'), "abc abc".ToRope().LastIndexOf('c'));
+		Assert.AreEqual("abc abc".LastIndexOf('a'), new Rope<char>("abc a".ToRope(), "bc".ToRope()).LastIndexOf('a'));
+		Assert.AreEqual("abc abc".LastIndexOf('a'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('a'));
+		Assert.AreEqual("abc abc".LastIndexOf('x'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('x'));
+	}
 
 	[TestMethod]
 	public void ConcattedLastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));

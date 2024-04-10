@@ -1,12 +1,3 @@
-using System.Collections.Immutable;
-using System.Diagnostics.Contracts;
-using System.Numerics;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Web;
-
-namespace Rope;
-
 /*
 * Diff Match and Patch
 * Copyright 2018 The diff-match-patch Authors.
@@ -24,6 +15,15 @@ namespace Rope;
 * See the License for the specific language governing permissions and
 * limitations under the License.
 */
+
+namespace Rope;
+
+using System.Collections.Immutable;
+using System.Diagnostics.Contracts;
+using System.Numerics;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Web;
 
 internal static class CompatibilityExtensions
 {
@@ -262,7 +262,7 @@ public class diff_match_patch
      *     If true, then run a faster slightly less optimal diff.
      * @return List of Diff objects.
      */
-     public Rope<Diff> diff_main(string text1, string text2, bool checklines)  => diff_main(text1.ToRope(), text2.ToRope(), checklines);
+     public Rope<Diff> diff_main(string text1, string text2, bool checklines) => diff_main(text1.ToRope(), text2.ToRope(), checklines);
     
     public Rope<Diff> diff_main(Rope<char> text1, Rope<char> text2, bool checklines)
     {
