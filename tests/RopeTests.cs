@@ -86,7 +86,32 @@ public sealed class RopeTests
 	public void ConcattedLastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
 
 	[TestMethod]
-	public void IndexOf() => Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
+	public void IndexOf()
+	{
+		Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
+		Assert.AreEqual("abc abc".IndexOf("c", 2), "abc abc".ToRope().IndexOf("c".ToRope(), 2));
+		Assert.AreEqual("abc abc".IndexOf("c", 6), "abc abc".ToRope().IndexOf("c".ToRope(), 6));
+		Assert.AreEqual("abc abc".IndexOf("c", 7), "abc abc".ToRope().IndexOf("c".ToRope(), 7));
+		Assert.AreEqual("ABC".IndexOf("B", 0), "ABC".ToRope().IndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".IndexOf("B", 1), "ABC".ToRope().IndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".IndexOf("C", 2), "ABC".ToRope().IndexOf("C".ToRope(), 2));
+
+		Assert.AreEqual("ABC".IndexOf("B", 0), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".IndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".IndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("C".ToRope(), 2));
+		Assert.AreEqual("ab".IndexOf("ab", 1), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf("ab".ToRope(), 1));
+		Assert.AreEqual("ab".IndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf(Rope<char>.Empty, 1));
+		Assert.AreEqual("ab".IndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf(Rope<char>.Empty, 2));
+		Assert.AreEqual("def abcdefgh".IndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).IndexOf("def".ToRope()));
+
+		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("test".ToRope(), Rope<char>.Empty)));
+		Assert.AreEqual(0, new Rope<char>("test".ToRope(), Rope<char>.Empty).IndexOf("test".ToRope()));
+
+
+		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("te".ToRope(), "st".ToRope())));
+		Assert.AreEqual(0, new Rope<char>("tes".ToRope(), "t".ToRope()).IndexOf("test".ToRope()));
+
+	}
 
 	[TestMethod]
 	public void IndexOfRopeAfter() => Assert.AreEqual("abc abc".IndexOf("bc", 2), "abc abc".ToRope().IndexOf("bc".ToRope(), 2));

@@ -80,7 +80,6 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	{
 		// Empty rope is just a leaf node.
 		this.data = ReadOnlyMemory<T>.Empty;
-		this.Depth = 0;
 		this.IsBalanced = true;
 	}
 
@@ -96,8 +95,8 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		
 		// Always initialize a leaf node when given memory directly.
 		this.data = data;
-		this.Depth = 0;
 		this.IsBalanced = true;
+		this.Length = this.data.Length;
 	}
 
 	/// <summary>
@@ -108,12 +107,12 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <exception cref="ArgumentNullException">Thrown if either the left or right node is null.</exception>
 	public Rope(Rope<T> left, Rope<T> right)
 	{
-		if (left == null)
+		if (ReferenceEquals(left, null))
 		{
 			throw new ArgumentNullException(nameof(left));
 		}
 
-		if (right == null)
+		if (ReferenceEquals(right, null))
 		{
 			throw new ArgumentNullException(nameof(right));
 		}
@@ -125,13 +124,13 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
                 this.left = left.left;
                 this.right = left.right;
                 this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+				this.Length = left.Length;
                 this.IsBalanced = this.CalculateIsBalanced();
-
             }
             else
             {
                 this.data = left.data;
-                this.Depth = 0;
+				this.Length = this.data.Length;
 				this.IsBalanced = true;
             }
         }
@@ -142,12 +141,13 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
                 this.left = right.left;
                 this.right = right.right;
                 this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+				this.Length = right.Length;
                 this.IsBalanced = this.CalculateIsBalanced();
             }
             else
             {
                 this.data = right.data;
-                this.Depth = 0;
+				this.Length = this.data.Length;
 				this.IsBalanced = true;
             }
         }
@@ -157,6 +157,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			this.left = left;
 			this.right = right;
 			this.Depth = Math.Max(left.Depth, right.Depth) + 1;
+			this.Length = this.left.Length + this.right.Length;
             this.IsBalanced = this.CalculateIsBalanced();
 
             // if (newDepth > MaxTreeDepth)
@@ -166,7 +167,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
             // 	this.right = right.Balanced();
             // 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
             // }
-        }
+        }		
 	}
 
     public T this[long index] => this.ElementAt(index);
@@ -213,7 +214,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <summary>
 	/// Gets the length of the rope in terms of the number of elements it contains.
 	/// </summary>
-	public long Length => this.IsNode ? this.left.Length + this.right.Length : this.data.Length;
+	public long Length { get; }
 
 	/// <summary>
 	/// Gets a value indicating whether this rope is empty.
@@ -628,21 +629,76 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		{
 			return MemoryExtensions.CommonPrefixLength(this.data.Span, other.data.Span);
 		}
-
-		// TODO: Compare Performance
-		////return MemoryExtensions.CommonPrefixLength(this.ToMemory().Span, other.ToMemory().Span);
-
-		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
-		var n = Math.Min(this.Length, other.Length);
-		for (long i = 0; i < n; i++)
+		
+		using var a = this.Buffers.GetEnumerator();
+		using var b = other.Buffers.GetEnumerator();
+		if (a.MoveNext() && b.MoveNext())
 		{
-			if (!this.ElementAt(i).Equals(other.ElementAt(i)))
+			var aSpan = a.Current.Span;
+			var bSpan = b.Current.Span;
+
+			long globalCommon = 0;
+			while (true)
 			{
-				return i;
+				// A buffer and b buffer are aligned match them
+				var common = MemoryExtensions.CommonPrefixLength(aSpan, bSpan);
+				if (common > 0)
+				{
+					globalCommon += common;
+					
+					// A buffer is shorter than B buffer
+					if (common == aSpan.Length && common < bSpan.Length)
+					{
+						// Shift A and Slice B
+						bSpan = bSpan.Slice(common);
+						if (a.MoveNext())
+						{
+							aSpan = a.Current.Span;
+							continue;
+						}
+						else
+						{
+							return globalCommon;
+						}
+					}
+					else if (common == bSpan.Length && common < aSpan.Length)
+					{
+						// Slice A and Shift B
+						aSpan = aSpan.Slice(common);
+						if (b.MoveNext())
+						{
+							bSpan = b.Current.Span;
+							continue;
+						}
+						else
+						{
+							return globalCommon;
+						}
+					} 
+					else
+					{
+						// We have a common prefix and both spans are longer than necessary, we're done.
+						return globalCommon;
+					}
+				}
+
+				return globalCommon;
 			}
 		}
 
-		return n;
+		return 0;
+
+		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
+		// var n = Math.Min(this.Length, other.Length);
+		// for (long i = 0; i < n; i++)
+		// {
+		// 	if (!this.ElementAt(i).Equals(other.ElementAt(i)))
+		// 	{
+		// 		return i;
+		// 	}
+		// }
+
+		// return n;
 	}
 
 	/// <summary>
@@ -726,25 +782,164 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			return 0;
 		}
 
-		if (!this.IsNode)
-		{
-			var dataSpan = this.data.Span;
-			if (!find.IsNode && object.ReferenceEquals(EqualityComparer<T>.Default, comparer))
-			{
-				return dataSpan.IndexOf(find.data.Span);
-			}
+		// Attempt 1: Naive split of slow and fast paths.
+		// if (!this.IsNode)
+		// {
+		// 	var dataSpan = this.data.Span;
+		// 	var isDefault = object.ReferenceEquals(EqualityComparer<T>.Default, comparer);
+		// 	if (!find.IsNode && isDefault)
+		// 	{
+		// 		return dataSpan.IndexOf(find.data.Span);
+		// 	}
 
-			// Check in the 'data' array for a starting match that could spill over to 'right'
-			for (var i = 0; i < dataSpan.Length; i++)
+		// 	// Check in the 'data' array for a starting match that could spill over to 'right'
+		// 	for (var i = 0; i < dataSpan.Length - find.Length; i++)
+        //     {
+        //         var match = isDefault ? find.StartsWithSpanFast(dataSpan[i..]) : find.StartsWithSpanSlow(comparer, dataSpan[i..]);
+        //         if (match)
+        //         {
+        //             return i;
+        //         }
+        //     }
+
+        //     return -1;
+		// }
+
+		// for (var i = 0; i < this.Length; i++)
+		// {
+		// 	bool match = true;
+		// 	for (var j = 0; j < find.Length && match; j++)
+		// 	{
+		// 		if (i + j < buffer.Length)
+		// 		{
+		// 			match = comparer.Equals(buffer[(int)(i + j)], find[j]);
+		// 		}
+		// 		else
+		// 		{
+		// 			match = false;
+		// 		}
+		// 	}
+
+		// 	if (match)
+		// 	{
+		// 		return i;
+		// 	}
+		// }
+
+		// // Indicate that no match was found
+		// return -1;
+
+
+		// Attempt 2: Flattened access to buffers and slow search (Big memory allocation overhead).
+		var buffers = this.Buffers.ToArray();
+		var findBuffer = find.ToMemory(); // PERF: This is BAD!!
+		return this.IndexOfSlow(buffers, findBuffer, comparer);
+
+
+		// Attempt 3: WIP - Shifting through buffers and using IndexOf for fast seek.
+		// using var a = this.Buffers.GetEnumerator();
+		// using var b = find.Buffers.GetEnumerator();
+		// if (a.MoveNext() && b.MoveNext())
+		// {
+		// 	var aSpan = a.Current.Span;
+		// 	var bSpan = b.Current.Span;
+		// 	while (true)
+		// 	{
+		// 		// Jump to the first element to seek to a possible start
+		// 		var f = aSpan.IndexOf(bSpan[0]);
+		// 		if (f == -1)
+		// 		{
+		// 			if (a.MoveNext())
+		// 			{
+		// 				aSpan = a.Current.Span;
+		// 			}
+		// 			else
+		// 			{
+		// 				return -1;
+		// 			}
+		// 		}
+		// 		else
+		// 		{
+		// 			var goodStart = aSpan[f..];
+
+		// 			// Check if F is a good start?
+		// 			while (true)
+		// 			{
+		// 				var common = goodStart.CommonPrefixLength(bSpan);
+		// 				if (common == bSpan.Length)
+		// 				{
+		// 					if (b.MoveNext())
+		// 					{
+		// 						goodStart = goodStart.Slice(common);
+
+		// 						// Keep going!
+		// 						bSpan = b.Current.Span;
+		// 					}
+		// 					else
+		// 					{
+		// 						// That was the last span, we're done!
+		// 						return f;
+		// 					}
+		// 				}
+		// 				else if (common == aSpan.Length)
+		// 				{
+		// 					if (a.MoveNext())
+		// 					{
+		// 						aSpan = a.Current.Span;
+		// 					}
+		// 					else
+		// 					{
+		// 						return -1;
+		// 					}
+		// 				}
+		// 			}
+		// 		}			
+		// 	}
+		// }
+
+		// return -1;
+	}
+
+	private IEnumerable<ReadOnlyMemory<T>> Buffers
+	{
+		get 
+		{
+			if (this.IsNode)
+			{
+				foreach (var b in this.left.Buffers)
+				{
+					yield return b;
+				}
+
+				foreach (var b in this.right.Buffers)
+				{
+					yield return b;
+				}
+			}
+			else
+			{
+				yield return this.data;
+			}
+		}
+	}
+
+	private int IndexOfSlow<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> buffers, ReadOnlyMemory<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+	{
+		if (find.Length == 0) return 0; // Matching empty sequence returns 0 (or consider special handling)
+
+		int globalIndex = 0; // Tracks overall position across all buffers
+
+		for (int bufIndex = 0; bufIndex < buffers.Length; bufIndex++)
+		{
+			ReadOnlySpan<T> bufferSpan = buffers[bufIndex].Span;
+			for (int i = 0; i < bufferSpan.Length; i++)
 			{
 				bool match = true;
-				for (var j = 0; j < find.Length && match; j++)
+				var findSpan = find.Span;
+				for (int j = 0; j < findSpan.Length && match; j++)
 				{
-					if (i + j < dataSpan.Length)
-					{
-						match = comparer.Equals(dataSpan[(int)(i + j)], find[j]);
-					}
-					else
+					int globalOffset = globalIndex + j;
+					if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out T value) || !comparer.Equals(value, findSpan[j]))
 					{
 						match = false;
 					}
@@ -752,39 +947,81 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 				if (match)
 				{
-					return i;
+					return globalIndex;
 				}
-			}
 
-			return -1;
-		}
-
-		for (var i = 0; i < this.Length; i++)
-		{
-			bool match = true;
-			for (var j = 0; j < find.Length && match; j++)
-			{
-				if (i + j < this.Length)
-				{
-					match = comparer.Equals(this[(int)(i + j)], find[j]);
-				}
-				else
-				{
-					match = false;
-				}
-			}
-
-			if (match)
-			{
-				return i;
+				globalIndex++; // Move to the next global position
 			}
 		}
 
-		// Indicate that no match was found
-		return -1;
+		return -1; // Not found
 	}
 
-	[Pure]
+	/// <summary>
+	/// Helper method to get value at a global index across all buffers
+	/// </summary>
+	/// <param name="buffers">Span of memory buffers</param>
+	/// <param name="globalIndex">The global index to find.</param>
+	/// <param name="value">The output value</param>
+	/// <returns>true if found, otherwise false.</returns>
+	private bool TryGetValueAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, out T value)
+	{
+		int accumulatedLength = 0;
+		foreach (var buffer in buffers)
+		{
+			if (globalIndex < accumulatedLength + buffer.Length)
+			{
+				value = buffer.Span[globalIndex - accumulatedLength];
+				return true;
+			}
+
+			accumulatedLength += buffer.Length;
+		}
+
+		value = default;
+		return false; // Global index out of range
+	}
+
+
+    // private bool StartsWithSpanFast(ReadOnlySpan<T> dataSpan)
+    // {
+	// 	if (this.IsNode)
+	// 	{
+	// 		return this.Left.StartsWithSpanFast(dataSpan) && this.Right.StartsWithSpanFast(dataSpan[this.Left.Count..]);
+	// 	}
+	// 	else
+	// 	{
+	// 		return this.data.Span.StartsWith(dataSpan);
+	// 	}
+    // }
+
+    // private bool StartsWithSpanSlow<TEqualityComparer>(TEqualityComparer comparer, ReadOnlySpan<T> dataSpan) where TEqualityComparer : IEqualityComparer<T>
+    // {
+	// 	if (this.IsNode)
+	// 	{
+	// 		return this.Left.StartsWithSpanSlow(comparer, dataSpan[..this.Left.Count]) && this.Right.StartsWithSpanSlow(comparer, dataSpan[this.Left.Count..]);
+	// 	}
+	// 	else
+	// 	{
+	// 		var match = true;
+	// 		var thisSpan = this.data.Span;
+	// 		for (var j = 0; j < thisSpan.Length && match; j++)
+	// 		{
+	// 			if (j < dataSpan.Length)
+	// 			{
+	// 				match = comparer.Equals(dataSpan[j], thisSpan[j]);
+	// 			}
+	// 			else
+	// 			{
+	// 				match = false;
+	// 			}
+	// 		}
+
+	// 		return match;
+	// 	}
+    // }
+
+    [Pure]
 	public long IndexOf(Rope<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);

@@ -213,30 +213,29 @@ public class diff_match_patch
     private short Match_MaxBits = 32;
 
 
-    private sealed class Deadline
+    private sealed class Deadline : IDisposable
     {
-        private readonly TimeSpan timeout;
+        private readonly CancellationTokenSource source;
 
-        public Deadline(float timeoutSeconds) : this(timeoutSeconds <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds(timeoutSeconds))
+        public Deadline(float timeoutSeconds) : this(timeoutSeconds <= 0.0f ? TimeSpan.Zero : TimeSpan.FromSeconds(timeoutSeconds))
         {
         }
 
         public Deadline(TimeSpan timeout)
         {
-            this.timeout = timeout;
+            this.source = new CancellationTokenSource();
             if (timeout != TimeSpan.Zero)
             {
-                var source = new CancellationTokenSource();
-                source.CancelAfter((int)timeout.TotalMilliseconds);
-                this.Cancellation = source.Token;
-            }
-            else
-            {
-                this.Cancellation = CancellationToken.None;
+                this.source.CancelAfter(timeout);
             }
         }
 
-        public CancellationToken Cancellation { get; }
+        public CancellationToken Cancellation => this.source.Token;
+
+        public void Dispose()
+        {
+            this.source.Dispose();
+        }
     }
 
     //  DIFF FUNCTIONS
@@ -262,12 +261,14 @@ public class diff_match_patch
      *     If true, then run a faster slightly less optimal diff.
      * @return List of Diff objects.
      */
-     public Rope<Diff> diff_main(string text1, string text2, bool checklines) => diff_main(text1.ToRope(), text2.ToRope(), checklines);
+    public Rope<Diff> diff_main(string text1, string text2, bool checklines) => diff_main(text1.ToRope(), text2.ToRope(), checklines);
     
+    public Rope<Diff> diff_main(Rope<char> text1, Rope<char> text2) => diff_main(text1, text2, true);
+
     public Rope<Diff> diff_main(Rope<char> text1, Rope<char> text2, bool checklines)
     {
         // Set a deadline by which time the diff must be complete.
-        var deadline = new Deadline(this.Diff_Timeout);
+        using var deadline = new Deadline(this.Diff_Timeout);
         return diff_main(text1, text2, checklines, deadline.Cancellation);
     }
 
@@ -316,12 +317,12 @@ public class diff_match_patch
         // Restore the prefix and suffix.
         if (commonprefix.Length != 0)
         {
-            diffs = diffs.Prepend(new Diff(Operation.EQUAL, commonprefix));
+            diffs = diffs.Insert(0, new Diff(Operation.EQUAL, commonprefix));
         }
 
         if (commonsuffix.Length != 0)
         {
-            diffs = diffs.Append(new Diff(Operation.EQUAL, commonsuffix));
+            diffs = diffs.Add(new Diff(Operation.EQUAL, commonsuffix));
         }
 
         return diff_cleanupMerge_pure(diffs);
@@ -338,20 +339,18 @@ public class diff_match_patch
      * @param cancel Time when the diff should be complete by.
      * @return List of Diff objects.
      */
-    private IEnumerable<Diff> diff_compute(Rope<char> text1, Rope<char> text2, bool checklines, CancellationToken cancel)
+    private Rope<Diff> diff_compute(Rope<char> text1, Rope<char> text2, bool checklines, CancellationToken cancel)
     {
         if (text1.Length == 0)
         {
             // Just add some text (speedup).
-            yield return new Diff(Operation.INSERT, text2);
-            yield break;
+            return new Rope<Diff>(new[] { new Diff(Operation.INSERT, text2) });
         }
 
         if (text2.Length == 0)
         {
             // Just delete some text (speedup).
-            yield return new Diff(Operation.DELETE, text1);
-            yield break;
+            return new Rope<Diff>(new[] { new Diff(Operation.DELETE, text1) });
         }
 
         var longtext = text1.Length > text2.Length ? text1 : text2;
@@ -361,19 +360,23 @@ public class diff_match_patch
         {
             // Shorter text is inside the longer text (speedup).
             Operation op = (text1.Length > text2.Length) ? Operation.DELETE : Operation.INSERT;
-            yield return new Diff(op, longtext.Slice(0, i));
-            yield return new Diff(Operation.EQUAL, shorttext);
-            yield return new Diff(op, longtext.Slice(i + shorttext.Length));
-            yield break;
+            return new Rope<Diff>(new[]
+            { 
+                new Diff(op, longtext.Slice(0, i)),
+                new Diff(Operation.EQUAL, shorttext),
+                new Diff(op, longtext.Slice(i + shorttext.Length))
+            });
         }
 
         if (shorttext.Length == 1)
         {
             // Single character string.
             // After the previous speedup, the character can't be an equality.
-            yield return new Diff(Operation.DELETE, text1);
-            yield return new Diff(Operation.INSERT, text2);
-            yield break;
+            return new Rope<Diff>(new[]
+            {
+                new Diff(Operation.DELETE, text1),
+                new Diff(Operation.INSERT, text2)
+            });
         }
 
         // Check to see if the problem can be split in two.
@@ -389,36 +392,17 @@ public class diff_match_patch
 
             // Send both pairs off for separate processing.
             var diffs_a = diff_main(text1_a, text2_a, checklines, cancel);
-            foreach (var a in diffs_a)
-            {
-                yield return a;
-            }
-
-            yield return new Diff(Operation.EQUAL, mid_common);
-
-            var diffs_b = diff_main(text1_b, text2_b, checklines, cancel);
-            foreach (var b in diffs_b)
-            {
-                yield return b;
-            }
-
-            yield break;
+            diffs_a = diffs_a + new Diff(Operation.EQUAL, mid_common);
+            var diffs_b = diff_main(text1_b, text2_b, checklines, cancel);            
+            return diffs_a + diffs_b;
         }
 
         if (checklines && text1.Length > 100 && text2.Length > 100)
         {
-            foreach (var line in diff_lineMode(text1, text2, cancel))
-            {
-                yield return line;
-            }
-
-            yield break;
+            return diff_lineMode(text1, text2, cancel);
         }
 
-        foreach (var d in diff_bisect(text1, text2, cancel))
-        {
-            yield return d;
-        }
+        return diff_bisect(text1, text2, cancel);
     }
 
     /**
@@ -495,36 +479,33 @@ public class diff_match_patch
      * @param deadline Time at which to bail if not yet complete.
      * @return List of Diff objects.
      */
-    protected IReadOnlyList<Diff> diff_bisect(string text1, string text2, CancellationToken cancel) => diff_bisect(text1.AsMemory(), text2.AsMemory(), cancel);
+    protected IReadOnlyList<Diff> diff_bisect(string text1, string text2, CancellationToken cancel) => diff_bisect(text1.ToRope(), text2.ToRope(), cancel);
+    
     protected Rope<Diff> diff_bisect(Rope<char> text1, Rope<char> text2, CancellationToken cancel)
     {
         // Cache the text lengths to prevent multiple calls.
         var text1_length = text1.Length;
         var text2_length = text2.Length;
-        var max_d = (text1_length + text2_length + 1) / 2;
+        var max_d = (int)(text1_length + text2_length + 1) / 2;
         var v_offset = max_d;
         var v_length = 2 * max_d;
-        var v1 = new long[v_length];
-        var v2 = new long[v_length];
-        for (var x = 0; x < v_length; x++)
-        {
-            v1[x] = -1;
-            v2[x] = -1;
-        }
-
+        var v1 = new int[v_length].AsSpan();
+        var v2 = new int[v_length].AsSpan();
+        v1.Fill(-1);
+        v2.Fill(-1);
         v1[v_offset + 1] = 0;
         v2[v_offset + 1] = 0;
-        var delta = text1_length - text2_length;
+        var delta = (int)(text1_length - text2_length);
         // If the total number of characters is odd, then the front path will
         // collide with the reverse path.
         bool front = (delta % 2 != 0);
         // Offsets for start and end of k loop.
         // Prevents mapping of space beyond the grid.
-        long k1start = 0;
-        long k1end = 0;
-        long k2start = 0;
-        long k2end = 0;
-        for (long d = 0; d < max_d; d++)
+        int k1start = 0;
+        int k1end = 0;
+        int k2start = 0;
+        int k2end = 0;
+        for (int d = 0; d < max_d; d++)
         {
             // Bail out if deadline is reached.
             if (cancel.IsCancellationRequested)
@@ -536,7 +517,7 @@ public class diff_match_patch
             for (var k1 = -d + k1start; k1 <= d - k1end; k1 += 2)
             {
                 var k1_offset = v_offset + k1;
-                long x1;
+                int x1;
                 if (k1 == -d || k1 != d && v1[k1_offset - 1] < v1[k1_offset + 1])
                 {
                     x1 = v1[k1_offset + 1];
@@ -546,12 +527,22 @@ public class diff_match_patch
                     x1 = v1[k1_offset - 1] + 1;
                 }
                 
-                long y1 = x1 - k1;
+                int y1 = x1 - k1;
                 while (x1 < text1_length && y1 < text2_length && text1[x1] == text2[y1])
                 {
                     x1++;
                     y1++;
                 }
+                
+                // EXPERIMENTAL: Slice + CommonPrefixLength, seems to allocate GB's!??
+                // if (x1 < text1_length && y1 < text2_length)
+                // {
+                //     var prefix = (int)text1[x1..].CommonPrefixLength(text2[y1..]);
+                //     x1 += prefix;
+                //     y1 += prefix;
+                // }
+
+
                 v1[k1_offset] = x1;
                 if (x1 > text1_length)
                 {
@@ -583,7 +574,7 @@ public class diff_match_patch
             for (var k2 = -d + k2start; k2 <= d - k2end; k2 += 2)
             {
                 var k2_offset = v_offset + k2;
-                long x2;
+                int x2;
                 if (k2 == -d || k2 != d && v2[k2_offset - 1] < v2[k2_offset + 1])
                 {
                     x2 = v2[k2_offset + 1];
@@ -620,7 +611,7 @@ public class diff_match_patch
                         var y1 = v_offset + x1 - k1_offset;
                         
                         // Mirror x2 onto top-left coordinate system.
-                        x2 = text1_length - v2[k2_offset];
+                        x2 = (int)(text1_length - v2[k2_offset]);
                         if (x1 >= x2)
                         {
                             // Overlap detected.
@@ -1175,7 +1166,7 @@ public class diff_match_patch
                 var insertion = diffs[pointer].Text;
                 int overlap_length1 = diff_commonOverlap(deletion, insertion);
                 int overlap_length2 = diff_commonOverlap(insertion, deletion);
-                if (overlap_length1 >= overlap_length2)
+                if (overlap_length1 != 0 && overlap_length1 >= overlap_length2)
                 {
                     if (overlap_length1 >= deletion.Length / 2.0 ||
                         overlap_length1 >= insertion.Length / 2.0)
@@ -1496,10 +1487,8 @@ public class diff_match_patch
      * @param diffs List of Diff objects.
      */
     [Pure]
-    public Rope<Diff> diff_cleanupMerge_pure(IEnumerable<Diff> inputDiffs)
+    public Rope<Diff> diff_cleanupMerge_pure(Rope<Diff> diffs)
     {
-        var diffs = inputDiffs.ToRope();
-
         // Add a dummy entry at the end.
         diffs = diffs.Add(new Diff(Operation.EQUAL, Rope<char>.Empty));
         int pointer = 0;
@@ -1542,6 +1531,7 @@ public class diff_match_patch
                                     diffs = diffs.Insert(0, new Diff(Operation.EQUAL, text_insert.Slice(0, commonlength)));
                                     pointer++;
                                 }
+
                                 text_insert = text_insert.Slice(commonlength);
                                 text_delete = text_delete.Slice(commonlength);
                             }
@@ -1563,6 +1553,7 @@ public class diff_match_patch
                             (_, diffs) = diffs.Splice(pointer, 0, new Diff(Operation.DELETE, text_delete));
                             pointer++;
                         }
+                        
                         if (text_insert.Length != 0)
                         {
                             (_, diffs) = diffs.Splice(pointer, 0, new Diff(Operation.INSERT, text_insert));

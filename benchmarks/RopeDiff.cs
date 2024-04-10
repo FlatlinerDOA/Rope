@@ -10,7 +10,7 @@ namespace Benchmarks;
 [MemoryDiagnoser]
 public class RopeDiff
 {
-    private static readonly string text1 = """
+    private static readonly Rope<char> text1 = """
 This is a '''list of newspapers published by [[Journal Register Company]]'''.
 
 The company owns daily and weekly newspapers, other print media properties and newspaper-affiliated local Websites in the [[U.S.]] states of [[Connecticut]], [[Michigan]], [[New York]], [[Ohio]] and [[Pennsylvania]], organized in six geographic "clusters":<ref>[http://www.journalregister.com/newspapers.html Journal Register Company: Our Newspapers], accessed February 10, 2008.</ref>
@@ -241,9 +241,9 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 <references />
 
 [[Category:Journal Register publications|*]]
-""";    
+""".ToRope();    
     
-    private static readonly string text2 = """
+    private static readonly Rope<char> text2 = """
 This is a '''list of newspapers published by [[Journal Register Company]]'''.
 
 The company owns daily and weekly newspapers, other print media properties and newspaper-affiliated local Websites in the [[U.S.]] states of [[Connecticut]], [[Michigan]], [[New York]], [[Ohio]], [[Pennsylvania]] and [[New Jersey]], organized in six geographic "clusters":<ref>[http://www.journalregister.com/publications.html Journal Register Company: Our Publications], accessed April 21, 2010.</ref>
@@ -432,7 +432,7 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 <references />
 
 [[Category:Journal Register publications|*]]
-""";
+""".ToRope();
     
     [Benchmark]
     public void DiffMain()
@@ -440,5 +440,25 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
         diff_match_patch dmp = new diff_match_patch();
         dmp.Diff_Timeout = 0;
         dmp.diff_main(text1, text2);
+    }  
+}
+
+
+public class RopeDiffMain
+{
+    [Benchmark]
+    public void CleanupSemanticPure()
+    {
+        string a = "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n";
+        string b = "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n";
+        // Increase the text lengths by 1024 times to ensure a timeout.
+        for (int i = 0; i < 10; i++)
+        {
+            a += a;
+            b += b;
+        }
+        
+        diff_match_patch dmp = new diff_match_patch();
+        dmp.diff_main(a, b);
     }
 }
