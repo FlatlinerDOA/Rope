@@ -65,6 +65,13 @@ A comparison could be drawn between a Rope and a StringBuilder as they use a ver
 |More than 2 billion elements|✅ |❌|❌|
 
 
+# Performance
+![Append Range](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.AppendRange-barplot.png)
+![Insert Range](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.InsertRange-barplot.png)
+![Split then Concat](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.SplitThenConcat-barplot.png)
+![Create New Empty](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.CreateNewEmpty-barplot.png)
+![Create New With Length 10](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.CreateNewWithLength10-barplot.png)
+
 ### Performance and Memory Allocation Comparison with StringBuilder
 Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max Depth = 46
 
