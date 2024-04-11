@@ -19,4 +19,7 @@ public class RopeSearch
 
     [Benchmark]
     public void IndexOfLargeFind() => _ = Ints.IndexOf(FindInts);
+
+    [Benchmark]
+    public void LastIndexOfLargeFind() => _ = Ints.LastIndexOf(FindInts);
 }

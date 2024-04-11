@@ -7,7 +7,7 @@ using Rope;
 namespace Benchmarks;
 
 [MemoryDiagnoser]
-public class RopeVersusPriorityQueue
+public class InsertSorted
 {
     private static readonly Random random = new(42);
     
@@ -16,7 +16,7 @@ public class RopeVersusPriorityQueue
     private static readonly float[] RandomFloats = Enumerable.Range(0, 65000).Select(s => random.NextSingle()).ToArray();
 
     [Benchmark]
-    public void RopeInsertSortedLong() 
+    public void RopeOfLong() 
     {
         var rope = Rope<long>.Empty;
         var comparer = Comparer<long>.Default;
@@ -27,7 +27,7 @@ public class RopeVersusPriorityQueue
     }
 
     [Benchmark]
-    public void PriorityQueueEnqueueSortedLong() 
+    public void PriorityQueueOfLong() 
     {
         var queue = new PriorityQueue<long, long>();
         for (int i = 0; i < RandomLongs.Length; i++)
@@ -37,7 +37,7 @@ public class RopeVersusPriorityQueue
     }
 
     [Benchmark]
-    public void RopeInsertSortedFloat() 
+    public void RopeOfFloat() 
     {
         var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
@@ -48,7 +48,7 @@ public class RopeVersusPriorityQueue
     }
 
     [Benchmark]
-    public void PriorityQueueEnqueueSortedFloat() 
+    public void PriorityQueueOfFloat() 
     {
         var queue = new PriorityQueue<long, float>();
         for (int i = 0; i < RandomFloats.Length; i++)
