@@ -51,19 +51,27 @@ Rope<char> text3 = text + " My second favourite text".ToRope();
 ## Comparison with .NET Built in Types
 A comparison could be drawn between a Rope and a StringBuilder as they use a very similar technique for efficient edits. List{T} is included as a commonly used alternative.
 
-|Feature|Rope&lt;T&gt;|StringBuilder|List{T}|
-|-------|-------------|-------------|-------|
-|Supports items of any type| ✅ |❌|✅|
-|Immutable edits| ✅ |❌|❌|
-|Thread safe| ✅ |❌|❌|
-|Copy free Append (avoid double allocations)| ✅ |✅|❌|
-|Copy free Insert| ✅ |✅|❌|
-|Copy free Remove| ✅ |❌|❌|
-|Copy free split| ✅ |❌|❌|
-|GC Friendly (No LOH, stays in Gen 0)| ✅ |❌|❌|
-|Value-like (Structural invariant GetHashCode and Equals)| ✅ |❌|❌|
-|More than 2 billion elements|✅ |❌|❌|
+|Feature|Rope&lt;T&gt;|StringBuilder|List{T}|ReadOnlyMemory{T}|ImmutableList{T}|ImmutableArray{T}|
+|-------|-------------|-------------|-------|-----------------|----------------|-----------------|
+|Supports items of any type|✅|❌|✅|✅|✅|✅|
+|Immutable edits|✅|❌|❌|❌|✅|✅|✅|
+|Thread safe|✅<sup>1.</sup>|❌|❌|✅<sup>1.</sup>|✅|✅|✅|
+|Copy free Append (avoid double allocations)|✅|✅|❌|❌|❌|❌|
+|Copy free Insert|✅|✅|❌|❌|❌|❌|
+|Copy free Remove|✅|❌|❌|❌|❌|❌|
+|Copy free split|✅|❌|❌|❌|❌|❌|
+|GC Friendly (No LOH, stays in Gen 0)|✅|❌|❌|✅|❌|✅|
+|Create()|O(1)|O(N)|O(N)|O(1)|O(N)|O(N)|
+|this[]|O(log N)|O(log N)|O(1)|O(1)|O(log N)|O(1)|
+|Add|O(1) <sup>2.</sup>|O(log N)|O(1) <sup>3.</sup>|O(N) <sup>4.</sup>|O(log N)|O(N) <sup>4.</sup>|
+|Value-like Equality <sup>5.</sup>|✅|❌|❌|❌|❌|✅|
+|More than 2 billion elements (long index)|✅|❌|❌|❌|❌|❌|
 
+* <sup>1.</sup> Thread safe as long as initial Array is not modified.
+* <sup>2.</sup> Average is case O(1) (amortized). Worst case is O(log N) when a rebalance is required.
+* <sup>3.</sup> Average is case O(1) (amortized). Worst case is O(N) when capacity increase is required.
+* <sup>4.</sup> Copying to a new instance is required.
+* <sup>5.</sup> Structural and reference invariant GetHashCode and Equals comparison.
 
 # Performance
 ![Append Range](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.AppendRange-barplot.png)

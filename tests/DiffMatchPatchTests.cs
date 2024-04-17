@@ -1,4 +1,5 @@
 
+using Rope.Compare;
 using System.Diagnostics;
 using System.Text;
 
@@ -20,7 +21,7 @@ using System.Text;
  * limitations under the License.
  */
 
-public class diff_match_patchTest : diff_match_patch
+public class diff_match_patchTest : DiffMatchPatch
 {
     public void diff_commonPrefixTest()
     {
@@ -45,102 +46,101 @@ public class diff_match_patchTest : diff_match_patch
     public void diff_commonOverlapTest()
     {
         // Detect any suffix/prefix overlap.
-        assertEquals("diff_commonOverlap: Null case.", 0, this.diff_commonOverlap("", "abcd"));
+        assertEquals("diff_commonOverlap: Null case.", 0, this.diff_commonOverlap("".ToRope(), "abcd".ToRope()));
 
-        assertEquals("diff_commonOverlap: Whole case.", 3, this.diff_commonOverlap("abc", "abcd"));
+        assertEquals("diff_commonOverlap: Whole case.", 3, this.diff_commonOverlap("abc".ToRope(), "abcd".ToRope()));
 
-        assertEquals("diff_commonOverlap: No overlap.", 0, this.diff_commonOverlap("123456", "abcd"));
+        assertEquals("diff_commonOverlap: No overlap.", 0, this.diff_commonOverlap("123456".ToRope(), "abcd".ToRope()));
 
-        assertEquals("diff_commonOverlap: No overlap #2.", 0, this.diff_commonOverlap("abcdef", "cdfg"));
+        assertEquals("diff_commonOverlap: No overlap #2.", 0, this.diff_commonOverlap("abcdef".ToRope(), "cdfg".ToRope()));
         
-        assertEquals("diff_commonOverlap: No overlap #3.", 0, this.diff_commonOverlap("cdfg", "abcdef"));
+        assertEquals("diff_commonOverlap: No overlap #3.", 0, this.diff_commonOverlap("cdfg".ToRope(), "abcdef".ToRope()));
 
-        assertEquals("diff_commonOverlap: Overlap.", 3, this.diff_commonOverlap("123456xxx", "xxxabcd"));
+        assertEquals("diff_commonOverlap: Overlap.", 3, this.diff_commonOverlap("123456xxx".ToRope(), "xxxabcd".ToRope()));
 
         // Some overly clever languages (C#) may treat ligatures as equal to their
         // component letters.  E.g. U+FB01 == 'fi'
-        assertEquals("diff_commonOverlap: Unicode.", 0, this.diff_commonOverlap("fi", "\ufb01i"));
+        assertEquals("diff_commonOverlap: Unicode.", 0, this.diff_commonOverlap("fi".ToRope(), "\ufb01i".ToRope()));
     }
 
     public void diff_halfmatchTest()
     {
         this.Diff_Timeout = 1;
-        assertNull("diff_halfMatch: No match #1.", this.diff_halfMatch("1234567890", "abcdef"));
+        assertNull("diff_halfMatch: No match #1.", this.diff_halfMatch("1234567890".ToRope(), "abcdef".ToRope()));
 
-        assertNull("diff_halfMatch: No match #2.", this.diff_halfMatch("12345", "23"));
+        assertNull("diff_halfMatch: No match #2.", this.diff_halfMatch("12345".ToRope(), "23".ToRope()));
 
-        assertEquals("diff_halfMatch: Single Match #1.", new string[] { "12", "90", "a", "z", "345678" }, this.diff_halfMatch("1234567890", "a345678z"));
+        assertEquals("diff_halfMatch: Single Match #1.", new HalfMatch("12", "90", "a", "z", "345678"), this.diff_halfMatch("1234567890".ToRope(), "a345678z".ToRope()));
 
-        assertEquals("diff_halfMatch: Single Match #2.", new string[] { "a", "z", "12", "90", "345678" }, this.diff_halfMatch("a345678z", "1234567890"));
+        assertEquals("diff_halfMatch: Single Match #2.", new HalfMatch("a", "z", "12", "90", "345678"), this.diff_halfMatch("a345678z".ToRope(), "1234567890".ToRope()));
 
-        assertEquals("diff_halfMatch: Single Match #3.", new string[] { "abc", "z", "1234", "0", "56789" }, this.diff_halfMatch("abc56789z", "1234567890"));
+        assertEquals("diff_halfMatch: Single Match #3.", new HalfMatch("abc", "z", "1234", "0", "56789"), this.diff_halfMatch("abc56789z".ToRope(), "1234567890".ToRope()));
 
-        assertEquals("diff_halfMatch: Single Match #4.", new string[] { "a", "xyz", "1", "7890", "23456" }, this.diff_halfMatch("a23456xyz", "1234567890"));
+        assertEquals("diff_halfMatch: Single Match #4.", new HalfMatch("a", "xyz", "1", "7890", "23456"), this.diff_halfMatch("a23456xyz".ToRope(), "1234567890".ToRope()));
 
-        assertEquals("diff_halfMatch: Multiple Matches #1.", new string[] { "12123", "123121", "a", "z", "1234123451234" }, this.diff_halfMatch("121231234123451234123121", "a1234123451234z"));
+        assertEquals("diff_halfMatch: Multiple Matches #1.", new HalfMatch("12123", "123121", "a", "z", "1234123451234"), this.diff_halfMatch("121231234123451234123121".ToRope(), "a1234123451234z".ToRope()));
 
-        assertEquals("diff_halfMatch: Multiple Matches #2.", new string[] { "", "-=-=-=-=-=", "x", "", "x-=-=-=-=-=-=-=" }, this.diff_halfMatch("x-=-=-=-=-=-=-=-=-=-=-=-=", "xx-=-=-=-=-=-=-="));
+        assertEquals("diff_halfMatch: Multiple Matches #2.", new HalfMatch("", "-=-=-=-=-=", "x", "", "x-=-=-=-=-=-=-="), this.diff_halfMatch("x-=-=-=-=-=-=-=-=-=-=-=-=".ToRope(), "xx-=-=-=-=-=-=-=".ToRope()));
 
-        assertEquals("diff_halfMatch: Multiple Matches #3.", new string[] { "-=-=-=-=-=", "", "", "y", "-=-=-=-=-=-=-=y" }, this.diff_halfMatch("-=-=-=-=-=-=-=-=-=-=-=-=y", "-=-=-=-=-=-=-=yy"));
+        assertEquals("diff_halfMatch: Multiple Matches #3.", new HalfMatch("-=-=-=-=-=", "", "", "y", "-=-=-=-=-=-=-=y"), this.diff_halfMatch("-=-=-=-=-=-=-=-=-=-=-=-=y".ToRope(), "-=-=-=-=-=-=-=yy".ToRope()));
 
         // Optimal diff would be -q+x=H-i+e=lloHe+Hu=llo-Hew+y not -qHillo+x=HelloHe-w+Hulloy
-        assertEquals("diff_halfMatch: Non-optimal halfmatch.", new string[] { "qHillo", "w", "x", "Hulloy", "HelloHe" }, this.diff_halfMatch("qHilloHelloHew", "xHelloHeHulloy"));
+        assertEquals("diff_halfMatch: Non-optimal halfmatch.", new HalfMatch("qHillo", "w", "x", "Hulloy", "HelloHe"), this.diff_halfMatch("qHilloHelloHew".ToRope(), "xHelloHeHulloy".ToRope()));
 
         this.Diff_Timeout = 0;
-        assertNull("diff_halfMatch: Optimal no halfmatch.", this.diff_halfMatch("qHilloHelloHew", "xHelloHeHulloy"));
+        assertNull("diff_halfMatch: Optimal no halfmatch.", this.diff_halfMatch("qHilloHelloHew".ToRope(), "xHelloHeHulloy".ToRope()));
     }
 
     public void diff_linesToCharsTest()
     {
         // Convert lines down to characters.
-        List<string> tmpVector = new List<string>();
-        tmpVector.Add("");
-        tmpVector.Add("alpha\n");
-        tmpVector.Add("beta\n");
-        var result = this.diff_linesToChars_pure("alpha\nbeta\nalpha\n", "beta\nalpha\nbeta\n");
-        assertEquals("diff_linesToChars: Shared lines #1.", "\u0001\u0002\u0001", result.Item1);
-        assertEquals("diff_linesToChars: Shared lines #2.", "\u0002\u0001\u0002", result.Item2);
+        Rope<Rope<char>> tmpVector = Rope<Rope<char>>.Empty;
+        tmpVector += "".ToRope();
+        tmpVector += "alpha\n".ToRope();
+        tmpVector += "beta\n".ToRope();
+        var result = this.diff_linesToChars_pure("alpha\nbeta\nalpha\n".ToRope(), "beta\nalpha\nbeta\n".ToRope());
+        assertEquals("diff_linesToChars: Shared lines #1.", "\u0001\u0002\u0001".ToRope(), result.Item1);
+        assertEquals("diff_linesToChars: Shared lines #2.", "\u0002\u0001\u0002".ToRope(), result.Item2);
         assertEquals("diff_linesToChars: Shared lines #3.", tmpVector, result.Item3);
 
-        tmpVector.Clear();
-        tmpVector.Add("");
-        tmpVector.Add("alpha\r\n");
-        tmpVector.Add("beta\r\n");
-        tmpVector.Add("\r\n");
-        result = this.diff_linesToChars_pure("", "alpha\r\nbeta\r\n\r\n\r\n");
-        assertEquals("diff_linesToChars: Empty string and blank lines #1.", "", result.Item1);
-        assertEquals("diff_linesToChars: Empty string and blank lines #2.", "\u0001\u0002\u0003\u0003", result.Item2);
+        tmpVector = tmpVector.Clear();
+        tmpVector += "".ToRope();
+        tmpVector += "alpha\r\n".ToRope();
+        tmpVector += "beta\r\n".ToRope();
+        tmpVector += "\r\n".ToRope();
+        result = this.diff_linesToChars_pure("".ToRope(), "alpha\r\nbeta\r\n\r\n\r\n".ToRope());
+        assertEquals("diff_linesToChars: Empty string and blank lines #1.", "".ToRope(), result.Item1);
+        assertEquals("diff_linesToChars: Empty string and blank lines #2.", "\u0001\u0002\u0003\u0003".ToRope(), result.Item2);
         assertEquals("diff_linesToChars: Empty string and blank lines #3.", tmpVector, result.Item3);
 
-        tmpVector.Clear();
-        tmpVector.Add("");
-        tmpVector.Add("a");
-        tmpVector.Add("b");
-        result = this.diff_linesToChars_pure("a", "b");
-        assertEquals("diff_linesToChars: No linebreaks #1.", "\u0001", result.Item1);
-        assertEquals("diff_linesToChars: No linebreaks #2.", "\u0002", result.Item2);
+        tmpVector = tmpVector.Clear();
+        tmpVector += "".ToRope();
+        tmpVector += "a".ToRope();
+        tmpVector += "b".ToRope();
+        result = this.diff_linesToChars_pure("a".ToRope(), "b".ToRope());
+        assertEquals("diff_linesToChars: No linebreaks #1.", "\u0001".ToRope(), result.Item1);
+        assertEquals("diff_linesToChars: No linebreaks #2.", "\u0002".ToRope(), result.Item2);
         assertEquals("diff_linesToChars: No linebreaks #3.", tmpVector, result.Item3);
 
         // More than 256 to reveal any 8-bit limitations.
         int n = 300;
-        tmpVector.Clear();
-        StringBuilder lineList = new StringBuilder();
-        StringBuilder charList = new StringBuilder();
+        tmpVector = tmpVector.Clear();
+        var lines = Rope<char>.Empty;
+        var chars = Rope<char>.Empty;
         for (int i = 1; i < n + 1; i++)
         {
-            tmpVector.Add(i + "\n");
-            lineList.Append(i + "\n");
-            charList.Append(Convert.ToChar(i));
+            tmpVector = tmpVector.Add((i + "\n").ToRope());
+            lines = lines.AddRange((i + "\n").ToRope());
+            chars = chars.Add(Convert.ToChar(i));
         }
+
         assertEquals("Test initialization fail #1.", n, tmpVector.Count);
-        string lines = lineList.ToString();
-        string chars = charList.ToString();
         assertEquals("Test initialization fail #2.", n, chars.Length);
-        tmpVector.Insert(0, "");
-        result = this.diff_linesToChars_pure(lines, "");
-        assertEquals("diff_linesToChars: More than 256 #1.", chars, result.Item1);
-        assertEquals("diff_linesToChars: More than 256 #2.", "", result.Item2);
-        assertEquals("diff_linesToChars: More than 256 #3.", tmpVector, result.Item3);
+        tmpVector = tmpVector.Insert(0, "".ToRope());
+        result = this.diff_linesToChars_pure(lines, "".ToRope());
+        assertEquals("diff_linesToChars: More than 256 #1.", chars, result.Text1Encoded);
+        assertEquals("diff_linesToChars: More than 256 #2.", "".ToRope(), result.Text2Encoded);
+        assertEquals("diff_linesToChars: More than 256 #3.", tmpVector, result.Lines);
     }
 
     public void diff_charsToLinesTest()
@@ -193,11 +193,11 @@ public class diff_match_patchTest : diff_match_patch
             lineList = lineList.AddRange((i + "\n").AsMemory());
         }
 
-        chars = lineList.ToString();
-        var result = this.diff_linesToChars_pure(chars.AsMemory(), "".AsMemory());
+        lineList = lineList.Balanced();
+        var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
         diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, result.Text1Encoded) });
         diffs = this.diff_charsToLines_pure(diffs, result.Lines);
-        assertEquals("diff_charsToLines: More than 65536.", chars, diffs[0].Text.ToString());
+        assertEquals("diff_charsToLines: More than 65536.", lineList, diffs[0].Text);
     }
 
     public void diff_cleanupMergeTest()
@@ -536,8 +536,10 @@ public class diff_match_patchTest : diff_match_patch
         new Diff(Operation.EQUAL, "a\n"),
         new Diff(Operation.DELETE, "<B>b</B>"),
         new Diff(Operation.INSERT, "c&d")});
-        assertEquals("diff_prettyHtml:", "<span>a&para;<br></span><del style=\"background:#ffe6e6;\">&lt;B&gt;b&lt;/B&gt;</del><ins style=\"background:#e6ffe6;\">c&amp;d</ins>",
-            this.diff_prettyHtml(diffs));
+        assertEquals(
+            "diff_prettyHtml:",
+            "<span>a&para;<br></span><del style=\"background:#ffe6e6;\">&lt;B&gt;b&lt;/B&gt;</del><ins style=\"background:#e6ffe6;\">c&amp;d</ins>".ToRope(),
+            diffs.ToHtmlReport());
     }
 
     public void diff_textTest()
@@ -551,9 +553,8 @@ public class diff_match_patchTest : diff_match_patch
         new Diff(Operation.DELETE, "the"),
         new Diff(Operation.INSERT, "a"),
         new Diff(Operation.EQUAL, " lazy")});
-        assertEquals("diff_text1:", "jumps over the lazy", this.diff_text1(diffs));
-
-        assertEquals("diff_text2:", "jumped over a lazy", this.diff_text2(diffs));
+        assertEquals("diff_text1:", "jumps over the lazy".ToRope(), diffs.ToSourceText());
+        assertEquals("diff_text2:", "jumped over a lazy".ToRope(), diffs.ToDestinationText());
     }
 
     public void diff_deltaTest()
@@ -568,11 +569,11 @@ public class diff_match_patchTest : diff_match_patch
         new Diff(Operation.INSERT, "a"),
         new Diff(Operation.EQUAL, " lazy"),
         new Diff(Operation.INSERT, "old dog")});
-        var text1 = this.diff_text1(diffs);
-        assertEquals("diff_text1: Base text.", "jumps over the lazy", text1);
+        var text1 = diffs.ToSourceText();
+        assertEquals("diff_text1: Base text.", "jumps over the lazy".ToRope(), text1);
 
         var delta = this.diff_toDelta(diffs);
-        assertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog", delta);
+        assertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog".ToRope(), delta);
 
         // Convert delta string into a diff.
         assertEquals("diff_fromDelta: Normal.", diffs, this.diff_fromDelta(text1, delta));
@@ -580,7 +581,7 @@ public class diff_match_patchTest : diff_match_patch
         // Generates error (19 < 20).
         try
         {
-            this.diff_fromDelta(text1 + "x".ToRope(), delta);
+            _ = this.diff_fromDelta(text1 + "x".ToRope(), delta);
             assertFail("diff_fromDelta: Too long.");
         }
         catch (ArgumentException)
@@ -591,7 +592,7 @@ public class diff_match_patchTest : diff_match_patch
         // Generates error (19 > 18).
         try
         {
-            this.diff_fromDelta(text1.Slice(1), delta);
+            _ = this.diff_fromDelta(text1.Slice(1), delta);
             assertFail("diff_fromDelta: Too short.");
         }
         catch (ArgumentException)
@@ -602,7 +603,7 @@ public class diff_match_patchTest : diff_match_patch
         // Generates error (%c3%xy invalid Unicode).
         try
         {
-            this.diff_fromDelta("".ToRope(), "+%c3%xy".ToRope());
+            _ = this.diff_fromDelta("".ToRope(), "+%c3%xy".ToRope());
             assertFail("diff_fromDelta: Invalid character.");
         }
         catch (ArgumentException)
@@ -618,36 +619,36 @@ public class diff_match_patchTest : diff_match_patch
         new Diff(Operation.EQUAL, "\u0680 " + zero + " \t %"),
         new Diff(Operation.DELETE, "\u0681 " + one + " \n ^"),
         new Diff(Operation.INSERT, "\u0682 " + two + " \\ |")});
-        text1 = this.diff_text1(diffs);
-        assertEquals("diff_text1: Unicode text.", "\u0680 " + zero + " \t %\u0681 " + one + " \n ^", text1);
+        text1 = diffs.ToSourceText();
+        assertEquals("diff_text1: Unicode text.", ("\u0680 " + zero + " \t %\u0681 " + one + " \n ^").ToRope(), text1);
 
         delta = this.diff_toDelta(diffs);
         // Lowercase, due to UrlEncode uses lower.
-        assertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%da%82 %02 %5c %7c", delta);
+        assertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%da%82 %02 %5c %7c".ToRope(), delta);
 
         assertEquals("diff_fromDelta: Unicode.", diffs, this.diff_fromDelta(text1, delta));
 
         // Verify pool of unchanged characters.
         diffs = new Rope<Diff>(new[] {
         new Diff(Operation.INSERT, "A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ & = + $ , # ")});
-        var text2 = this.diff_text2(diffs);
-        assertEquals("diff_text2: Unchanged characters.", "A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ", text2);
+        var text2 = diffs.ToDestinationText();
+        assertEquals("diff_text2: Unchanged characters.", "A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ".ToRope(), text2);
 
         delta = this.diff_toDelta(diffs);
-        assertEquals("diff_toDelta: Unchanged characters.", "+A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ", delta);
+        assertEquals("diff_toDelta: Unchanged characters.", "+A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ".ToRope(), delta);
 
         // Convert delta string into a diff.
         assertEquals("diff_fromDelta: Unchanged characters.", diffs, this.diff_fromDelta("".ToRope(), delta));
 
         // 160 kb string.
-        string a = "abcdefghij";
+        var a = "abcdefghij".ToRope();
         for (int i = 0; i < 14; i++)
         {
             a += a;
         }
         diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, a) });
         delta = this.diff_toDelta(diffs);
-        assertEquals("diff_toDelta: 160kb string.", "+" + a, delta);
+        assertEquals("diff_toDelta: 160kb string.", ("+" + a).ToRope(), delta);
 
         // Convert delta string into a diff.
         assertEquals("diff_fromDelta: 160kb string.", diffs, this.diff_fromDelta("".ToRope(), delta));
@@ -669,32 +670,32 @@ public class diff_match_patchTest : diff_match_patch
         assertEquals("diff_xIndex: Translation on deletion.", 1, (int)this.diff_xIndex(diffs, 3));
     }
 
-    public void diff_levenshteinTest()
+    public void CalculateEditDistanceTest()
     {
         var diffs = new Rope<Diff>(new[] {
         new Diff(Operation.DELETE, "abc"),
         new Diff(Operation.INSERT, "1234"),
         new Diff(Operation.EQUAL, "xyz")});
-        assertEquals("diff_levenshtein: Levenshtein with trailing equality.", 4, (int)this.diff_levenshtein(diffs));
+        assertEquals("diff_levenshtein: Levenshtein with trailing equality.", 4, (int)diffs.CalculateEditDistance());
 
         diffs = new Rope<Diff>(new[] {
         new Diff(Operation.EQUAL, "xyz"),
         new Diff(Operation.DELETE, "abc"),
         new Diff(Operation.INSERT, "1234")});
-        assertEquals("diff_levenshtein: Levenshtein with leading equality.", 4, (int)this.diff_levenshtein(diffs));
+        assertEquals("diff_levenshtein: Levenshtein with leading equality.", 4, (int)diffs.CalculateEditDistance());
 
         diffs = new Rope<Diff>(new[] {
         new Diff(Operation.DELETE, "abc"),
         new Diff(Operation.EQUAL, "xyz"),
         new Diff(Operation.INSERT, "1234")});
-        assertEquals("diff_levenshtein: Levenshtein with middle equality.", 7, (int)this.diff_levenshtein(diffs));
+        assertEquals("diff_levenshtein: Levenshtein with middle equality.", 7, (int)diffs.CalculateEditDistance());
     }
 
     public void diff_bisectTest()
     {
         // Normal.
-        string a = "cat";
-        string b = "map";
+        var a = "cat".ToRope();
+        var b = "map".ToRope();
         // Since the resulting diff hasn't been normalized, it would be ok if
         // the insertion and deletion pairs are swapped.
         // If the order changes, tweak this test as required.
@@ -754,7 +755,11 @@ public class diff_match_patchTest : diff_match_patch
         diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, " "), new Diff(Operation.EQUAL, "a"), new Diff(Operation.INSERT, "nd"), new Diff(Operation.EQUAL, " [[Pennsylvania]]"), new Diff(Operation.DELETE, " and [[New") });
         assertEquals("diff_main: Large equality.", diffs, this.diff_main("a [[Pennsylvania]] and [[New", " and [[Pennsylvania]]", false));
 
+#if DEBUG
+        this.Diff_Timeout = 0.2f;  // 200ms
+#else
         this.Diff_Timeout = 0.1f;  // 100ms
+#endif
         string a = "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n";
         string b = "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n";
         // Increase the text lengths by 1024 times to ensure a timeout.
@@ -765,7 +770,7 @@ public class diff_match_patchTest : diff_match_patch
         }
         
         var s = Stopwatch.StartNew();
-        this.diff_main(a, b);
+        _ = this.diff_main(a, b);
         s.Stop();
         
         // Test that we took at least the timeout period.
@@ -788,9 +793,10 @@ public class diff_match_patchTest : diff_match_patch
 
         a = "1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n";
         b = "abcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n";
-        string[] texts_linemode = diff_rebuildtexts(this.diff_main(a, b, true));
-        string[] texts_textmode = diff_rebuildtexts(this.diff_main(a, b, false));
-        assertEquals("diff_main: Overlap line-mode.", texts_textmode, texts_linemode);
+        var texts_linemode = diff_rebuildtexts(this.diff_main(a, b, true));
+        var texts_textmode = diff_rebuildtexts(this.diff_main(a, b, false));
+        assertEquals("diff_main: Overlap line-mode. Source", texts_textmode.Source, texts_linemode.Source);
+        assertEquals("diff_main: Overlap line-mode. Destination", texts_textmode.Destination, texts_linemode.Destination);
 
         // Test null inputs -- not needed because nulls can't be passed in C#.
     }
@@ -800,11 +806,11 @@ public class diff_match_patchTest : diff_match_patch
         // Initialise the bitmasks for Bitap.
         Dictionary<char, long> bitmask = new Dictionary<char, long>();
         bitmask.Add('a', 4); bitmask.Add('b', 2); bitmask.Add('c', 1);
-        assertEquals("match_alphabet: Unique.", bitmask, this.match_alphabet("abc"));
+        assertEquals("match_alphabet: Unique.", bitmask, this.match_alphabet("abc".ToRope()));
 
         bitmask.Clear();
         bitmask.Add('a', 37); bitmask.Add('b', 18); bitmask.Add('c', 8);
-        assertEquals("match_alphabet: Duplicates.", bitmask, this.match_alphabet("abcaba"));
+        assertEquals("match_alphabet: Duplicates.", bitmask, this.match_alphabet("abcaba".ToRope()));
     }
 
     public void match_bitapTest()
@@ -812,45 +818,45 @@ public class diff_match_patchTest : diff_match_patch
         // Bitap algorithm.
         this.Match_Distance = 100;
         this.Match_Threshold = 0.5f;
-        assertEquals("match_bitap: Exact match #1.", 5, this.match_bitap("abcdefghijk", "fgh", 5));
+        assertEquals("match_bitap: Exact match #1.", 5, this.match_bitap("abcdefghijk".ToRope(), "fgh".ToRope(), 5));
 
-        assertEquals("match_bitap: Exact match #2.", 5, this.match_bitap("abcdefghijk", "fgh", 0));
+        assertEquals("match_bitap: Exact match #2.", 5, this.match_bitap("abcdefghijk".ToRope(), "fgh".ToRope(), 0));
 
-        assertEquals("match_bitap: Fuzzy match #1.", 4, this.match_bitap("abcdefghijk", "efxhi", 0));
+        assertEquals("match_bitap: Fuzzy match #1.", 4, this.match_bitap("abcdefghijk".ToRope(), "efxhi".ToRope(), 0));
 
-        assertEquals("match_bitap: Fuzzy match #2.", 2, this.match_bitap("abcdefghijk", "cdefxyhijk", 5));
+        assertEquals("match_bitap: Fuzzy match #2.", 2, this.match_bitap("abcdefghijk".ToRope(), "cdefxyhijk".ToRope(), 5));
 
-        assertEquals("match_bitap: Fuzzy match #3.", -1, this.match_bitap("abcdefghijk", "bxy", 1));
+        assertEquals("match_bitap: Fuzzy match #3.", -1, this.match_bitap("abcdefghijk".ToRope(), "bxy".ToRope(), 1));
 
-        assertEquals("match_bitap: Overflow.", 2, this.match_bitap("123456789xx0", "3456789x0", 2));
+        assertEquals("match_bitap: Overflow.", 2, this.match_bitap("123456789xx0".ToRope(), "3456789x0".ToRope(), 2));
 
-        assertEquals("match_bitap: Before start match.", 0, this.match_bitap("abcdef", "xxabc", 4));
+        assertEquals("match_bitap: Before start match.", 0, this.match_bitap("abcdef".ToRope(), "xxabc".ToRope(), 4));
 
-        assertEquals("match_bitap: Beyond end match.", 3, this.match_bitap("abcdef", "defyy", 4));
+        assertEquals("match_bitap: Beyond end match.", 3, this.match_bitap("abcdef".ToRope(), "defyy".ToRope(), 4));
 
-        assertEquals("match_bitap: Oversized pattern.", 0, this.match_bitap("abcdef", "xabcdefy", 0));
+        assertEquals("match_bitap: Oversized pattern.", 0, this.match_bitap("abcdef".ToRope(), "xabcdefy".ToRope(), 0));
 
         this.Match_Threshold = 0.4f;
-        assertEquals("match_bitap: Threshold #1.", 4, this.match_bitap("abcdefghijk", "efxyhi", 1));
+        assertEquals("match_bitap: Threshold #1.", 4, this.match_bitap("abcdefghijk".ToRope(), "efxyhi".ToRope(), 1));
 
         this.Match_Threshold = 0.3f;
-        assertEquals("match_bitap: Threshold #2.", -1, this.match_bitap("abcdefghijk", "efxyhi", 1));
+        assertEquals("match_bitap: Threshold #2.", -1, this.match_bitap("abcdefghijk".ToRope(), "efxyhi".ToRope(), 1));
 
         this.Match_Threshold = 0.0f;
-        assertEquals("match_bitap: Threshold #3.", 1, this.match_bitap("abcdefghijk", "bcdef", 1));
+        assertEquals("match_bitap: Threshold #3.", 1, this.match_bitap("abcdefghijk".ToRope(), "bcdef".ToRope(), 1));
 
         this.Match_Threshold = 0.5f;
-        assertEquals("match_bitap: Multiple select #1.", 0, this.match_bitap("abcdexyzabcde", "abccde", 3));
+        assertEquals("match_bitap: Multiple select #1.", 0, this.match_bitap("abcdexyzabcde".ToRope(), "abccde".ToRope(), 3));
 
-        assertEquals("match_bitap: Multiple select #2.", 8, this.match_bitap("abcdexyzabcde", "abccde", 5));
+        assertEquals("match_bitap: Multiple select #2.", 8, this.match_bitap("abcdexyzabcde".ToRope(), "abccde".ToRope(), 5));
 
         this.Match_Distance = 10;  // Strict location.
-        assertEquals("match_bitap: Distance test #1.", -1, this.match_bitap("abcdefghijklmnopqrstuvwxyz", "abcdefg", 24));
+        assertEquals("match_bitap: Distance test #1.", -1, this.match_bitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdefg".ToRope(), 24));
 
-        assertEquals("match_bitap: Distance test #2.", 0, this.match_bitap("abcdefghijklmnopqrstuvwxyz", "abcdxxefg", 1));
+        assertEquals("match_bitap: Distance test #2.", 0, this.match_bitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdxxefg".ToRope(), 1));
 
         this.Match_Distance = 1000;  // Loose location.
-        assertEquals("match_bitap: Distance test #3.", 0, this.match_bitap("abcdefghijklmnopqrstuvwxyz", "abcdefg", 24));
+        assertEquals("match_bitap: Distance test #3.", 0, this.match_bitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdefg".ToRope(), 24));
     }
 
     public void match_mainTest()
@@ -1123,12 +1129,12 @@ public class diff_match_patchTest : diff_match_patch
 
         patches = this.patch_make("", "test");
         string patchStr = this.patch_toText(patches);
-        this.patch_apply(patches, "");
+        _ = this.patch_apply(patches, "");
         assertEquals("patch_apply: No side effects.", patchStr, this.patch_toText(patches));
 
         patches = this.patch_make("The quick brown fox jumps over the lazy dog.", "Woof");
         patchStr = this.patch_toText(patches);
-        this.patch_apply(patches, "The quick brown fox jumps over the lazy dog.");
+        _ = this.patch_apply(patches, "The quick brown fox jumps over the lazy dog.");
         assertEquals("patch_apply: No side effects with major delete.", patchStr, this.patch_toText(patches));
 
         patches = this.patch_make("", "test");
@@ -1150,24 +1156,26 @@ public class diff_match_patchTest : diff_match_patch
         assertEquals("patch_apply: Edge partial match.", "x123\tTrue", resultStr);
     }
 
-    private string[] diff_rebuildtexts(IEnumerable<Diff> diffs)
+    private (Rope<char> Source, Rope<char> Destination) diff_rebuildtexts(IEnumerable<Diff> diffs)
     {
-        string[] text = { "", "" };
+        var text = (Rope<char>.Empty, Rope<char>.Empty);
         foreach (Diff myDiff in diffs)
         {
             if (myDiff.Operation != Operation.INSERT)
             {
-                text[0] += myDiff.Text;
+                text.Item1 = text.Item1 + myDiff.Text;
             }
+
             if (myDiff.Operation != Operation.DELETE)
             {
-                text[1] += myDiff.Text;
+                text.Item2 += myDiff.Text;
             }
         }
+
         return text;
     }
 
-    private static void assertEquals(string error_msg, string expected, Rope<char> actual) => assertEquals(error_msg, expected, actual.ToString());
+    private static void assertEquals(string error_msg, Rope<char> expected, Rope<char> actual) => assertEquals(error_msg, expected.ToString(), actual.ToString());
 
     private static void assertEquals(string error_msg, string expected, string actual)
     {
@@ -1177,7 +1185,12 @@ public class diff_match_patchTest : diff_match_patch
         }
     }
 
-    private static void assertEquals(string error_msg, string[] expected, string[]? actual)
+    private static void assertEquals(string error_msg, HalfMatch expected, HalfMatch? actual) => assertEquals(
+        error_msg,
+        new Rope<char>[] { expected.Text1Prefix, expected.Text1Suffix, expected.Text2Prefix, expected.Text2Suffix, expected.Common },
+        actual != null ? new Rope<char>[] { actual.Text1Prefix, actual.Text1Suffix, actual.Text2Prefix, actual.Text2Suffix, actual.Common } : null);
+
+    private static void assertEquals(string error_msg, Rope<char>[] expected, Rope<char>[]? actual)
     {
         if (actual is null)
         {
@@ -1197,7 +1210,7 @@ public class diff_match_patchTest : diff_match_patch
         }
     }
 
-    private static void assertEquals(string error_msg, List<string> expected, List<string> actual)
+    private static void assertEquals(string error_msg, Rope<Rope<char>> expected, Rope<Rope<char>> actual)
     {
         if (expected.Count != actual.Count)
         {
@@ -1257,7 +1270,7 @@ public class diff_match_patchTest : diff_match_patch
         }
     }
 
-    private static void assertEquals(string error_msg, int expected, int actual)
+    private static void assertEquals(string error_msg, long expected, long actual)
     {
         if (expected != actual)
         {
@@ -1358,7 +1371,7 @@ public sealed class DiffMatchPatchTests
     [TestMethod]
     public void diff_xIndexTest() => new diff_match_patchTest().diff_xIndexTest();
     [TestMethod]
-    public void diff_levenshteinTest() => new diff_match_patchTest().diff_levenshteinTest();
+    public void diff_levenshteinTest() => new diff_match_patchTest().CalculateEditDistanceTest();
     [TestMethod]
     public void diff_bisectTest() => new diff_match_patchTest().diff_bisectTest();
     [TestMethod]

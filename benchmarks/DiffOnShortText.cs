@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using Rope;
+using Rope.Compare;
 
 namespace Benchmarks;
 
@@ -14,7 +15,7 @@ public class DiffOnShortText
     [Benchmark]
     public void DiffMain()
     {
-        diff_match_patch dmp = new diff_match_patch();
-        dmp.diff_main(BenchmarkData.ShortDiffText1, BenchmarkData.ShortDiffText2);
+        var dmp = new DiffMatchPatch();
+        _ = dmp.diff_main(BenchmarkData.ShortDiffText1, BenchmarkData.ShortDiffText2);
     }  
 }

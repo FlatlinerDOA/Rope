@@ -40,7 +40,12 @@ public static class RopeExtensions
 			return Rope<T>.FromReadOnlySpan(ref span);
 		}
 
-		if (items is IReadOnlyList<T> readOnlyList)
+        if (items is T[] array)
+        {
+            return new Rope<T>(array);
+        }
+
+        if (items is IReadOnlyList<T> readOnlyList)
 		{
 			return Rope<T>.FromReadOnlyList(readOnlyList);
 		}
@@ -57,4 +62,14 @@ public static class RopeExtensions
 	{
 		return Rope<T>.Combine(leaves);
 	}
+
+    /// <summary>
+    /// Constructs a new Rope from a series of leaves into a tree.
+    /// </summary>
+    /// <param name="leaves">The leaf nodes to construct into a tree.</param>
+    /// <returns>A new rope with the leaves specified.</returns>
+    public static Rope<T> Combine<T>(this IEnumerable<Rope<T>> leaves) where T : IEquatable<T>
+    {
+        return Rope<T>.Combine(leaves.ToRope());
+    }
 }

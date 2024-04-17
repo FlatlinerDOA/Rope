@@ -11,6 +11,8 @@ using System.Runtime.CompilerServices;
 using System.Diagnostics.Metrics;
 using System.Collections.Immutable;
 using System.Diagnostics.Contracts;
+using System.Diagnostics;
+using System.Text;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -237,17 +239,12 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	{
 		if (this.IsNode)
 		{
-			if (this.Weight <= index && this.right.Length != 0)
+			if (this.left.Length <= index)
 			{
-				return this.right.ElementAt(index - this.Weight);
+				return this.right.ElementAt(index - this.left.Length);
 			}
 
-			if (this.left.Length != 0)
-			{
-				return this.left.ElementAt(index);
-			}
-
-			throw new IndexOutOfRangeException(nameof(index));
+			return this.left.ElementAt(index);
 		}
 
 		return this.data.Span[(int)index];
@@ -548,11 +545,11 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	[Pure]
 	public static implicit operator Rope<T> (T[] a) => new Rope<T>(a);
 
-	/// <summary>
-	/// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
-	/// </summary>
-	/// <returns>A balanced tree or the original rope if not out of range.</returns>
-	[Pure]
+    /// <summary>
+    /// Determines if the rope's binary tree is unbalanced and then recursively rebalances if necessary.
+    /// </summary>
+    /// <returns>A balanced tree or the original rope if not out of range.</returns>
+    [Pure]
 	public Rope<T> Balanced()
 	{
 		// Early return if the tree is already balanced or not a node		
@@ -760,9 +757,29 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			this.data.CopyTo(other);
 		}
 	}
-		
+
 	[Pure]
-	public long IndexOf(Rope<T> find) => this.IndexOf(find, EqualityComparer<T>.Default);
+	public long IndexOf(Rope<T> find)
+	{
+		if (find.Length > this.Length)
+		{
+			return -1;
+		}
+
+		if (find.Length == 0)
+		{
+			return 0;
+		}
+
+		if (!this.IsNode && !find.IsNode)
+		{
+			return this.data.Span.IndexOf(find.data.Span);
+		}
+
+        var buffers = this.Buffers.ToArray();
+		var findBuffers = find.Buffers.ToArray();
+        return this.IndexOfDefaultEquality(buffers, findBuffers);
+    }
 
 	/// <summary>
 	/// Finds the index of a subset of the rope
@@ -783,14 +800,14 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
 
 		// Attempt 1: Naive split of slow and fast paths.
-		// if (!this.IsNode)
-		// {
-		// 	var dataSpan = this.data.Span;
-		// 	var isDefault = object.ReferenceEquals(EqualityComparer<T>.Default, comparer);
-		// 	if (!find.IsNode && isDefault)
-		// 	{
-		// 		return dataSpan.IndexOf(find.data.Span);
-		// 	}
+		//if (!this.IsNode)
+		//{
+		//	var dataSpan = this.data.Span;
+		//	var isDefault = object.ReferenceEquals(EqualityComparer<T>.Default, comparer);
+		//	if (!find.IsNode && isDefault)
+		//	{
+		//		return dataSpan.IndexOf(find.data.Span);
+		//	}
 
 		// 	// Check in the 'data' array for a starting match that could spill over to 'right'
 		// 	for (var i = 0; i < dataSpan.Length - find.Length; i++)
@@ -923,10 +940,57 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
 	}
 
-	private int IndexOfSlow<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> buffers, ReadOnlyMemory<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
-	{
-		if (find.Length == 0) return 0; // Matching empty sequence returns 0 (or consider special handling)
+    private int IndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers)
+    {
+        int globalIndex = 0; // Tracks overall position across all buffers
+        foreach (var targetBuffer in targetBuffers)
+        {
+            for (int targetSpanIndex = 0; targetSpanIndex < targetBuffer.Length; targetSpanIndex++)
+            {
+                int j = 0;
+                bool match = true;
+				foreach (var findBuffer in findBuffers)
+				{
+					var findSpan = findBuffer.Span;
+					while (findSpan.Length > 0 && match)
+					{
+						int globalOffset = globalIndex + j;
+						ReadOnlySpan<T> range = default;
+						if (TryGetSpanAtGlobalIndex(targetBuffers, globalOffset, findSpan.Length, ref range))
+						{
+							if (range.SequenceEqual(findSpan[..range.Length]))
+							{
+								j += range.Length;
+								findSpan = findSpan[range.Length..];
+							}
+							else
+							{
+								match = false;
+								break;
+							}
+						}
+                        else
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+				}
 
+                if (match)
+                {
+                    return globalIndex;
+                }
+
+                globalIndex++; // Move to the next global position
+            }
+        }
+
+        return -1; // Not found
+    }
+
+    private int IndexOfSlow<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> buffers, ReadOnlyMemory<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+	{
 		int globalIndex = 0; // Tracks overall position across all buffers
 
 		for (int bufIndex = 0; bufIndex < buffers.Length; bufIndex++)
@@ -942,6 +1006,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 					if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out T value) || !comparer.Equals(value, findSpan[j]))
 					{
 						match = false;
+						break;
 					}
 				}
 
@@ -982,46 +1047,69 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		return false; // Global index out of range
 	}
 
+	private bool TryGetSpanAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, int maxLength, ref ReadOnlySpan<T> value)
+	{
+		int accumulatedLength = 0;
+		foreach (var buffer in buffers)
+		{
+			if (globalIndex < accumulatedLength + buffer.Length)
+			{
+				value = buffer.Span[(globalIndex - accumulatedLength)..];
+				Debug.Assert(value.Length != 0, "Empty span!");
+				if (value.Length > maxLength)
+				{
+                    value = value[..maxLength];
+				}
 
-    // private bool StartsWithSpanFast(ReadOnlySpan<T> dataSpan)
-    // {
-	// 	if (this.IsNode)
-	// 	{
-	// 		return this.Left.StartsWithSpanFast(dataSpan) && this.Right.StartsWithSpanFast(dataSpan[this.Left.Count..]);
-	// 	}
-	// 	else
-	// 	{
-	// 		return this.data.Span.StartsWith(dataSpan);
-	// 	}
-    // }
+				return true;
+			}
 
-    // private bool StartsWithSpanSlow<TEqualityComparer>(TEqualityComparer comparer, ReadOnlySpan<T> dataSpan) where TEqualityComparer : IEqualityComparer<T>
-    // {
-	// 	if (this.IsNode)
-	// 	{
-	// 		return this.Left.StartsWithSpanSlow(comparer, dataSpan[..this.Left.Count]) && this.Right.StartsWithSpanSlow(comparer, dataSpan[this.Left.Count..]);
-	// 	}
-	// 	else
-	// 	{
-	// 		var match = true;
-	// 		var thisSpan = this.data.Span;
-	// 		for (var j = 0; j < thisSpan.Length && match; j++)
-	// 		{
-	// 			if (j < dataSpan.Length)
-	// 			{
-	// 				match = comparer.Equals(dataSpan[j], thisSpan[j]);
-	// 			}
-	// 			else
-	// 			{
-	// 				match = false;
-	// 			}
-	// 		}
+			accumulatedLength += buffer.Length;
+		}
 
-	// 		return match;
-	// 	}
-    // }
+		value = default;
+		return false; // Global index out of range
+	}
 
-    [Pure]
+// private bool StartsWithSpanFast(ReadOnlySpan<T> dataSpan)
+// {
+// 	if (this.IsNode)
+// 	{
+// 		return this.Left.StartsWithSpanFast(dataSpan) && this.Right.StartsWithSpanFast(dataSpan[this.Left.Count..]);
+// 	}
+// 	else
+// 	{
+// 		return this.data.Span.StartsWith(dataSpan);
+// 	}
+// }
+
+// private bool StartsWithSpanSlow<TEqualityComparer>(TEqualityComparer comparer, ReadOnlySpan<T> dataSpan) where TEqualityComparer : IEqualityComparer<T>
+// {
+// 	if (this.IsNode)
+// 	{
+// 		return this.Left.StartsWithSpanSlow(comparer, dataSpan[..this.Left.Count]) && this.Right.StartsWithSpanSlow(comparer, dataSpan[this.Left.Count..]);
+// 	}
+// 	else
+// 	{
+// 		var match = true;
+// 		var thisSpan = this.data.Span;
+// 		for (var j = 0; j < thisSpan.Length && match; j++)
+// 		{
+// 			if (j < dataSpan.Length)
+// 			{
+// 				match = comparer.Equals(dataSpan[j], thisSpan[j]);
+// 			}
+// 			else
+// 			{
+// 				match = false;
+// 			}
+// 		}
+
+// 		return match;
+// 	}
+// }
+
+	[Pure]
 	public long IndexOf(Rope<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
@@ -1100,7 +1188,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public bool StartsWith(Rope<T> find) => this.IndexOf(find) == 0;
+	public bool StartsWith(Rope<T> find) => this.Slice(0, Math.Min(this.Length, find.Length)).IndexOf(find) == 0;
 
 	[Pure]
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
@@ -1377,7 +1465,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 	public override bool Equals(object? obj)
 	{
-		if (ReferenceEquals(obj, null))
+		if (obj is null)
 		{
 			return false;
 		}
@@ -1387,9 +1475,9 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	
 	public static bool Equals(Rope<T>? a, Rope<T>? b) 
 	{
-		if (ReferenceEquals(a, null))
+		if (a is null)
 		{
-			return ReferenceEquals(b, null);
+			return b is null;
 		}
 
 		return a.Equals(b);
@@ -1403,7 +1491,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	[Pure]
 	public bool Equals(Rope<T>? other)
 	{
-		if (ReferenceEquals(other, null))
+		if (other is null)
 		{
 			return false;
 		}
@@ -1427,7 +1515,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	[Pure]
 	public override int GetHashCode() => this.Length switch 
 	{
-		> 256 => HashCode.Combine(this[0], this[this.Length / 2], this[this.Length - 1], this.Length),
+		> 16 => HashCode.Combine(this[0], this[this.Length / 2], this[this.Length - 1], this.Length),
 		> 0 => HashCode.Combine(this[0], this.Length),
 		_ => 0
 	};
@@ -1591,7 +1679,11 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		return Combine(leaves);
     }
 
-	[Pure]
+    /// <summary>
+    /// Alias for <see cref="Rope<T>.Empty"/>.
+    /// </summary>
+    /// <returns>An empty rope instance.</returns>
+    [Pure]
     public Rope<T> Clear() => Rope<T>.Empty;
 
 	[Pure]

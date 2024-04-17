@@ -3,6 +3,7 @@
 
 using BenchmarkDotNet.Attributes;
 using Rope;
+using Rope.Compare;
 
 namespace Benchmarks;
 
@@ -12,8 +13,8 @@ public class DiffOnLongText
     [Benchmark]
     public void DiffMain()
     {
-        diff_match_patch dmp = new diff_match_patch();
+        var dmp = new DiffMatchPatch();
         dmp.Diff_Timeout = 0;
-        dmp.diff_main(BenchmarkData.LongDiffText1, BenchmarkData.LongDiffText2);
+        _ = dmp.diff_main(BenchmarkData.LongDiffText1, BenchmarkData.LongDiffText2);
     }
 }
