@@ -802,7 +802,6 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 		var rentedBuffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(this.LeafCount);
 		var rentedFindBuffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(find.LeafCount);
-
 		var buffers = rentedBuffers[..this.LeafCount];
 		var findBuffers = rentedFindBuffers[..find.LeafCount];
         this.FillBuffers(buffers);
@@ -1626,8 +1625,28 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		{
 			return false;
 		}
-		
-		return this.StartsWith(other);
+
+        var rentedBuffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(this.LeafCount);
+        var rentedFindBuffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(other.LeafCount);
+        var buffers = rentedBuffers[..this.LeafCount];
+        var findBuffers = rentedFindBuffers[..other.LeafCount];
+        this.FillBuffers(buffers);
+        other.FillBuffers(findBuffers);
+
+        var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+        var matches = true;
+        while (aligned.MoveNext())
+        {
+            if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+            {
+                matches = false;
+                break;
+            }
+        }
+        
+        ArrayPool<ReadOnlyMemory<T>>.Shared.Return(rentedFindBuffers);
+        ArrayPool<ReadOnlyMemory<T>>.Shared.Return(rentedBuffers);
+		return matches;
 	}
 	
 	/// <summary>
