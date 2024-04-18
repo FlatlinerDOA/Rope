@@ -13,6 +13,7 @@ using System.Collections.Immutable;
 using System.Diagnostics.Contracts;
 using System.Diagnostics;
 using System.Text;
+using System.Buffers;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -50,7 +51,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// For <see cref="char"/> this is 2,989,827,202,620,588,032 characters.
 	/// For <see cref="int"/> this is 1,494,913,601,310,294,016 ints.
     /// </summary>
-    public static readonly long MaxLength = (long)Math.Pow(2, MaxTreeDepth) * (long)MaxLeafLength;
+    public static readonly long MaxLength = 2.IntPow(MaxTreeDepth) * MaxLeafLength;
 
 	/// <summary>
 	/// Defines the Empty leaf.
@@ -779,6 +780,34 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
         var buffers = this.Buffers.ToArray();
 		var findBuffers = find.Buffers.ToArray();
         return this.IndexOfDefaultEquality(buffers, findBuffers);
+	}
+	
+	[Pure]
+	public long IndexOfFill(Rope<T> find)
+	{
+		if (find.Length > this.Length)
+		{
+			return -1;
+		}
+
+		if (find.Length == 0)
+		{
+			return 0;
+		}
+
+		if (!this.IsNode && !find.IsNode)
+		{
+			return this.data.Span.IndexOf(find.data.Span);
+		}
+
+		var buffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(this.LeafCount);
+		var findBuffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(find.LeafCount);
+		this.FillBuffers(buffers);
+		find.FillBuffers(findBuffers);
+		var i = this.IndexOfDefaultEquality(buffers, findBuffers);
+		ArrayPool<ReadOnlyMemory<T>>.Shared.Return(findBuffers);
+		ArrayPool<ReadOnlyMemory<T>>.Shared.Return(buffers);
+		return i;
     }
 
 	/// <summary>
@@ -848,9 +877,12 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 
 		// Attempt 2: Flattened access to buffers and slow search (Big memory allocation overhead).
-		var buffers = this.Buffers.ToArray();
+		var buffers = ArrayPool<ReadOnlyMemory<T>>.Shared.Rent(this.LeafCount);
+		this.FillBuffers(buffers);
 		var findBuffer = find.ToMemory(); // PERF: This is BAD!!
-		return this.IndexOfSlow(buffers, findBuffer, comparer);
+		var i = this.IndexOfSlow(buffers, findBuffer, comparer);
+		ArrayPool<ReadOnlyMemory<T>>.Shared.Return(buffers);
+		return i;
 
 
 		// Attempt 3: WIP - Shifting through buffers and using IndexOf for fast seek.
@@ -917,6 +949,21 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		// return -1;
 	}
 
+	public int LeafCount => 2.IntPow((uint)this.Depth);
+
+	private void FillBuffers(Span<ReadOnlyMemory<T>> buffers)
+	{
+		if (this.IsNode)
+		{
+			this.left.FillBuffers(buffers[..this.left.LeafCount]);
+			this.right.FillBuffers(buffers[this.left.LeafCount..]);
+		}
+		else
+		{
+			buffers[0] = this.data;
+		}
+	}
+
 	private IEnumerable<ReadOnlyMemory<T>> Buffers
 	{
 		get 
@@ -940,51 +987,127 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
 	}
 
-    private int IndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers)
-    {
-        int globalIndex = 0; // Tracks overall position across all buffers
-        foreach (var targetBuffer in targetBuffers)
-        {
-            for (int targetSpanIndex = 0; targetSpanIndex < targetBuffer.Length; targetSpanIndex++)
-            {
-                int j = 0;
-                bool match = true;
-				foreach (var findBuffer in findBuffers)
+    private static int MoveToFirstElement(T element, ref ReadOnlySpan<T> current, ref ReadOnlySpan<ReadOnlyMemory<T>> currentAndRemainder)
+	{
+        int globalOffset = 0;
+		while (true)
+		{
+			var result = current.IndexOf(element);
+			if (result == -1)
+			{
+                globalOffset += current.Length;
+                currentAndRemainder = currentAndRemainder[1..];
+				if (currentAndRemainder.Length == 0)
 				{
-					var findSpan = findBuffer.Span;
-					while (findSpan.Length > 0 && match)
-					{
-						int globalOffset = globalIndex + j;
-						ReadOnlySpan<T> range = default;
-						if (TryGetSpanAtGlobalIndex(targetBuffers, globalOffset, findSpan.Length, ref range))
-						{
-							if (range.SequenceEqual(findSpan[..range.Length]))
-							{
-								j += range.Length;
-								findSpan = findSpan[range.Length..];
-							}
-							else
-							{
-								match = false;
-								break;
-							}
-						}
-                        else
-                        {
-                            match = false;
-                            break;
-                        }
-                    }
+                    current = ReadOnlySpan<T>.Empty;
+                    return -1;
 				}
 
-                if (match)
-                {
-                    return globalIndex;
-                }
+                current = currentAndRemainder[0].Span;
+            }
+			else
+			{
+				current = current[result..];
+                return globalOffset + result;
+			}
+		}
+    }
 
-                globalIndex++; // Move to the next global position
+    private int IndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers)
+    {
+        // 1. Fast forward to first element in findBuffers
+        // 2. Reduce find buffer using sequence equal,
+        // 2.1    If no match, slice target buffers
+        // 2.2    Else iterate until all sliced sub-sequences matches
+        var remainingTargetBuffers = targetBuffers;
+        var currentTargetSpan = remainingTargetBuffers[0].Span;
+        int globalIndex = 0;
+		while (remainingTargetBuffers.Length > 0)
+		{
+			// Reset find to the beginning
+			var remainingFindBuffers = findBuffers;
+			var currentFindSpan = remainingFindBuffers[0].Span;
+			var firstElement = currentFindSpan[0];
+
+			var index = MoveToFirstElement(firstElement, ref currentTargetSpan, ref remainingTargetBuffers);
+			if (index == -1)
+			{
+				return -1;
+			}
+
+			var aligned = new AlignedBufferEnumerator<T>(currentTargetSpan, currentFindSpan, remainingTargetBuffers, remainingTargetBuffers);
+			var matches = true;
+			while (aligned.MoveNext())
+			{
+				if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+				{
+					matches = false;
+					break;
+				}
+			}
+
+			// We matched and had nothing left in B. We're done!
+			if (matches && aligned.RemainderB.Length == 0)
+			{
+				return globalIndex + index;
+			}
+
+			// We found an index but it wasn't a match, shift by 1 and do an indexof again.
+			if (currentTargetSpan.Length > 0)
+			{
+                currentTargetSpan = currentTargetSpan[1..];
+                globalIndex += 1;
+            }
+            else
+			{
+                globalIndex += remainingTargetBuffers[0].Length;
+                remainingTargetBuffers = remainingTargetBuffers[1..];
             }
         }
+
+    //    int globalIndex = 0; // Tracks overall position across all buffers
+    //    foreach (var targetBuffer in targetBuffers)
+    //    {
+    //        for (int targetSpanIndex = 0; targetSpanIndex < targetBuffer.Length; targetSpanIndex++)
+    //        {
+    //            int j = 0;
+    //            bool match = true;
+				//foreach (var findBuffer in findBuffers)
+				//{
+				//	var findSpan = findBuffer.Span;
+				//	while (findSpan.Length > 0 && match)
+				//	{
+				//		int globalOffset = globalIndex + j;
+				//		ReadOnlySpan<T> range = default;
+				//		if (TryGetSpanAtGlobalIndex(targetBuffers, globalOffset, findSpan.Length, ref range))
+				//		{
+				//			if (range.SequenceEqual(findSpan[..range.Length]))
+				//			{
+				//				j += range.Length;
+				//				findSpan = findSpan[range.Length..];
+				//			}
+				//			else
+				//			{
+				//				match = false;
+				//				break;
+				//			}
+				//		}
+    //                    else
+    //                    {
+    //                        match = false;
+    //                        break;
+    //                    }
+    //                }
+				//}
+
+    //            if (match)
+    //            {
+    //                return globalIndex;
+    //            }
+
+    //            globalIndex++; // Move to the next global position
+    //        }
+    //    }
 
         return -1; // Not found
     }

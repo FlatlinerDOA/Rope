@@ -107,7 +107,7 @@ Vestibulum at commodo odio, vel venenatis neque. Praesent convallis scelerisque 
 Donec odio ipsum, commodo vel maximus vitae, aliquet ut justo. Ut tellus erat, euismod id sodales vel, bibendum quis odio. Morbi pellentesque semper mauris, a cursus orci hendrerit nec. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Mauris gravida tempus nisl ut vestibulum. Nam vulputate enim ut purus congue, vitae consequat neque placerat. Cras consectetur risus non magna molestie, et faucibus est semper. Ut auctor pulvinar nisl, et maximus erat fermentum quis. Cras posuere mattis pulvinar. Nam consectetur, turpis molestie consectetur ultricies, lectus nisi consequat est, eu imperdiet nisl orci auctor urna. Ut nisi nibh, dictum a aliquam quis, maximus sed lacus. Integer ex ipsum, tempor in pulvinar vitae, blandit a magna. Morbi tristique dictum erat in sagittis. Vestibulum enim neque, rhoncus eu ipsum ac, vestibulum auctor diam. Cras ut mollis eros.
 """;
 
-    public static readonly Rope<char> LongDiffText1 = """
+    public const string LongDiffText1String = """
 This is a '''list of newspapers published by [[Journal Register Company]]'''.
 
 The company owns daily and weekly newspapers, other print media properties and newspaper-affiliated local Websites in the [[U.S.]] states of [[Connecticut]], [[Michigan]], [[New York]], [[Ohio]] and [[Pennsylvania]], organized in six geographic "clusters":<ref>[http://www.journalregister.com/newspapers.html Journal Register Company: Our Newspapers], accessed February 10, 2008.</ref>
@@ -338,7 +338,9 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 <references />
 
 [[Category:Journal Register publications|*]]
-""".ToRope();    
+""";
+
+    public static readonly Rope<char> LongDiffText1 = LongDiffText1String.ToRope();    
     
     public static readonly Rope<char> LongDiffText2 = """
 This is a '''list of newspapers published by [[Journal Register Company]]'''.

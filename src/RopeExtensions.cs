@@ -4,6 +4,17 @@ namespace Rope;
 
 public static class RopeExtensions
 {
+	internal static int IntPow(this int x, uint pow)
+	{
+		int ret = 1;
+		for (var p = 0; p < pow; p++)
+		{
+			ret *= x;
+		}
+	
+		return ret;
+	}
+
 	/// <summary>
 	/// Creates a new <see cref="Rope{char}"/> from the string provided.
 	/// </summary>
