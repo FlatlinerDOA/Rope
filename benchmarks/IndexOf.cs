@@ -16,37 +16,37 @@ public class IndexOf
     [Benchmark]
     public void RopeOfChar()
     {
-        _ = BenchmarkData.LongDiffText1.IndexOf(Find);
+        _ = BenchmarkData.LongDiffText1.IndexOfArray(Find);
     }
 
     [Benchmark]
     public void RopeOfCharFill()
     {
-        _ = BenchmarkData.LongDiffText1.IndexOfFill(Find);
+        _ = BenchmarkData.LongDiffText1.IndexOf(Find);
     }
 
     [Benchmark]
     public void FragmentedRopeOfChar()
     {
-        _ = FragmentedRope.IndexOf(Find);
+        _ = FragmentedRope.IndexOfArray(Find);
     }
 
     [Benchmark]
     public void FragmentedRopeOfCharFill()
     {
-        _ = FragmentedRope.IndexOfFill(Find);
+        _ = FragmentedRope.IndexOf(Find);
     }
 
     [Benchmark]
     public void FragmentedRopeOfCharLarge()
     {
-        _ = FragmentedRope.IndexOf(FragmentedFind);
+        _ = FragmentedRope.IndexOfArray(FragmentedFind);
     }
 
     [Benchmark]
     public void FragmentedRopeOfCharFillLarge()
     {
-        _ = FragmentedRope.IndexOfFill(FragmentedFind);
+        _ = FragmentedRope.IndexOf(FragmentedFind);
     }
 
     [Benchmark]
