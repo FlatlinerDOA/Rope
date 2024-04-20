@@ -2,6 +2,7 @@
 * Diff Match and Patch
 * Copyright 2018 The diff-match-patch Authors.
 * https://github.com/google/diff-match-patch
+* Copyright 2024 Andrew Chisholm.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -14,6 +15,7 @@
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 * See the License for the specific language governing permissions and
 * limitations under the License.
+* 
 */
 
 namespace Rope.Compare;
@@ -21,6 +23,7 @@ namespace Rope.Compare;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -521,11 +524,56 @@ public partial class DiffMatchPatch
         // "\x00" is a valid character, but various debuggers don't like it.
         // So we'll insert a junk entry to avoid generating a null character.
         lineArray = lineArray.Add(Rope<char>.Empty);
+        var chars1 = Munge2(text1, ref lineArray, lineHash, 40000);
+        var chars2 = Munge2(text1, ref lineArray, lineHash, 65535);
+        //Rope<char> chars2 = Rope<char>.Empty;
+        //foreach (var line in text2.Split('\n').Take(65535 - 40000))
+        //{
+        //    var e = lineHash.GetValueOrDefault(line, -1);
+        //    if (e == -1)
+        //    {
+        //        e = lineHash.Count;
+        //        lineArray += line;
+        //        lineHash.Add(line, e);
+        //    }
+        //    else
+        //    {
+        //        chars2 += (char)e;
+        //    }
+        //}
+
 
         // Allocate 2/3rds of the space for text1, the rest for text2.
-        (var chars1, lineArray) = diff_linesToCharsMunge_pure(text1, lineArray, lineHash, 40000);
-        (var chars2, lineArray) = diff_linesToCharsMunge_pure(text2, lineArray, lineHash, 65535);
+        //(var chars1, lineArray) = diff_linesToCharsMunge_pure(text1, lineArray, lineHash, 40000);
+        //(var chars2, lineArray) = diff_linesToCharsMunge_pure(text2, lineArray, lineHash, 65535);
         return (chars1, chars2, lineArray.Balanced());
+    }
+
+    private static Rope<char> Munge2(Rope<char> text1, ref Rope<Rope<char>> lineArray, Dictionary<Rope<char>, int> lineHash, int maxLines)
+    {
+        var chars = Rope<char>.Empty;
+        long consumed = 0;
+        foreach (var line in text1.Split('\n'))
+        {
+            var e = lineHash.GetValueOrDefault(line, -1);
+            if (e == -1)
+            {
+                if (lineArray.Count == maxLines)
+                {
+                    e = lineHash.Count;
+                    lineArray += text1.Slice(consumed);
+                    break;
+                }
+
+                lineArray += line;
+                lineHash.Add(line, e);
+            }
+
+            chars += (char)e;
+            consumed += line.Length;
+        }
+
+        return chars;
     }
 
     /**
@@ -1441,7 +1489,7 @@ public partial class DiffMatchPatch
             switch (aDiff.Operation)
             {
                 case Operation.INSERT:
-                    text = text.Append("+").AddRange(encodeURI(aDiff.Text)).Append("\t");
+                    text = text.Append("+").AddRange(aDiff.Text.DiffEncode()).Append("\t");
                     break;
                 case Operation.DELETE:
                     text = text.Append("-").Append(aDiff.Text.Length.ToString()).Append("\t");
@@ -1489,9 +1537,7 @@ public partial class DiffMatchPatch
             switch (token[0])
             {
                 case '+':
-                    // decode would change all "+" to " "
-                    param = param.Replace("+", "%2b");
-                    param = HttpUtility.UrlDecode(param.ToString()).ToRope();
+                    param = param.DiffDecode();
 
                     //} catch (UnsupportedEncodingException e) {
                     //  // Not likely on modern system.
@@ -1513,12 +1559,11 @@ public partial class DiffMatchPatch
                     }
                     catch (FormatException e)
                     {
-                        throw new ArgumentException("Invalid number in diff_fromDelta: " + param, e);
+                        throw new ArgumentException(("Invalid number in diff_fromDelta: " + param).ToString(), e);
                     }
                     if (n < 0)
                     {
-                        throw new ArgumentException(
-                            "Negative number in diff_fromDelta: " + param);
+                        throw new ArgumentException(("Negative number in diff_fromDelta: " + param).ToString());
                     }
 
                     Rope<char> text;
@@ -1814,7 +1859,7 @@ public partial class DiffMatchPatch
     }
 
     [Pure]
-    public IEnumerable<Patch> patch_make(string text1, string text2) => patch_make(text1.ToRope(), text2.ToRope());
+    public Rope<Patch> patch_make(string text1, string text2) => patch_make(text1.ToRope(), text2.ToRope());
 
     /**
      * Compute a list of patches to turn text1 into text2.
@@ -1824,11 +1869,11 @@ public partial class DiffMatchPatch
      * @return List of Patch objects.
      */
     [Pure]
-    public IEnumerable<Patch> patch_make(Rope<char> text1, Rope<char> text2)
+    public Rope<Patch> patch_make(Rope<char> text1, Rope<char> text2)
     {
         // Check for null inputs not needed since null can't be passed in C#.
         // No diffs provided, compute our own.
-        using var deadline = new Deadline(this.Diff_Timeout);
+        using var deadline = new Deadline(0); //this.Diff_Timeout);
         var diffs = diff_main(text1, text2, true, deadline.Cancellation);
         if (diffs.Count > 2)
         {
@@ -1846,7 +1891,7 @@ public partial class DiffMatchPatch
      * @return List of Patch objects.
      */
     [Pure]
-    public IEnumerable<Patch> patch_make(Rope<Diff> diffs)
+    public Rope<Patch> patch_make(Rope<Diff> diffs)
     {
         // No origin string provided, compute our own.
         var text1 = diffs.ToSourceText();
@@ -1863,7 +1908,7 @@ public partial class DiffMatchPatch
      * @deprecated Prefer patch_make(string text1, List<Diff> diffs).
      */
     [Obsolete("Prefer patch_make(Rope<char text1, List<Diff> diffs).")]
-    public IEnumerable<Patch> patch_make(Rope<char> text1, Rope<char> text2, Rope<Diff> diffs) => patch_make(text1, diffs);
+    public Rope<Patch> patch_make(Rope<char> text1, Rope<char> text2, Rope<Diff> diffs) => patch_make(text1, diffs);
 
     /**
      * Compute a list of patches to turn text1 into text2.
@@ -1873,14 +1918,15 @@ public partial class DiffMatchPatch
      * @return List of Patch objects.
      */
     [Pure]
-    public IEnumerable<Patch> patch_make(Rope<char> text1, Rope<Diff> diffs)
+    public Rope<Patch> patch_make(Rope<char> text1, Rope<Diff> diffs)
     {
         // Check for null inputs not needed since null can't be passed in C#.
         if (diffs.Count == 0)
         {
-            yield break;
+            return Rope<Patch>.Empty;
         }
 
+        var result = Rope<Patch>.Empty;
         Patch patch = new Patch();
         long char_count1 = 0;  // Number of characters into the text1 string.
         long char_count2 = 0;  // Number of characters into the text2 string.
@@ -1912,7 +1958,7 @@ public partial class DiffMatchPatch
                     postpatch_text = postpatch_text.RemoveRange(char_count2, aDiff.Text.Length);
                     break;
                 case Operation.EQUAL:
-                    if (aDiff.Text.Length <= 2 * Patch_Margin && patch.Diffs.Count() != 0 && aDiff != diffs.Last())
+                    if (aDiff.Text.Length <= 2 * Patch_Margin && patch.Diffs.Count != 0 && aDiff != diffs.Last())
                     {
                         // Small equality inside a patch.
                         patch = patch with
@@ -1929,7 +1975,7 @@ public partial class DiffMatchPatch
                         if (patch.Diffs.Count != 0)
                         {
                             patch = patch_addContext_pure(patch, prepatch_text);
-                            yield return patch;
+                            result += patch;
 
                             patch = new Patch();
                             // Unlike Unidiff, our patch lists have a rolling context.
@@ -1958,8 +2004,10 @@ public partial class DiffMatchPatch
         if (patch.Diffs.Count != 0)
         {
             patch = patch_addContext_pure(patch, prepatch_text);
-            yield return patch;
+            result += patch;
         }
+
+        return result;
     }
 
     /**
@@ -2455,26 +2503,5 @@ public partial class DiffMatchPatch
 
         }
         return patches;
-    }
-
-    /**
-     * Encodes a string with URI-style % escaping.
-     * Compatible with JavaScript's encodeURI function.
-     *
-     * @param str The string to encode.
-     * @return The encoded string.
-     */
-    public static Rope<char> encodeURI(Rope<char> str)
-    {
-        // C# is overzealous in the replacements.  Walk back on a few.
-        return HttpUtility.UrlEncode(str.ToString())
-            .ToRope()
-            .Replace('+', ' ').Replace("%20", " ").Replace("%21", "!")
-            .Replace("%2a", "*").Replace("%27", "'").Replace("%28", "(")
-            .Replace("%29", ")").Replace("%3b", ";").Replace("%2f", "/")
-            .Replace("%3f", "?").Replace("%3a", ":").Replace("%40", "@")
-            .Replace("%26", "&").Replace("%3d", "=").Replace("%2b", "+")
-            .Replace("%24", "$").Replace("%2c", ",").Replace("%23", "#")
-            .Replace("%7e", "~");
     }
 }

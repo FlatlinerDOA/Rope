@@ -25,14 +25,6 @@ using System;
  */
 public readonly record struct Diff(Operation Operation, Rope<char> Text)
 {
-    public Diff(Operation operation, string text) : this(operation, text.AsMemory())
-    {
-    }
-
-    public Diff(Operation operation, ReadOnlyMemory<char> text) : this(operation, new Rope<char>(text))
-    {
-    }
-
     public Diff WithOperation(Operation op) => this with { Operation = op };
     public Diff WithText(Rope<char> text) => this with { Text = text };
 

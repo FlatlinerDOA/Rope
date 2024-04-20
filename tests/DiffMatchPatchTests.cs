@@ -193,7 +193,7 @@ public class diff_match_patchTest : DiffMatchPatch
             lineList = lineList.AddRange((i + "\n").AsMemory());
         }
 
-        lineList = lineList.Balanced();
+        lineList = lineList.ToMemory();
         var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
         diffs = new Rope<Diff>(new[] { new Diff(Operation.INSERT, result.Text1Encoded) });
         diffs = this.diff_charsToLines_pure(diffs, result.Lines);
@@ -557,6 +557,14 @@ public class diff_match_patchTest : DiffMatchPatch
         assertEquals("diff_text2:", "jumped over a lazy".ToRope(), diffs.ToDestinationText());
     }
 
+    public void DiffEncodeDecode()
+    {
+        var source = "A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ & = + $ , # ".ToRope();
+        var encoded = source.DiffEncode();
+        var decoded = encoded.DiffDecode();
+        assertEquals("Should be round trippable", source.ToString(), decoded.ToString());
+    }
+
     public void diff_deltaTest()
     {
         // Convert a diff into delta string.
@@ -573,7 +581,7 @@ public class diff_match_patchTest : DiffMatchPatch
         assertEquals("diff_text1: Base text.", "jumps over the lazy".ToRope(), text1);
 
         var delta = this.diff_toDelta(diffs);
-        assertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog".ToRope(), delta);
+        assertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog", delta.ToString());
 
         // Convert delta string into a diff.
         assertEquals("diff_fromDelta: Normal.", diffs, this.diff_fromDelta(text1, delta));
@@ -623,8 +631,8 @@ public class diff_match_patchTest : DiffMatchPatch
         assertEquals("diff_text1: Unicode text.", ("\u0680 " + zero + " \t %\u0681 " + one + " \n ^").ToRope(), text1);
 
         delta = this.diff_toDelta(diffs);
-        // Lowercase, due to UrlEncode uses lower.
-        assertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%da%82 %02 %5c %7c".ToRope(), delta);
+        // Uppercase, due to UrlEncoder now uses upper.
+        assertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%DA%82 %02 %5C %7C".ToRope(), delta);
 
         assertEquals("diff_fromDelta: Unicode.", diffs, this.diff_fromDelta(text1, delta));
 
@@ -899,7 +907,7 @@ public class diff_match_patchTest : DiffMatchPatch
             new Diff(Operation.INSERT, "a"),
             new Diff(Operation.EQUAL, "\nlaz")})
         };
-        string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0alaz\n";
+        string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0Alaz\n";
         assertEquals("Patch: toString.", strp, p.ToString());
     }
 
@@ -907,7 +915,7 @@ public class diff_match_patchTest : DiffMatchPatch
     {
         assertTrue("patch_fromText: #0.", this.patch_fromText("").Count == 0);
 
-        string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0alaz\n";
+        string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0Alaz\n";
         assertEquals("patch_fromText: #1.", strp, this.patch_fromText(strp)[0].ToString());
 
         assertEquals("patch_fromText: #2.", "@@ -1 +1 @@\n-a\n+b\n", this.patch_fromText("@@ -1 +1 @@\n-a\n+b\n")[0].ToString());
@@ -965,7 +973,7 @@ public class diff_match_patchTest : DiffMatchPatch
 
     public void patch_makeTest()
     {
-        IEnumerable<Patch> patches;
+        Rope<Patch> patches = Rope<Patch>.Empty;
         patches = this.patch_make("", "");
         assertEquals("patch_make: Null case.", "", this.patch_toText(patches));
 
@@ -974,7 +982,8 @@ public class diff_match_patchTest : DiffMatchPatch
         string expectedPatch = "@@ -1,8 +1,7 @@\n Th\n-at\n+e\n  qui\n@@ -21,17 +21,18 @@\n jump\n-ed\n+s\n  over \n-a\n+the\n  laz\n";
         // The second patch must be "-21,17 +21,18", not "-22,17 +21,18" due to rolling context.
         patches = this.patch_make(text2, text1);
-        assertEquals("patch_make: Text2+Text1 inputs.", expectedPatch, this.patch_toText(patches));
+        var patchText = this.patch_toText(patches);
+        assertEquals("patch_make: Text2+Text1 inputs.", expectedPatch, patchText);
 
         expectedPatch = "@@ -1,11 +1,12 @@\n Th\n-e\n+at\n  quick b\n@@ -22,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n  laz\n";
         patches = this.patch_make(text1, text2);
@@ -992,7 +1001,7 @@ public class diff_match_patchTest : DiffMatchPatch
 
         patches = this.patch_make("`1234567890-=[]\\;',./", "~!@#$%^&*()_+{}|:\"<>?");
         assertEquals("patch_toText: Character encoding.",
-            "@@ -1,21 +1,21 @@\n-%601234567890-=%5b%5d%5c;',./\n+~!@#$%25%5e&*()_+%7b%7d%7c:%22%3c%3e?\n",
+            "@@ -1,21 +1,21 @@\n-%601234567890-=%5B%5D%5C;',./\n+~!@#$%25%5E&*()_+%7B%7D%7C:%22%3C%3E?\n",
             this.patch_toText(patches));
 
         diffs = new Rope<Diff>(new[] {
@@ -1366,6 +1375,10 @@ public sealed class DiffMatchPatchTests
     public void diff_prettyHtmlTest() => new diff_match_patchTest().diff_prettyHtmlTest();
     [TestMethod]
     public void diff_textTest() => new diff_match_patchTest().diff_textTest();
+
+    [TestMethod]
+    public void UrlEncodeDecode() => new diff_match_patchTest().DiffEncodeDecode();
+
     [TestMethod]
     public void diff_deltaTest() => new diff_match_patchTest().diff_deltaTest();
     [TestMethod]

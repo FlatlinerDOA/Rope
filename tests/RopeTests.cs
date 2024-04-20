@@ -68,7 +68,25 @@ public sealed class RopeTests
 		Assert.AreEqual("ab".LastIndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 1));
 		Assert.AreEqual("ab".LastIndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2));
 		Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
-	}
+
+    }
+
+	[TestMethod]
+	public void LastIndexOf()
+	{
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".LastIndexOf("ed over a"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("ed over a".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf("he quick"),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("he quick".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf(" "),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf(" ".ToRope()));
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".LastIndexOf("Th"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("Th".ToRope()));
+    }
 
     [TestMethod]
     public void LastIndexOfElementWithStartIndex() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
@@ -88,7 +106,7 @@ public sealed class RopeTests
 	[TestMethod]
 	public void IndexOf()
 	{
-		Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
+        Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
 		Assert.AreEqual("abc abc".IndexOf("c", 2), "abc abc".ToRope().IndexOf("c".ToRope(), 2));
 		Assert.AreEqual("abc abc".IndexOf("c", 6), "abc abc".ToRope().IndexOf("c".ToRope(), 6));
 		Assert.AreEqual("abc abc".IndexOf("c", 7), "abc abc".ToRope().IndexOf("c".ToRope(), 7));
@@ -107,13 +125,19 @@ public sealed class RopeTests
 		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("test".ToRope(), Rope<char>.Empty)));
 		Assert.AreEqual(0, new Rope<char>("test".ToRope(), Rope<char>.Empty).IndexOf("test".ToRope()));
 
-
 		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("te".ToRope(), "st".ToRope())));
 		Assert.AreEqual(0, new Rope<char>("tes".ToRope(), "t".ToRope()).IndexOf("test".ToRope()));
 
-	}
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".IndexOf("ed over a"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").IndexOf("ed over a".ToRope()));
 
-	[TestMethod]
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".IndexOf("he quick"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").IndexOf("he quick".ToRope()));
+    }
+
+    [TestMethod]
 	public void IndexOfRopeAfter() => Assert.AreEqual("abc abc".IndexOf("bc", 2), "abc abc".ToRope().IndexOf("bc".ToRope(), 2));
 
 	[TestMethod]

@@ -16,8 +16,9 @@
     a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly used with strings,
     but any list or sequence can be efficiently edited using the Rope data structure.
     </Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

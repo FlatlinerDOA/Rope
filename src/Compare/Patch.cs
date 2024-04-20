@@ -84,7 +84,7 @@ public sealed record class Patch()
                     break;
             }
 
-            text = text.AddRange(DiffMatchPatch.encodeURI(aDiff.Text)).Append("\n");
+            text = text.AddRange(aDiff.Text.DiffEncode()).Append("\n");
         }
 
         return text.ToString();
