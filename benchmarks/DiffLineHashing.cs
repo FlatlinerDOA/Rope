@@ -29,7 +29,7 @@ namespace Benchmarks
                     lineList = lineList.AddRange((i + "\n").AsMemory());
                 }
 
-                lineList = lineList.Balanced();
+                lineList = lineList.ToMemory();
                 var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
             }
         }

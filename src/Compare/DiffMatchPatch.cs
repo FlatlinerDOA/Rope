@@ -524,28 +524,12 @@ public partial class DiffMatchPatch
         // "\x00" is a valid character, but various debuggers don't like it.
         // So we'll insert a junk entry to avoid generating a null character.
         lineArray = lineArray.Add(Rope<char>.Empty);
-        var chars1 = Munge2(text1, ref lineArray, lineHash, 40000);
-        var chars2 = Munge2(text1, ref lineArray, lineHash, 65535);
-        //Rope<char> chars2 = Rope<char>.Empty;
-        //foreach (var line in text2.Split('\n').Take(65535 - 40000))
-        //{
-        //    var e = lineHash.GetValueOrDefault(line, -1);
-        //    if (e == -1)
-        //    {
-        //        e = lineHash.Count;
-        //        lineArray += line;
-        //        lineHash.Add(line, e);
-        //    }
-        //    else
-        //    {
-        //        chars2 += (char)e;
-        //    }
-        //}
-
+        // var chars1 = Munge2(text1, ref lineArray, lineHash, 40000);
+        // var chars2 = Munge2(text1, ref lineArray, lineHash, 65535);
 
         // Allocate 2/3rds of the space for text1, the rest for text2.
-        //(var chars1, lineArray) = diff_linesToCharsMunge_pure(text1, lineArray, lineHash, 40000);
-        //(var chars2, lineArray) = diff_linesToCharsMunge_pure(text2, lineArray, lineHash, 65535);
+        (var chars1, lineArray) = diff_linesToCharsMunge_pure(text1, lineArray, lineHash, 40000);
+        (var chars2, lineArray) = diff_linesToCharsMunge_pure(text2, lineArray, lineHash, 65535);
         return (chars1, chars2, lineArray.Balanced());
     }
 

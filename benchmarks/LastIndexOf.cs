@@ -5,7 +5,7 @@ using BenchmarkDotNet.Attributes;
 using Benchmarks;
 
 [MemoryDiagnoser]
-public class IndexOf
+public class LastIndexOf
 { 
     private static readonly Rope<char> FragmentedRope = BenchmarkData.LongDiffText1.Chunk(256).Select(c => c.ToRope()).Combine();
 
@@ -16,27 +16,24 @@ public class IndexOf
     [Benchmark(Description = "Rope<char>")]
     public void RopeOfChar()
     {
-        _ = BenchmarkData.LongDiffText1.IndexOf(Find);
+        _ = BenchmarkData.LongDiffText1.LastIndexOf(Find);
     }
 
-    [BenchmarkCategory("Fragmented\nRope<char>")]
-    [Benchmark(Description = "IndexOf")]
+    [Benchmark(Description = "Fragmented\nRope<char>")]
     public void FragmentedRopeOfChar()
     {
-        _ = FragmentedRope.IndexOf(Find);
+        _ = FragmentedRope.LastIndexOf(Find);
     }
 
-    [BenchmarkCategory("Fragmented\nRope<char>")]
-    [Benchmark(Description = "IndexOf (Fragmented Find)")]
+    [Benchmark(Description = "Fragmented\nRope<char> (Fragmented Find)")]
     public void FragmentedRopeOfCharLarge()
     {
-        _ = FragmentedRope.IndexOf(FragmentedFind);
+        _ = FragmentedRope.LastIndexOf(FragmentedFind);
     }
 
-    [BenchmarkCategory("string")]
     [Benchmark]
     public void String()
     {
-        _ = BenchmarkData.LongDiffText1String.IndexOf("[[New Haven Register]]");
+        _ = BenchmarkData.LongDiffText1String.LastIndexOf("[[New Haven Register]]");
     }
 }

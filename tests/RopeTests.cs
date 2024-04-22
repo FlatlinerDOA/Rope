@@ -68,7 +68,7 @@ public sealed class RopeTests
 		Assert.AreEqual("ab".LastIndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 1));
 		Assert.AreEqual("ab".LastIndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2));
 		Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
-
+        Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
     }
 
 	[TestMethod]
@@ -86,10 +86,24 @@ public sealed class RopeTests
         Assert.AreEqual(
 			"The quick brown fox jumped over a lazy dog.".LastIndexOf("Th"),
 			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("Th".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf("."),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf(".".ToRope()));
+    }
+
+	[TestMethod]
+	public void LastIndexOfElementWithStartIndex()
+	{
+		Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
+		Assert.AreEqual("0123456789".LastIndexOf('9', 9), "0123456789".ToRope().LastIndexOf('9', 9));
     }
 
     [TestMethod]
-    public void LastIndexOfElementWithStartIndex() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
+	[ExpectedException(typeof(ArgumentOutOfRangeException))]
+    public void LastIndexOfElementWithStartIndexOutOfBounds()
+    {
+        _ = "0123456789".ToRope().LastIndexOf('9', 10);
+    }
 
     [TestMethod]
     public void LastIndexOfElement()
@@ -99,9 +113,6 @@ public sealed class RopeTests
 		Assert.AreEqual("abc abc".LastIndexOf('a'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('a'));
 		Assert.AreEqual("abc abc".LastIndexOf('x'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('x'));
 	}
-
-	[TestMethod]
-	public void ConcattedLastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
 
 	[TestMethod]
 	public void IndexOf()

@@ -11,8 +11,8 @@
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
             "program": "dotnet",
-            "args": ["test", "${workspaceFolder}/src/Rope.UnitTests/bin/Debug/net8.0/Rope.UnitTests.dll"],
-            "cwd": "${workspaceFolder}/src/Rope.UnitTests",
+            "args": ["test", "${workspaceFolder}/tests/bin/Debug/net8.0/Rope.UnitTests.dll"],
+            "cwd": "${workspaceFolder}/tests",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",
             "stopAtEntry": false

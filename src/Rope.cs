@@ -18,7 +18,7 @@ using System.Buffers;
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
-public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
+public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
 	private static readonly ArrayPool<ReadOnlyMemory<T>> BufferPool = ArrayPool<ReadOnlyMemory<T>>.Create(128, 16);
 
@@ -215,7 +215,7 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	[MemberNotNullWhen(true, nameof(this.right))]
 	[MemberNotNullWhen(true, nameof(this.Left))]
 	[MemberNotNullWhen(true, nameof(this.Right))]
-	public bool IsNode => this.Depth > 0;
+	public bool IsNode => this.Depth != 0;
 
 	/// <summary>
 	/// Gets the length of the left Node if this is a node (the split-point essentially), otherwise the length of the data. 
@@ -343,7 +343,7 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 			}
 		}
 
-		return (new Rope<T>(this.data.Slice(0, (int)i)), new Rope<T>(this.data.Slice((int)i)));
+		return (new Rope<T>(this.data[..(int)i]), new Rope<T>(this.data[(int)i..]));
 	}
 
 	/// <summary>
@@ -745,10 +745,9 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 		if (this.IsNode)
 		{
 			// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
-			var result = GC.AllocateUninitializedArray<T>((int)(this.left.Length + this.right.Length));
+			var result = GC.AllocateUninitializedArray<T>((int)this.Length);
 			var mem = result.AsMemory();
-			this.left.CopyTo(mem);
-			this.right.CopyTo(mem.Slice((int)this.left.Length));
+			this.CopyTo(mem);
 			return result;
 		}
 
@@ -763,9 +762,22 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	{
 		if (this.IsNode)
 		{
+			var rentedBuffers = BufferPool.Rent(this.BufferCount);
+			var buffers = rentedBuffers[..this.BufferCount];
+			this.FillBuffers(buffers);
+			foreach (var b in buffers)
+			{
+				b.CopyTo(other[..b.Length]);
+				other = other[b.Length..];
+			}
+
+			// this.left.CopyTo(mem);
+			// this.right.CopyTo(mem.Slice((int)this.left.Length));
+			BufferPool.Return(rentedBuffers);
+
 			// Binary tree so copy each half.
-			this.left.CopyTo(other);
-			this.right.CopyTo(other.Slice((int)this.left.Length));
+			// this.left.CopyTo(other);
+			// this.right.CopyTo(other.Slice((int)this.left.Length));
 		}
 		else
 		{
@@ -774,29 +786,6 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 		}
 	}
 
-	[Pure]
-	public long IndexOfArray(Rope<T> find)
-	{
-		if (find.Length > this.Length)
-		{
-			return -1;
-		}
-
-		if (find.Length == 0)
-		{
-			return 0;
-		}
-
-		if (!this.IsNode && !find.IsNode)
-		{
-			return this.data.Span.IndexOf(find.data.Span);
-		}
-
-        var buffers = this.Buffers.ToArray();
-		var findBuffers = find.Buffers.ToArray();
-        return this.IndexOfDefaultEquality(buffers, findBuffers);
-	}
-	
 	[Pure]
 	public long IndexOf(Rope<T> find)
 	{
@@ -1042,13 +1031,13 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
         // 2.2    Else iterate until all sliced sub-sequences matches
         var remainingTargetBuffers = targetBuffers;
         var currentTargetSpan = remainingTargetBuffers[0].Span;
+        var firstElement = findBuffers[0].Span[0];
         int globalIndex = 0;
 		while (remainingTargetBuffers.Length > 0)
 		{
 			// Reset find to the beginning
 			var remainingFindBuffers = findBuffers;
 			var currentFindSpan = remainingFindBuffers[0].Span;
-			var firstElement = currentFindSpan[0];
 
 			var index = MoveToFirstElement(firstElement, ref currentTargetSpan, ref remainingTargetBuffers);
 			if (index == -1)
@@ -1347,7 +1336,36 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
 
-	public long LastIndexOf(Rope<T> find) => this.LastIndexOf(find, this.Length);
+	public long LastIndexOf(Rope<T> find)
+	{
+        if (find.Length == 0)
+        {
+            // Adjust the return value to conform with .NET's behavior.
+            // return the length of 'this' as the next plausible index.
+            return this.Length;
+        }
+
+        if (this.IsNode || find.IsNode)
+        {
+            var rentedBuffers = BufferPool.Rent(this.BufferCount);
+            var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
+            var buffers = rentedBuffers[..this.BufferCount];
+            var findBuffers = rentedFindBuffers[..find.BufferCount];
+            this.FillBuffers(buffers);
+            find.FillBuffers(findBuffers);
+
+            var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
+
+            BufferPool.Return(rentedFindBuffers);
+            BufferPool.Return(rentedBuffers);
+            return i;
+        }
+        else
+        {
+            // Finding a Leaf within another leaf.
+            return this.data.Span.LastIndexOf(find.data.Span);
+        }
+    }
 	
 	/// <summary>
 	/// Returns the last element index that matches the specified sub-sequence, working backwards from the startIndex (inclusive).
@@ -1356,61 +1374,130 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	/// <param name="startIndex">The starting index to start searching backwards from (Optional).</param>
 	/// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
 	[Pure]
-	public long LastIndexOf(Rope<T> find, long startIndex)
+	public long LastIndexOf(Rope<T> find, long startIndex) => this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find);
+
+    private long LastIndexOfSlow(Rope<T> find, long startIndex)
+    {
+        var comparer = EqualityComparer<T>.Default;
+        for (var i = startIndex; i >= 0; i--)
+        {
+            if (i + find.Length > this.Length) continue; // Skip if find exceeds bounds from i
+
+            var match = true;
+            for (var j = find.Length - 1; j >= 0 && match; j--)
+            {
+                // This check ensures we don't overshoot the bounds of 'this'
+                if (i + j < this.Length)
+                {
+                    match = comparer.Equals(this[i + j], find[j]);
+                }
+                else
+                {
+                    match = false;
+                    break; // No need to continue if we're out of bounds
+                }
+            }
+
+            if (match)
+            {
+                return i; // Found the last occurrence
+            }
+        }
+
+        return -1;
+    }
+
+    private static long MoveToLastElement(long length, T element, ref ReadOnlySpan<T> current, ref ReadOnlySpan<ReadOnlyMemory<T>> currentAndRemainder)
 	{
-		if (find.Length == 0)
+        var globalOffset = length;
+		while (true)
 		{
-			// Adjust the return value to conform with .NET's behavior.
-			// If startIndex is within bounds, return startIndex + 1, ensuring it does not exceed the length of 'this'.
-			// Otherwise, return the length of 'this' as the next plausible index.
-			return Math.Min(startIndex + 1, this.Length);
-		}
-
-		if (this.IsNode || find.IsNode)
-		{
-			var comparer = EqualityComparer<T>.Default;
-			for (var i = startIndex; i >= 0; i--)
+			var result = current.LastIndexOf(element);
+			if (result == -1)
 			{
-				if (i + find.Length > this.Length) continue; // Skip if find exceeds bounds from i
-
-				var match = true;
-				for (var j = find.Length - 1; j >= 0 && match; j--)
+                globalOffset -= current.Length;
+                currentAndRemainder = currentAndRemainder[..^1];
+				if (currentAndRemainder.Length == 0)
 				{
-					// This check ensures we don't overshoot the bounds of 'this'
-					if (i + j < this.Length)
-					{
-						match = comparer.Equals(this[i + j], find[j]);
-					}
-					else
-					{
-						match = false;
-						break; // No need to continue if we're out of bounds
-					}
+                    current = ReadOnlySpan<T>.Empty;
+                    return -1;
 				}
 
-				if (match)
-				{
-					return i; // Found the last occurrence
-				}
-			}
-			
-			return -1;
-		}
-		else
-		{
-			// Finding a Leaf within another leaf.
-			var i = this.data.Span[..(int)Math.Min(startIndex + 1, this.Length)].LastIndexOf(find.data.Span);
-			if (i != -1)
+                current = currentAndRemainder[^1].Span;
+            }
+			else
 			{
-				return i;
+				var index = globalOffset - (current.Length - result);
+                current = current[..(result + 1)];
+                return index;
+			}
+		}
+    }
+
+	private long LastIndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers, long findLength)
+    {
+        // 1. Fast forward to last element in findBuffers
+        // 2. Reduce find buffer using sequence equal,
+        // 2.1    If no match, slice target buffers
+        // 2.2    Else iterate until all sliced sub-sequences matches
+        var remainingTargetBuffers = targetBuffers;
+        var currentTargetSpan = remainingTargetBuffers[^1].Span;
+        var lastElement = findBuffers[^1].Span[^1];
+        var endIndex = this.Length;
+		while (remainingTargetBuffers.Length > 0)
+		{
+			// Reset find to the beginning
+			var remainingFindBuffers = findBuffers;
+			var currentFindSpan = remainingFindBuffers[^1].Span;
+
+			var index = MoveToLastElement(endIndex, lastElement, ref currentTargetSpan, ref remainingTargetBuffers);
+			if (index == -1)
+			{
+				return -1;
 			}
 
-			return -1;
-		}
+			var aligned = new ReverseAlignedBufferEnumerator<T>(currentTargetSpan, currentFindSpan, remainingTargetBuffers, remainingFindBuffers);
+			var matches = true;
+			while (aligned.MoveNext())
+			{
+				if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+				{
+					matches = false;
+					break;
+				}
+			}
+
+			if (matches)
+			{
+                // We matched and had nothing left in B. We're done!
+                if (!aligned.HasRemainderB)
+                {
+                    return index + 1 - findLength;
+                }
+
+				// We matched everything so far in A but B had more to search for, so there was no match.
+				return -1;
+            }
+            else
+			{
+                // We found an index but it wasn't a match, shift by 1 and do an indexof again.
+                if (currentTargetSpan.Length > 0)
+                {
+					endIndex = index;
+                    currentTargetSpan = currentTargetSpan[..^1];
+                }
+                else
+                {
+                    remainingTargetBuffers = remainingTargetBuffers[..^1];
+                }
+            }
+        }
+
+		return -1;
 	}
 
 	[Pure]
-	public long LastIndexOf(T find, int startIndex) => this.LastIndexOf(new Rope<T>(new[] { find }), startIndex);
+	public long LastIndexOf(T find, int startIndex) => this.Slice(0, startIndex + 1).LastIndexOf(new Rope<T>(new[] { find }));
 
 	[Pure]
 	public long LastIndexOf(T find) => this.LastIndexOf(new Rope<T>(new[] { find }));
@@ -1644,15 +1731,25 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	[Pure]
 	public bool Equals(Rope<T>? other)
 	{
-		if (other is null)
+        if (object.ReferenceEquals(this, other))
+        {
+            return true;
+        }
+        if (other is null)
 		{
 			return false;
 		}
-		
-		if (this.Length != other.Length) 
-		{
-			return false;
-		}
+
+        if (this.Length != other.Length)
+        {
+            return false;
+        }
+
+        if (!this.IsNode && !other.IsNode)
+        {
+            return this.data.Span.SequenceEqual(other.data.Span);
+        }
+
 
 		if (this.Length == 0)
 		{
@@ -1694,7 +1791,9 @@ public class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEqu
 	[Pure]
 	public override int GetHashCode() => this.Length switch 
 	{
-		> 64 => HashCode.Combine(this[0], this[this.Length - 1], this.Length),
+        > 64 => HashCode.Combine(this[0], this[(int)(this.Length * 0.25)], this[(int)(this.Length * 0.75)], this[this.Length - 1], this.Length),
+        > 3 => HashCode.Combine(this[0], this[this.Length / 2], this[this.Length - 1], this.Length),
+        > 2 => HashCode.Combine(this[0], this[this.Length - 1], this.Length),
 		> 0 => HashCode.Combine(this[0], this.Length),
 		_ => 0
 	};

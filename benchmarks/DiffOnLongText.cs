@@ -11,7 +11,7 @@ namespace Benchmarks;
 public class DiffOnLongText
 {
     [Benchmark]
-    public void DiffMain()
+    public void SpeedTest()
     {
         var dmp = new DiffMatchPatch();
         dmp.Diff_Timeout = 0;
