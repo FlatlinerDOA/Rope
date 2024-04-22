@@ -9,9 +9,11 @@ using System.Linq;
 [TestClass]
 public sealed class RopeTests
 {
-	private static Rope<int> EvenNumbers;
-	
-	private static Rope<char> LargeText;
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    private static Rope<int> EvenNumbers;
+
+    private static Rope<char> LargeText;
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
 	public RopeTests()
 	{
@@ -50,18 +52,103 @@ public sealed class RopeTests
     public void SplitBySequence() => Assert.IsTrue("this  is  a  test  of  the  things  I  split  by.".ToRope().Split("  ".AsMemory()).Select(c => c.ToString()).SequenceEqual("this  is  a  test  of  the  things  I  split  by.".Split("  ")));
 
     [TestMethod]
-    public void LastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf("c".AsMemory(), 2));
+    public void LastIndexOfRopeWithStartIndex()
+	{
+		Assert.AreEqual("abc abc".LastIndexOf("c", 2), "abc abc".ToRope().LastIndexOf("c".ToRope(), 2));
+		Assert.AreEqual("abc abc".LastIndexOf("c", 6), "abc abc".ToRope().LastIndexOf("c".ToRope(), 6));
+		Assert.AreEqual("abc abc".LastIndexOf("c", 7), "abc abc".ToRope().LastIndexOf("c".ToRope(), 7));
+		Assert.AreEqual("ABC".LastIndexOf("B", 0), "ABC".ToRope().LastIndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".LastIndexOf("B", 1), "ABC".ToRope().LastIndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".LastIndexOf("C", 2), "ABC".ToRope().LastIndexOf("C".ToRope(), 2));
+
+		Assert.AreEqual("ABC".LastIndexOf("B", 0), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".LastIndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".LastIndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("C".ToRope(), 2));
+		Assert.AreEqual("ab".LastIndexOf("ab", 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf("ab".ToRope(), 1));
+		Assert.AreEqual("ab".LastIndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 1));
+		Assert.AreEqual("ab".LastIndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2));
+		Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
+        Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
+    }
+
+	[TestMethod]
+	public void LastIndexOf()
+	{
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".LastIndexOf("ed over a"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("ed over a".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf("he quick"),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("he quick".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf(" "),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf(" ".ToRope()));
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".LastIndexOf("Th"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf("Th".ToRope()));
+        Assert.AreEqual(
+            "The quick brown fox jumped over a lazy dog.".LastIndexOf("."),
+            ("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").LastIndexOf(".".ToRope()));
+    }
+
+	[TestMethod]
+	public void LastIndexOfElementWithStartIndex()
+	{
+		Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
+		Assert.AreEqual("0123456789".LastIndexOf('9', 9), "0123456789".ToRope().LastIndexOf('9', 9));
+    }
 
     [TestMethod]
-    public void LastIndexOfElement() => Assert.AreEqual("abc abc".LastIndexOf('c', 2), "abc abc".ToRope().LastIndexOf('c', 2));
+	[ExpectedException(typeof(ArgumentOutOfRangeException))]
+    public void LastIndexOfElementWithStartIndexOutOfBounds()
+    {
+        _ = "0123456789".ToRope().LastIndexOf('9', 10);
+    }
+
+    [TestMethod]
+    public void LastIndexOfElement()
+	{
+ 		Assert.AreEqual("abc abc".LastIndexOf('c'), "abc abc".ToRope().LastIndexOf('c'));
+		Assert.AreEqual("abc abc".LastIndexOf('a'), new Rope<char>("abc a".ToRope(), "bc".ToRope()).LastIndexOf('a'));
+		Assert.AreEqual("abc abc".LastIndexOf('a'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('a'));
+		Assert.AreEqual("abc abc".LastIndexOf('x'), new Rope<char>("abc ".ToRope(), "abc".ToRope()).LastIndexOf('x'));
+	}
 
 	[TestMethod]
-	public void ConcattedLastIndexOf() => Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
+	public void IndexOf()
+	{
+        Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
+		Assert.AreEqual("abc abc".IndexOf("c", 2), "abc abc".ToRope().IndexOf("c".ToRope(), 2));
+		Assert.AreEqual("abc abc".IndexOf("c", 6), "abc abc".ToRope().IndexOf("c".ToRope(), 6));
+		Assert.AreEqual("abc abc".IndexOf("c", 7), "abc abc".ToRope().IndexOf("c".ToRope(), 7));
+		Assert.AreEqual("ABC".IndexOf("B", 0), "ABC".ToRope().IndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".IndexOf("B", 1), "ABC".ToRope().IndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".IndexOf("C", 2), "ABC".ToRope().IndexOf("C".ToRope(), 2));
 
-	[TestMethod]
-	public void IndexOf() => Assert.AreEqual("abc abc".IndexOf('c', 2), "abc abc".ToRope().IndexOf("c".AsMemory(), 2));
+		Assert.AreEqual("ABC".IndexOf("B", 0), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("B".ToRope(), 0));
+		Assert.AreEqual("ABC".IndexOf("B", 1), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("B".ToRope(), 1));
+		Assert.AreEqual("ABC".IndexOf("C", 2), new Rope<char>("A".ToRope(), "BC".ToRope()).IndexOf("C".ToRope(), 2));
+		Assert.AreEqual("ab".IndexOf("ab", 1), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf("ab".ToRope(), 1));
+		Assert.AreEqual("ab".IndexOf(string.Empty, 1), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf(Rope<char>.Empty, 1));
+		Assert.AreEqual("ab".IndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).IndexOf(Rope<char>.Empty, 2));
+		Assert.AreEqual("def abcdefgh".IndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).IndexOf("def".ToRope()));
 
-	[TestMethod]
+		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("test".ToRope(), Rope<char>.Empty)));
+		Assert.AreEqual(0, new Rope<char>("test".ToRope(), Rope<char>.Empty).IndexOf("test".ToRope()));
+
+		Assert.AreEqual(0, "test".ToRope().IndexOf(new Rope<char>("te".ToRope(), "st".ToRope())));
+		Assert.AreEqual(0, new Rope<char>("tes".ToRope(), "t".ToRope()).IndexOf("test".ToRope()));
+
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".IndexOf("ed over a"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").IndexOf("ed over a".ToRope()));
+
+        Assert.AreEqual(
+			"The quick brown fox jumped over a lazy dog.".IndexOf("he quick"),
+			("Th".ToRope() + "e" + " quick brown fox jumped over a lazy dog.").IndexOf("he quick".ToRope()));
+    }
+
+    [TestMethod]
 	public void IndexOfRopeAfter() => Assert.AreEqual("abc abc".IndexOf("bc", 2), "abc abc".ToRope().IndexOf("bc".ToRope(), 2));
 
 	[TestMethod]
@@ -104,6 +191,9 @@ public sealed class RopeTests
 	public void StartsWith() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".ToRope()));
 
 	[TestMethod]
+	public void NotStartsWithPartitioned() => Assert.IsFalse(new Rope<char>("cde".ToRope(), "f".ToRope()).StartsWith(new Rope<char>("cdf".ToRope(), "g".ToRope())));
+
+	[TestMethod]
 	public void StartsWithMemory() => Assert.IsTrue("abcd".ToRope().StartsWith("ab".AsMemory()));
 
 	[TestMethod]
@@ -116,7 +206,7 @@ public sealed class RopeTests
 	public void AdditionOperatorSingleElement() => Assert.AreEqual("Lorem ipsum", ("Lorem ipsu".ToRope() + 'm').ToString());
 
 	[TestMethod]
-	public void ConcatRopes() => Assert.AreEqual("Lorem ipsum", "Lorem ".ToRope().Concat("ipsum".ToRope()).ToString());
+	public void ConcatRopes() => Assert.AreEqual("Lorem ipsum", "Lorem ".ToRope().AddRange("ipsum".ToRope()).ToString());
 
 	[TestMethod]
 	public void Replace() => Assert.AreEqual("The ghosts say boo dee boo", "The ghosts say doo dee doo".ToRope().Replace("doo".AsMemory(), "boo".AsMemory()).ToString());		
@@ -197,14 +287,14 @@ public sealed class RopeTests
 	public void RemoveZeroLengthDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(10, 0));
+		Assert.AreSame(a, a.RemoveRange(10, 0));
 	}
 
 	[TestMethod]
 	public void RemoveAtTailDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(a.Length));
+		Assert.AreSame(a, a.RemoveRange(a.Length));
 	}
 
 	[TestMethod]
@@ -212,7 +302,7 @@ public sealed class RopeTests
 	public void RemoveBeyondTailArgumentOutOfRangeException()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.Remove(a.Length + 1));
+		Assert.AreSame(a, a.RemoveRange(a.Length + 1));
 	}
 
 	[TestMethod]
@@ -241,6 +331,18 @@ public sealed class RopeTests
 
     [TestMethod]
 	public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
+
+	[TestMethod]
+	public void StringEqualsOperator() => Assert.IsTrue("abc".ToRope() == "abc".ToRope());
+
+	[TestMethod]
+	public void StructuralEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() == "ab".ToRope() + "c".ToRope());
+
+	[TestMethod]
+	public void StringNotEqualsOperator() => Assert.IsTrue("abc".ToRope() != "abbc".ToRope());
+
+	[TestMethod]
+	public void StructuralNotEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() != "ab".ToRope() + "bc".ToRope());
 
 	[TestMethod]
 	public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals(null));
@@ -351,7 +453,7 @@ public sealed class RopeTests
 		var s = LargeText;
 		for (int i = 0; i < 1000; i++)
 		{
-			s = s.Insert(LargeText.Length / 2, LargeText);
+			s = s.InsertRange(LargeText.Length / 2, LargeText);
 		}
 
 		Assert.AreEqual(LargeText.Length * 1001, s.Length);
@@ -364,7 +466,7 @@ public sealed class RopeTests
 		var s = LargeText;
 		for (int i = 0; i < 1000; i++)
 		{
-			s = s.Insert(memory.Length / 2, memory);
+			s = s.InsertRange(memory.Length / 2, memory);
 		}
 
 		Assert.AreEqual(memory.Length * 1001, s.Length);
