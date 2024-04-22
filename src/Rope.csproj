@@ -9,7 +9,7 @@
     <Copyright>©️ 2024 Andrew Chisholm</Copyright>
     <PackageProjectUrl>https://github.com/FlatlinerDOA/Rope</PackageProjectUrl>
     <RepositoryUrl>https://github.com/FlatlinerDOA/Rope.git</RepositoryUrl>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>Andrew Chisholm</Authors>
     <Description>
     C# implementation of a Rope immutable data structure. A Rope is an immutable sequence built using

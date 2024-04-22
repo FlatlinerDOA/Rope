@@ -77,7 +77,7 @@ A comparison could be drawn between a Rope and a StringBuilder as they use a ver
 
 ## Performance - AddRange
 
-![AddRange](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.AppendRange-barplot.png)
+![AddRange](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.AppendRange-barplot.png)
 
 Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max Depth = 46
 
@@ -96,7 +96,7 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 
 ##  Performance - InsertRange
 
-![InsertRange](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.InsertRange-barplot.png)
+![InsertRange](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.InsertRange-barplot.png)
 
 | Method        | EditCount | Mean               | Error           | StdDev          | Gen0      | Gen1      | Gen2      | Allocated    |
 |-------------- |---------- |-------------------:|----------------:|----------------:|----------:|----------:|----------:|-------------:|
@@ -113,7 +113,7 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 
 ##  Performance - Split then Concat
 
-![Split then Concat](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.SplitThenConcat-barplot.png)
+![Split then Concat](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.SplitThenConcat-barplot.png)
 
 | Method        | EditCount | Mean            | Error           | StdDev        | Gen0      | Gen1     | Gen2     | Allocated   |
 |-------------- |---------- |----------------:|----------------:|--------------:|----------:|---------:|---------:|------------:|
@@ -129,13 +129,13 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 
 ##  Performance - Create New
 
-![Create New Empty](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.CreateNewEmpty-barplot.png)
-![Create New With Length 10](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.CreateNewWithLength10-barplot.png)
+![Create New Empty](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.CreateNewEmpty-barplot.png)
+![Create New With Length 10](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.CreateNewWithLength10-barplot.png)
 
 
 ## Performance - Equals
 
-![Equals](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.Equals-barplot.png)
+![Equals](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.Equals-barplot.png)
 
 | Method               | Length | Mean        | Error      | StdDev    | Gen0   | Gen1   | Allocated |
 |--------------------- |------- |------------:|-----------:|----------:|-------:|-------:|----------:|
@@ -158,7 +158,7 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 
 ## Performance - IndexOf
 
-![IndexOf](https://raw.githubusercontent.com/FlatlinerDOA/Rope/diffmatchpatch/benchmarks/results/Benchmarks.IndexOf-barplot.png)
+![IndexOf](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.IndexOf-barplot.png)
 
 | Method                      | Length | Mean         | Error        | StdDev     | Gen0   | Allocated |
 |---------------------------- |------- |-------------:|-------------:|-----------:|-------:|----------:|
