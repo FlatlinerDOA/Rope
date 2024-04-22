@@ -10,10 +10,10 @@ namespace Benchmarks;
 [MemoryDiagnoser]
 public class AddRange
 {
-    [Params(10, 100, 1000)]
+    [Params(10, 100, 500)]
     public int EditCount;
 
-    [Benchmark(Description = "Rope<char>")]
+    [Benchmark(Description = "Rope")]
     public void RopeOfChar()
     {
         var lorem = BenchmarkData.LoremIpsum.ToRope();
@@ -22,8 +22,6 @@ public class AddRange
         {
             s = s.AddRange(lorem);
         }
-
-        ////s.ToString();
     }
 
     [Benchmark(Description = "StringBuilder")]
@@ -34,11 +32,9 @@ public class AddRange
         {
             s.Append(BenchmarkData.LoremIpsum);
         }
-
-        ////s.ToString();
     }
 
-    [Benchmark(Description = "List<char>")]
+    [Benchmark(Description = "List")]
     public void ListOfChar()
     {
         var s = new List<char>(BenchmarkData.LoremIpsum);
@@ -46,45 +42,5 @@ public class AddRange
         {
             s.AddRange(BenchmarkData.LoremIpsum);
         }
-
-        ////s.ToString();
-    }
-
-    [Benchmark(Description = "ImmutableList<char>\n.Builder")]
-    public void ImmutableListBuilderOfChar()
-    {
-        var s = ImmutableList<char>.Empty.ToBuilder();
-        s.AddRange(BenchmarkData.LoremIpsum);
-        
-        for (int i = 0; i < EditCount; i++)
-        {
-            s.AddRange(BenchmarkData.LoremIpsum);
-        }
-
-        ////s.ToString();
-    }
-
-    [Benchmark(Description = "ImmutableList<char>")]
-    public void ImmutableListOfChar()
-    {
-        var s = ImmutableList<char>.Empty.AddRange(BenchmarkData.LoremIpsum);
-        for (int i = 0; i < EditCount; i++)
-        {
-            s = s.AddRange(BenchmarkData.LoremIpsum);
-        }
-
-        ////s.ToString();
-    }
-
-    [Benchmark(Description = "ImmutableArray<char>")]
-    public void ImmutableArrayOfChar()
-    {
-        var s = ImmutableArray<char>.Empty.AddRange(BenchmarkData.LoremIpsum.AsSpan());
-        for (int i = 0; i < EditCount; i++)
-        {
-            s = s.AddRange(BenchmarkData.LoremIpsum.AsSpan());
-        }
-
-        ////s.ToString();
     }
 }

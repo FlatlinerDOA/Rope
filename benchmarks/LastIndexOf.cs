@@ -1,8 +1,9 @@
-namespace Rope;
+namespace Benchmarks;
 
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using Benchmarks;
+using Rope;
 
 [MemoryDiagnoser]
 public class LastIndexOf

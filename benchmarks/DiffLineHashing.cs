@@ -2,36 +2,32 @@
 using Rope;
 using Rope.Compare;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Benchmarks
-{    
-    public class DiffLineHashing
+namespace Benchmarks;
+
+[MemoryDiagnoser]
+public class DiffLineHashing
+{
+    [Benchmark]
+    public void LinesToCharsPure()
     {
-        [Benchmark]
-        public void LinesToCharsPure()
-        {
-            var b = new LinesToCharsBenchTest();
-            b.Run();
-        }
+        var b = new LinesToCharsBenchTest();
+        b.Run();
+    }
 
-        private class LinesToCharsBenchTest : DiffMatchPatch
+    private class LinesToCharsBenchTest : DiffMatchPatch
+    {
+        public void Run()
         {
-            public void Run()
+            // More than 65536 to verify any 16-bit limitation.
+            var lineList = Rope<char>.Empty;
+            for (int i = 0; i < 66000; i++)
             {
-                // More than 65536 to verify any 16-bit limitation.
-                var lineList = Rope<char>.Empty;
-                for (int i = 0; i < 66000; i++)
-                {
-                    lineList = lineList.AddRange((i + "\n").AsMemory());
-                }
-
-                lineList = lineList.ToMemory();
-                var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
+                lineList = lineList.AddRange((i + "\n").AsMemory());
             }
+
+            lineList = lineList.ToMemory();
+            var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
         }
     }
 }
