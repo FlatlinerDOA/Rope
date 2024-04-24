@@ -27,7 +27,7 @@ public class DiffLineHashing
             }
 
             lineList = lineList.ToMemory();
-            var result = this.diff_linesToChars_pure(lineList, Rope<char>.Empty);
+            var result = this.DiffLinesToChars(lineList, Rope<char>.Empty);
         }
     }
 }

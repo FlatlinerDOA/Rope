@@ -101,7 +101,7 @@ public static class CompatibilityExtensions
     /// <param name="str">The string to encode.</param>
     /// <returns>The encoded string.</returns>
     [Pure]
-    public static Rope<char> DiffEncode(this Rope<char> str) => DiffEncoder.Encode(str.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
+    public static Rope<char> DiffEncode<T>(this Rope<T> str) where T : IEquatable<T> => DiffEncoder.Encode(str.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
 
     /// <summary>
     /// C# is overzealous in the replacements. Walk back on a few.

@@ -330,9 +330,11 @@ public sealed class RopeTests
 #pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
     [TestMethod]
-	public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+    public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
-	[TestMethod]
+    [TestMethod]
 	public void StringEqualsOperator() => Assert.IsTrue("abc".ToRope() == "abc".ToRope());
 
 	[TestMethod]

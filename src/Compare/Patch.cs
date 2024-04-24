@@ -23,9 +23,9 @@ using System;
 /**
  * Class representing one patch operation.
  */
-public sealed record class Patch()
+public sealed record class Patch<T>() where T : IEquatable<T>
 {
-    public Rope<Diff> Diffs { get; init; } = Rope<Diff>.Empty;
+    public Rope<Diff<T>> Diffs { get; init; } = Rope<Diff<T>>.Empty;
     public long Start1 { get; init; }
     public long Start2 { get; init; }
     public long Length1 { get; init; }
@@ -69,7 +69,7 @@ public sealed record class Patch()
         text = text.Append("@@ -").Append(coords1).Append(" +").Append(coords2)
             .Append(" @@\n");
         // Escape the body of the patch with %xx notation.
-        foreach (Diff aDiff in this.Diffs)
+        foreach (var aDiff in this.Diffs)
         {
             switch (aDiff.Operation)
             {

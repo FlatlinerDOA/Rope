@@ -1171,7 +1171,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="globalIndex">The global index to find.</param>
 	/// <param name="value">The output value</param>
 	/// <returns>true if found, otherwise false.</returns>
-	private bool TryGetValueAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, out T value)
+	private bool TryGetValueAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, out T? value)
 	{
 		int accumulatedLength = 0;
 		foreach (var buffer in buffers)
@@ -1816,12 +1816,12 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
             true;
     }
 
-	/// <summary>
-	/// Constructs a new Rope from a series of leaves into a tree.
-	/// </summary>
-	/// <param name="leaves">The leaf nodes to construct into a tree.</param>
-	/// <returns>A new rope with the leaves specified.</returns>
-	[Pure]
+    /// <summary>
+    /// Constructs a new Rope from a series of leaves into a tree.
+    /// </summary>
+    /// <param name="leaves">The leaf nodes to construct into a tree.</param>
+    /// <returns>A new rope with the leaves specified.</returns>
+    [Pure]
 	public static Rope<T> Combine(Rope<Rope<T>> leaves) 
 	{
 		// Iteratively combine leaf nodes into a balanced tree

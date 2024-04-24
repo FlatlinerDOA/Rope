@@ -14,7 +14,7 @@ public class DiffOnLongText
     public void SpeedTest()
     {
         var dmp = new DiffMatchPatch();
-        dmp.Diff_Timeout = 0;
-        _ = dmp.diff_main(BenchmarkData.LongDiffText1, BenchmarkData.LongDiffText2);
+        dmp.DiffOptions = dmp.DiffOptions with { TimeoutSeconds = 0 };
+        _ = dmp.CalculateDifferences(BenchmarkData.LongDiffText1, BenchmarkData.LongDiffText2);
     }
 }

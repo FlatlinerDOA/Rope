@@ -16,6 +16,6 @@ public class DiffOnShortText
     public void DiffMain()
     {
         var dmp = new DiffMatchPatch();
-        _ = dmp.diff_main(BenchmarkData.ShortDiffText1, BenchmarkData.ShortDiffText2);
+        _ = dmp.CalculateDifferences(BenchmarkData.ShortDiffText1, BenchmarkData.ShortDiffText2);
     }  
 }

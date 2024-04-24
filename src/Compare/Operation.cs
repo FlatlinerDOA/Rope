@@ -26,5 +26,7 @@ namespace Rope.Compare;
  */
 public enum Operation
 {
-    DELETE, INSERT, EQUAL
+    DELETE = -1,
+    EQUAL = 0,
+    INSERT = 1
 }

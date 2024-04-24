@@ -20,14 +20,16 @@ namespace Rope.Compare;
 
 using System;
 
-/**
- * Class representing one diff operation.
- */
-public readonly record struct Diff(Operation Operation, Rope<char> Text)
+/// <summary>
+/// Class representing one diff operation.
+/// </summary>
+/// <param name="Operation">The operation being performed.</param>
+/// <param name="Text">The content of the operation.</param>
+public readonly record struct Diff<T>(Operation Operation, Rope<T> Text) where T : IEquatable<T>
 {
-    public Diff WithOperation(Operation op) => this with { Operation = op };
-    public Diff WithText(Rope<char> text) => this with { Text = text };
+    public Diff<T> WithOperation(Operation op) => this with { Operation = op };
+    public Diff<T> WithText(Rope<T> text) => this with { Text = text };
 
-    public Diff Append(Rope<char> text) => this with { Text = this.Text.AddRange(text) };
-    public Diff Prepend(Rope<char> text) => this with { Text = text.AddRange(this.Text) };
+    public Diff<T> Append(Rope<T> text) => this with { Text = this.Text.AddRange(text) };
+    public Diff<T> Prepend(Rope<T> text) => this with { Text = text.AddRange(this.Text) };
 }
