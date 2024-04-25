@@ -29,20 +29,30 @@ using System;
 /// </summary>
 /// <param name="TimeoutSeconds">The time in seconds to allow the diff to calculate for.</param>
 /// <param name="EditCost">The minimum text length for a Diff operation, larger values result in more chunky diff operations.</param>
-/// <param name="CheckLines">Speedup flag. If false, then don't run a
+/// <param name="IsChunkingEnabled">Speedup flag. If false, then don't run a
 /// line-level diff first to identify the changed areas.
 /// If true, then run a faster slightly less optimal diff.</param>
-public record class DiffOptions(float TimeoutSeconds, short EditCost, bool CheckLines)
+/// <param name="ChunkSeparator">An element that delineates one chunk from the next, the diff will attempt to use this if chunkng is enabled.</param>
+public record class DiffOptions<T>(float TimeoutSeconds, short EditCost, bool IsChunkingEnabled, T? ChunkSeparator) where T : IEquatable<T>
 {
     /// <summary>
-    /// Slightly faster line level diff.
+    /// Slower more accurate diff settings, where diffs can be down to the element level. (Timeout default is 500ms)
     /// </summary>
-    public static readonly DiffOptions Default = new(0.5f, 4, true);
+    public static readonly DiffOptions<T> Generic = new(0.5f, 4, false, default);
 
     /// <summary>
-    /// Slower more accurate diff settings, where diffs can be at the character level.
+    /// Slightly faster line level diff on chars only. (Timeout default is 500ms)
     /// </summary>
-    public static readonly DiffOptions Accurate = new(0.5f, 4, false);
+    public static readonly DiffOptions<char> LineLevel = new(0.5f, 4, true, '\n');
+
+    /// <summary>
+    /// Gets the defaults options to use.
+    /// Uses <see cref="DiffOptions{char}.LineLevel"/> when <typeparamref name="T"/> is <see cref="char"/>,
+    /// otherwise uses <see cref="DiffOptions{char}.Generic"/>.
+    /// </summary>
+    public static DiffOptions<T> Default => typeof(T) == typeof(char) ?
+            (DiffOptions<char>.LineLevel as DiffOptions<T>)! :
+            DiffOptions<T>.Generic;
 
     public CancellationTimer StartTimer() => new CancellationTimer(this.TimeoutSeconds);
 

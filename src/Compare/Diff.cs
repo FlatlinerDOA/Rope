@@ -21,7 +21,7 @@ namespace Rope.Compare;
 using System;
 
 /// <summary>
-/// Class representing one diff operation.
+/// Record struct representing one diff operation.
 /// </summary>
 /// <param name="Operation">The operation being performed.</param>
 /// <param name="Text">The content of the operation.</param>

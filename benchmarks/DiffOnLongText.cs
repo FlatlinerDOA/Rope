@@ -13,8 +13,6 @@ public class DiffOnLongText
     [Benchmark]
     public void SpeedTest()
     {
-        var dmp = new DiffMatchPatch();
-        dmp.DiffOptions = dmp.DiffOptions with { TimeoutSeconds = 0 };
-        _ = dmp.CalculateDifferences(BenchmarkData.LongDiffText1, BenchmarkData.LongDiffText2);
+        _ = BenchmarkData.LongDiffText1.Diff(BenchmarkData.LongDiffText2, DiffOptions<char>.LineLevel with { TimeoutSeconds = 0 });
     }
 }

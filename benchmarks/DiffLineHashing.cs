@@ -17,6 +17,10 @@ public class DiffLineHashing
 
     private class LinesToCharsBenchTest : DiffMatchPatch
     {
+        public LinesToCharsBenchTest() : base()
+        {
+        }
+
         public void Run()
         {
             // More than 65536 to verify any 16-bit limitation.
@@ -27,7 +31,7 @@ public class DiffLineHashing
             }
 
             lineList = lineList.ToMemory();
-            var result = this.DiffLinesToChars(lineList, Rope<char>.Empty);
+            var result = lineList.DiffChunksToChars(Rope<char>.Empty, this.DiffOptions);
         }
     }
 }

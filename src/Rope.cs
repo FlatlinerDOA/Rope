@@ -720,7 +720,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="other">Other sequence to compare against.</param>
 	/// <returns>The number of characters common to the end of each sequence.</returns>
 	[Pure]
-	public long CommonSuffixLength(Rope<char> other)
+	public long CommonSuffixLength(Rope<T> other)
 	{
 		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
 		var n = Math.Min(this.Length, other.Length);
@@ -1145,7 +1145,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 				for (int j = 0; j < findSpan.Length && match; j++)
 				{
 					int globalOffset = globalIndex + j;
-					if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out T value) || !comparer.Equals(value, findSpan[j]))
+					if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out var value) || !comparer.Equals(value, findSpan[j]))
 					{
 						match = false;
 						break;
