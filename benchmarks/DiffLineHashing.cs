@@ -15,7 +15,7 @@ public class DiffLineHashing
         b.Run();
     }
 
-    private class LinesToCharsBenchTest : DiffMatchPatch
+    private class LinesToCharsBenchTest
     {
         public LinesToCharsBenchTest() : base()
         {
@@ -31,7 +31,7 @@ public class DiffLineHashing
             }
 
             lineList = lineList.ToMemory();
-            var result = lineList.DiffChunksToChars(Rope<char>.Empty, this.DiffOptions);
+            var result = lineList.DiffChunksToChars(Rope<char>.Empty, DiffOptions<char>.LineLevel);
         }
     }
 }

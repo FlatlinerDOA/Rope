@@ -2,7 +2,9 @@
 * Diff Match and Patch
 * Copyright 2018 The diff-match-patch Authors.
 * https://github.com/google/diff-match-patch
-* Copyright 2024 Andrew Chisholm.
+*
+* Copyright 2024 Andrew Chisholm (FlatlinerDOA).
+* https://github.com/FlatlinerDOA/Rope
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -21,7 +23,7 @@
 namespace Rope.Compare;
 
 /// <summary>
-/// Defines options for creating and applying patches.
+/// Defines options for creating and applying patches, extends <see cref="MatchOptions"/>.
 /// </summary>
 /// <param name="DeleteThreshold">When deleting a large block of text (over ~64 characters), how close
 /// do the contents have to be to match the expected contents. 

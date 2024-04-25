@@ -22,8 +22,18 @@ using Rope.Compare;
 using System.Diagnostics;
 
 [TestClass]
-public class DiffMatchPatchTests : DiffMatchPatch
+public class DiffMatchPatchTests 
 {
+    public DiffMatchPatchTests()
+    {
+        this.DiffOptions = DiffOptions<char>.LineLevel;
+        this.PatchOptions = PatchOptions.Default;
+    }
+
+    public DiffOptions<char> DiffOptions { get; set; }
+
+    public PatchOptions PatchOptions { get; set; }
+
     [TestMethod]
     public void DiffCommonPrefixTest()
     {
@@ -607,12 +617,12 @@ public class DiffMatchPatchTests : DiffMatchPatch
         AssertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog", delta.ToString());
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: Normal.", diffs, this.DifferencesFromDelta(text1, delta));
+        AssertEquals("diff_fromDelta: Normal.", diffs, text1.ConvertDeltaToDiff(delta));
 
         // Generates error (19 < 20).
         try
         {
-            _ = this.DifferencesFromDelta(text1 + "x".ToRope(), delta);
+            _ = (text1 + "x".ToRope()).ConvertDeltaToDiff(delta);
             AssertFail("diff_fromDelta: Too long.");
         }
         catch (ArgumentException)
@@ -623,7 +633,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         // Generates error (19 > 18).
         try
         {
-            _ = this.DifferencesFromDelta(text1.Slice(1), delta);
+            _ = text1.Slice(1).ConvertDeltaToDiff(delta);
             AssertFail("diff_fromDelta: Too short.");
         }
         catch (ArgumentException)
@@ -634,7 +644,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         // Generates error (%c3%xy invalid Unicode).
         try
         {
-            _ = this.DifferencesFromDelta("".ToRope(), "+%c3%xy".ToRope());
+            _ = "".ToRope().ConvertDeltaToDiff("+%c3%xy".ToRope());
             AssertFail("diff_fromDelta: Invalid character.");
         }
         catch (ArgumentException)
@@ -657,7 +667,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         // Uppercase, due to UrlEncoder now uses upper.
         AssertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%DA%82 %02 %5C %7C".ToRope(), delta);
 
-        AssertEquals("diff_fromDelta: Unicode.", diffs, this.DifferencesFromDelta(text1, delta));
+        AssertEquals("diff_fromDelta: Unicode.", diffs, text1.ConvertDeltaToDiff(delta));
 
         // Verify pool of unchanged characters.
         diffs = new Rope<Diff<char>>(new[] {
@@ -669,7 +679,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         AssertEquals("diff_toDelta: Unchanged characters.", "+A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ".ToRope(), delta);
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: Unchanged characters.", diffs, this.DifferencesFromDelta("".ToRope(), delta));
+        AssertEquals("diff_fromDelta: Unchanged characters.", diffs, "".ToRope().ConvertDeltaToDiff(delta));
 
         // 160 kb string.
         var a = "abcdefghij".ToRope();
@@ -682,7 +692,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         AssertEquals("diff_toDelta: 160kb string.", ("+" + a).ToRope(), delta);
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: 160kb string.", diffs, this.DifferencesFromDelta("".ToRope(), delta));
+        AssertEquals("diff_fromDelta: 160kb string.", diffs, "".ToRope().ConvertDeltaToDiff(delta));
     }
 
     [TestMethod]
@@ -863,65 +873,65 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         // Bitap algorithm.
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.5f, MatchDistance = 100 };
-        AssertEquals("match_bitap: Exact match #1.", 5, this.MatchBitap("abcdefghijk".ToRope(), "fgh".ToRope(), 5, this.PatchOptions));
+        AssertEquals("match_bitap: Exact match #1.", 5, "abcdefghijk".ToRope().MatchBitap("fgh".ToRope(), 5, this.PatchOptions));
 
-        AssertEquals("match_bitap: Exact match #2.", 5, this.MatchBitap("abcdefghijk".ToRope(), "fgh".ToRope(), 0, this.PatchOptions));
+        AssertEquals("match_bitap: Exact match #2.", 5, "abcdefghijk".ToRope().MatchBitap("fgh".ToRope(), 0, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Fuzzy match #1.", 4, this.MatchBitap("abcdefghijk".ToRope(), "efxhi".ToRope(), 0, this.PatchOptions));
+        AssertEquals("MatchBitap: Fuzzy match #1.", 4, "abcdefghijk".ToRope().MatchBitap("efxhi".ToRope(), 0, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Fuzzy match #2.", 2, this.MatchBitap("abcdefghijk".ToRope(), "cdefxyhijk".ToRope(), 5, this.PatchOptions));
+        AssertEquals("MatchBitap: Fuzzy match #2.", 2, "abcdefghijk".ToRope().MatchBitap("cdefxyhijk".ToRope(), 5, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Fuzzy match #3.", -1, this.MatchBitap("abcdefghijk".ToRope(), "bxy".ToRope(), 1, this.PatchOptions));
+        AssertEquals("MatchBitap: Fuzzy match #3.", -1, "abcdefghijk".ToRope().MatchBitap("bxy".ToRope(), 1, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Overflow.", 2, this.MatchBitap("123456789xx0".ToRope(), "3456789x0".ToRope(), 2, this.PatchOptions));
+        AssertEquals("MatchBitap: Overflow.", 2, "123456789xx0".ToRope().MatchBitap("3456789x0".ToRope(), 2, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Before start match.", 0, this.MatchBitap("abcdef".ToRope(), "xxabc".ToRope(), 4, this.PatchOptions));
+        AssertEquals("MatchBitap: Before start match.", 0, "abcdef".ToRope().MatchBitap("xxabc".ToRope(), 4, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Beyond end match.", 3, this.MatchBitap("abcdef".ToRope(), "defyy".ToRope(), 4, this.PatchOptions));
+        AssertEquals("MatchBitap: Beyond end match.", 3, "abcdef".ToRope().MatchBitap("defyy".ToRope(), 4, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Oversized pattern.", 0, this.MatchBitap("abcdef".ToRope(), "xabcdefy".ToRope(), 0, this.PatchOptions));
+        AssertEquals("MatchBitap: Oversized pattern.", 0, "abcdef".ToRope().MatchBitap("xabcdefy".ToRope(), 0, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.4f };
-        AssertEquals("MatchBitap: Threshold #1.", 4, this.MatchBitap("abcdefghijk".ToRope(), "efxyhi".ToRope(), 1, this.PatchOptions));
+        AssertEquals("MatchBitap: Threshold #1.", 4, "abcdefghijk".ToRope().MatchBitap("efxyhi".ToRope(), 1, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.3f };
-        AssertEquals("MatchBitap: Threshold #2.", -1, this.MatchBitap("abcdefghijk".ToRope(), "efxyhi".ToRope(), 1, this.PatchOptions));
+        AssertEquals("MatchBitap: Threshold #2.", -1, "abcdefghijk".ToRope().MatchBitap("efxyhi".ToRope(), 1, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.0f };
-        AssertEquals("MatchBitap: Threshold #3.", 1, this.MatchBitap("abcdefghijk".ToRope(), "bcdef".ToRope(), 1, this.PatchOptions));
+        AssertEquals("MatchBitap: Threshold #3.", 1, "abcdefghijk".ToRope().MatchBitap("bcdef".ToRope(), 1, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.5f };
-        AssertEquals("MatchBitap: Multiple select #1.", 0, this.MatchBitap("abcdexyzabcde".ToRope(), "abccde".ToRope(), 3, this.PatchOptions));
+        AssertEquals("MatchBitap: Multiple select #1.", 0, "abcdexyzabcde".ToRope().MatchBitap("abccde".ToRope(), 3, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Multiple select #2.", 8, this.MatchBitap("abcdexyzabcde".ToRope(), "abccde".ToRope(), 5, this.PatchOptions));
+        AssertEquals("MatchBitap: Multiple select #2.", 8, "abcdexyzabcde".ToRope().MatchBitap("abccde".ToRope(), 5, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchDistance = 10 };  // Strict location.
-        AssertEquals("MatchBitap: Distance test #1.", -1, this.MatchBitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdefg".ToRope(), 24, this.PatchOptions));
+        AssertEquals("MatchBitap: Distance test #1.", -1, "abcdefghijklmnopqrstuvwxyz".ToRope().MatchBitap("abcdefg".ToRope(), 24, this.PatchOptions));
 
-        AssertEquals("MatchBitap: Distance test #2.", 0, this.MatchBitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdxxefg".ToRope(), 1, this.PatchOptions));
+        AssertEquals("MatchBitap: Distance test #2.", 0, "abcdefghijklmnopqrstuvwxyz".ToRope().MatchBitap("abcdxxefg".ToRope(), 1, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchDistance = 1000 };  // Loose location.
-        AssertEquals("MatchBitap: Distance test #3.", 0, this.MatchBitap("abcdefghijklmnopqrstuvwxyz".ToRope(), "abcdefg".ToRope(), 24, this.PatchOptions));
+        AssertEquals("MatchBitap: Distance test #3.", 0, "abcdefghijklmnopqrstuvwxyz".ToRope().MatchBitap("abcdefg".ToRope(), 24, this.PatchOptions));
     }
 
     [TestMethod]
     public void MatchMainTest()
     {
         // Full match.
-        AssertEquals("match_main: Equality.", 0, this.MatchPattern("abcdef", "abcdef", 1000));
+        AssertEquals("match_main: Equality.", 0, "abcdef".MatchPattern("abcdef", 1000, this.PatchOptions));
 
-        AssertEquals("match_main: Null text.", -1, this.MatchPattern("", "abcdef", 1));
+        AssertEquals("match_main: Null text.", -1, "".MatchPattern("abcdef", 1, this.PatchOptions));
 
-        AssertEquals("match_main: Null pattern.", 3, this.MatchPattern("abcdef", "", 3));
+        AssertEquals("match_main: Null pattern.", 3, "abcdef".MatchPattern("", 3, this.PatchOptions));
 
-        AssertEquals("match_main: Exact match.", 3, this.MatchPattern("abcdef", "de", 3));
+        AssertEquals("match_main: Exact match.", 3, "abcdef".MatchPattern("de", 3, this.PatchOptions));
 
-        AssertEquals("match_main: Beyond end match.", 3, this.MatchPattern("abcdef", "defy", 4));
+        AssertEquals("match_main: Beyond end match.", 3, "abcdef".MatchPattern("defy", 4, this.PatchOptions));
 
-        AssertEquals("match_main: Oversized pattern.", 0, this.MatchPattern("abcdef", "abcdefy", 0));
+        AssertEquals("match_main: Oversized pattern.", 0, "abcdef".MatchPattern("abcdefy", 0, this.PatchOptions));
 
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.7f };
-        AssertEquals("match_main: Complex match.", 4, this.MatchPattern("I am the very model of a modern major general.", " that berry ", 5));
+        AssertEquals("match_main: Complex match.", 4, "I am the very model of a modern major general.".MatchPattern(" that berry ", 5, this.PatchOptions));
         this.PatchOptions = this.PatchOptions with { MatchThreshold = 0.5f };
 
         // Test null inputs -- not needed because nulls can't be passed in C#.
@@ -953,21 +963,21 @@ public class DiffMatchPatchTests : DiffMatchPatch
     [TestMethod]
     public void PatchFromTextTest()
     {
-        AssertTrue("patch_fromText: #0.", this.ParsePatchText("").Count == 0);
+        AssertTrue("patch_fromText: #0.", "".ToRope().ParsePatchText().Count == 0);
 
         string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0Alaz\n";
-        AssertEquals("patch_fromText: #1.", strp, this.ParsePatchText(strp)[0].ToString());
+        AssertEquals("patch_fromText: #1.", strp, strp.ToRope().ParsePatchText()[0].ToString());
 
-        AssertEquals("patch_fromText: #2.", "@@ -1 +1 @@\n-a\n+b\n", this.ParsePatchText("@@ -1 +1 @@\n-a\n+b\n")[0].ToString());
+        AssertEquals("patch_fromText: #2.", "@@ -1 +1 @@\n-a\n+b\n", "@@ -1 +1 @@\n-a\n+b\n".ToRope().ParsePatchText()[0].ToString());
 
-        AssertEquals("patch_fromText: #3.", "@@ -1,3 +0,0 @@\n-abc\n", this.ParsePatchText("@@ -1,3 +0,0 @@\n-abc\n")[0].ToString());
+        AssertEquals("patch_fromText: #3.", "@@ -1,3 +0,0 @@\n-abc\n", "@@ -1,3 +0,0 @@\n-abc\n".ToRope().ParsePatchText()[0].ToString());
 
-        AssertEquals("patch_fromText: #4.", "@@ -0,0 +1,3 @@\n+abc\n", this.ParsePatchText("@@ -0,0 +1,3 @@\n+abc\n")[0].ToString());
+        AssertEquals("patch_fromText: #4.", "@@ -0,0 +1,3 @@\n+abc\n", "@@ -0,0 +1,3 @@\n+abc\n".ToRope().ParsePatchText()[0].ToString());
 
         // Generates error.
         try
         {
-            this.ParsePatchText("Bad\nPatch\n");
+            "Bad\nPatch\n".ToRope().ParsePatchText();
             AssertFail("patch_fromText: #5.");
         }
         catch (ArgumentException)
@@ -979,15 +989,14 @@ public class DiffMatchPatchTests : DiffMatchPatch
     [TestMethod]
     public void PatchToTextTest()
     {
-        string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n  laz\n";
-        List<Patch<char>> patches;
-        patches = this.ParsePatchText(strp);
-        string result = this.ToPatchText(patches);
+        var strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n  laz\n".ToRope();
+        var patches = strp.ParsePatchText();
+        string result = patches.ToPatchText();
         AssertEquals("patch_toText: Single.", strp, result);
 
-        strp = "@@ -1,9 +1,9 @@\n-f\n+F\n oo+fooba\n@@ -7,9 +7,9 @@\n obar\n-,\n+.\n  tes\n";
-        patches = this.ParsePatchText(strp);
-        result = this.ToPatchText(patches);
+        strp = "@@ -1,9 +1,9 @@\n-f\n+F\n oo+fooba\n@@ -7,9 +7,9 @@\n obar\n-,\n+.\n  tes\n".ToRope();
+        patches = strp.ParsePatchText();
+        result = patches.ToPatchText();
         AssertEquals("patch_toText: Dual.", strp, result);
     }
 
@@ -997,19 +1006,19 @@ public class DiffMatchPatchTests : DiffMatchPatch
         this.PatchOptions = this.PatchOptions with { Margin = 4 };
 
         Patch<char> p;
-        p = this.ParsePatchText("@@ -21,4 +21,10 @@\n-jump\n+somersault\n")[0];
+        p = "@@ -21,4 +21,10 @@\n-jump\n+somersault\n".ToRope().ParsePatchText()[0];
         p = p.PatchAddContext("The quick brown fox jumps over the lazy dog.".ToRope(), this.PatchOptions);
         AssertEquals("patch_addContext: Simple case.", "@@ -17,12 +17,18 @@\n fox \n-jump\n+somersault\n s ov\n", p.ToString());
 
-        p = this.ParsePatchText("@@ -21,4 +21,10 @@\n-jump\n+somersault\n")[0];
+        p = "@@ -21,4 +21,10 @@\n-jump\n+somersault\n".ToRope().ParsePatchText()[0];
         p = p.PatchAddContext("The quick brown fox jumps.".ToRope(), this.PatchOptions);
         AssertEquals("patch_addContext: Not enough trailing context.", "@@ -17,10 +17,16 @@\n fox \n-jump\n+somersault\n s.\n", p.ToString());
 
-        p = this.ParsePatchText("@@ -3 +3,2 @@\n-e\n+at\n")[0];
+        p = "@@ -3 +3,2 @@\n-e\n+at\n".ToRope().ParsePatchText()[0];
         p = p.PatchAddContext("The quick brown fox jumps.".ToRope(), this.PatchOptions);
         AssertEquals("patch_addContext: Not enough leading context.", "@@ -1,7 +1,8 @@\n Th\n-e\n+at\n  qui\n", p.ToString());
 
-        p = this.ParsePatchText("@@ -3 +3,2 @@\n-e\n+at\n")[0];
+        p = "@@ -3 +3,2 @@\n-e\n+at\n".ToRope().ParsePatchText()[0];
         p = p.PatchAddContext("The quick brown fox jumps.  The quick brown fox crashes.".ToRope(), this.PatchOptions);
         AssertEquals("patch_addContext: Ambiguity.", "@@ -1,27 +1,28 @@\n Th\n-e\n+at\n  quick brown fox jumps. \n", p.ToString());
     }
@@ -1019,38 +1028,38 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         Rope<Patch<char>> patches = Rope<Patch<char>>.Empty;
         patches = "".CreatePatches("");
-        AssertEquals("patch_make: Null case.", "", this.ToPatchText(patches));
+        AssertEquals("patch_make: Null case.", "", patches.ToPatchText());
 
         string text1 = "The quick brown fox jumps over the lazy dog.";
         string text2 = "That quick brown fox jumped over a lazy dog.";
         string expectedPatch = "@@ -1,8 +1,7 @@\n Th\n-at\n+e\n  qui\n@@ -21,17 +21,18 @@\n jump\n-ed\n+s\n  over \n-a\n+the\n  laz\n";
         // The second patch must be "-21,17 +21,18", not "-22,17 +21,18" due to rolling context.
         patches = text2.CreatePatches(text1);
-        var patchText = this.ToPatchText(patches);
+        var patchText = patches.ToPatchText();
         AssertEquals("patch_make: Text2+Text1 inputs.", expectedPatch, patchText);
 
         expectedPatch = "@@ -1,11 +1,12 @@\n Th\n-e\n+at\n  quick b\n@@ -22,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n  laz\n";
         patches = text1.CreatePatches(text2);
-        AssertEquals("patch_make: Text1+Text2 inputs.", expectedPatch, this.ToPatchText(patches));
+        AssertEquals("patch_make: Text1+Text2 inputs.", expectedPatch, patches.ToPatchText());
 
         var diffs = text1.Diff(text2, false);
         patches = diffs.ToPatches();
-        AssertEquals("patch_make: Diff input.", expectedPatch, this.ToPatchText(patches));
+        AssertEquals("patch_make: Diff input.", expectedPatch, patches.ToPatchText());
 
         patches = text1.ToRope().ToPatches(diffs, this.PatchOptions);
-        AssertEquals("patch_make: Text1+Diff inputs.", expectedPatch, this.ToPatchText(patches));
+        AssertEquals("patch_make: Text1+Diff inputs.", expectedPatch, patches.ToPatchText());
 
         patches = "`1234567890-=[]\\;',./".CreatePatches("~!@#$%^&*()_+{}|:\"<>?");
         AssertEquals("patch_toText: Character encoding.",
             "@@ -1,21 +1,21 @@\n-%601234567890-=%5B%5D%5C;',./\n+~!@#$%25%5E&*()_+%7B%7D%7C:%22%3C%3E?\n",
-            this.ToPatchText(patches));
+            patches.ToPatchText());
 
         diffs = new Rope<Diff<char>>(new[] {
         new Diff<char>(Operation.DELETE, "`1234567890-=[]\\;',./"),
         new Diff<char>(Operation.INSERT, "~!@#$%^&*()_+{}|:\"<>?")});
         AssertEquals("patch_fromText: Character decoding.",
             diffs,
-            this.ParsePatchText("@@ -1,21 +1,21 @@\n-%601234567890-=%5B%5D%5C;',./\n+~!@#$%25%5E&*()_+%7B%7D%7C:%22%3C%3E?\n")[0].Diffs);
+            "@@ -1,21 +1,21 @@\n-%601234567890-=%5B%5D%5C;',./\n+~!@#$%25%5E&*()_+%7B%7D%7C:%22%3C%3E?\n".ToRope().ParsePatchText()[0].Diffs);
 
         text1 = "";
         for (int x = 0; x < 100; x++)
@@ -1060,7 +1069,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
         text2 = text1 + "123";
         expectedPatch = "@@ -573,28 +573,31 @@\n cdefabcdefabcdefabcdefabcdef\n+123\n";
         patches = text1.CreatePatches(text2);
-        AssertEquals("patch_make: Long string with repeats.", expectedPatch, this.ToPatchText(patches));
+        AssertEquals("patch_make: Long string with repeats.", expectedPatch, patches.ToPatchText());
 
         // Test null inputs -- not needed because nulls can't be passed in C#.
     }
@@ -1072,21 +1081,21 @@ public class DiffMatchPatchTests : DiffMatchPatch
         IEnumerable<Patch<char>> patches;
 
         patches = "abcdefghijklmnopqrstuvwxyz01234567890".CreatePatches("XabXcdXefXghXijXklXmnXopXqrXstXuvXwxXyzX01X23X45X67X89X0");
-        patches = this.PatchSplitMaxLength(patches, this.PatchOptions);
-        AssertEquals("patch_splitMax: #1.", "@@ -1,32 +1,46 @@\n+X\n ab\n+X\n cd\n+X\n ef\n+X\n gh\n+X\n ij\n+X\n kl\n+X\n mn\n+X\n op\n+X\n qr\n+X\n st\n+X\n uv\n+X\n wx\n+X\n yz\n+X\n 012345\n@@ -25,13 +39,18 @@\n zX01\n+X\n 23\n+X\n 45\n+X\n 67\n+X\n 89\n+X\n 0\n", this.ToPatchText(patches));
+        patches = patches.PatchSplitMaxLength(this.PatchOptions);
+        AssertEquals("patch_splitMax: #1.", "@@ -1,32 +1,46 @@\n+X\n ab\n+X\n cd\n+X\n ef\n+X\n gh\n+X\n ij\n+X\n kl\n+X\n mn\n+X\n op\n+X\n qr\n+X\n st\n+X\n uv\n+X\n wx\n+X\n yz\n+X\n 012345\n@@ -25,13 +39,18 @@\n zX01\n+X\n 23\n+X\n 45\n+X\n 67\n+X\n 89\n+X\n 0\n", patches.ToPatchText());
 
         patches = "abcdef1234567890123456789012345678901234567890123456789012345678901234567890uvwxyz".CreatePatches("abcdefuvwxyz");
-        string oldToText = this.ToPatchText(patches);
-        patches = this.PatchSplitMaxLength(patches, this.PatchOptions);
-        AssertEquals("patch_splitMax: #2.", oldToText, this.ToPatchText(patches));
+        string oldToText = patches.ToPatchText();
+        patches = patches.PatchSplitMaxLength(this.PatchOptions);
+        AssertEquals("patch_splitMax: #2.", oldToText, patches.ToPatchText());
 
         patches = "1234567890123456789012345678901234567890123456789012345678901234567890".CreatePatches("abc");
-        patches = this.PatchSplitMaxLength(patches, this.PatchOptions);
-        AssertEquals("patch_splitMax: #3.", "@@ -1,32 +1,4 @@\n-1234567890123456789012345678\n 9012\n@@ -29,32 +1,4 @@\n-9012345678901234567890123456\n 7890\n@@ -57,14 +1,3 @@\n-78901234567890\n+abc\n", this.ToPatchText(patches));
+        patches = patches.PatchSplitMaxLength(this.PatchOptions);
+        AssertEquals("patch_splitMax: #3.", "@@ -1,32 +1,4 @@\n-1234567890123456789012345678\n 9012\n@@ -29,32 +1,4 @@\n-9012345678901234567890123456\n 7890\n@@ -57,14 +1,3 @@\n-78901234567890\n+abc\n", patches.ToPatchText());
 
         patches = "abcdefghij , h : 0 , t : 1 abcdefghij , h : 0 , t : 1 abcdefghij , h : 0 , t : 1".CreatePatches("abcdefghij , h : 1 , t : 1 abcdefghij , h : 1 , t : 1 abcdefghij , h : 0 , t : 1");
-        patches = this.PatchSplitMaxLength(patches, this.PatchOptions);
-        AssertEquals("patch_splitMax: #4.", "@@ -2,32 +2,32 @@\n bcdefghij , h : \n-0\n+1\n  , t : 1 abcdef\n@@ -29,32 +29,32 @@\n bcdefghij , h : \n-0\n+1\n  , t : 1 abcdef\n", this.ToPatchText(patches));
+        patches = patches.PatchSplitMaxLength(this.PatchOptions);
+        AssertEquals("patch_splitMax: #4.", "@@ -2,32 +2,32 @@\n bcdefghij , h : \n-0\n+1\n  , t : 1 abcdef\n@@ -29,32 +29,32 @@\n bcdefghij , h : \n-0\n+1\n  , t : 1 abcdef\n", patches.ToPatchText());
     }
 
     [TestMethod]
@@ -1096,29 +1105,29 @@ public class DiffMatchPatchTests : DiffMatchPatch
         patches = "".CreatePatches("test");
         AssertEquals("patch_addPadding: Both edges full.",
             "@@ -0,0 +1,4 @@\n+test\n",
-            this.ToPatchText(patches));
-        (_, patches) = this.PatchAddPadding(patches, this.PatchOptions);
+            patches.ToPatchText());
+        (_, patches) = patches.PatchAddPadding(this.PatchOptions);
         AssertEquals("patch_addPadding: Both edges full.",
             "@@ -1,8 +1,12 @@\n %01%02%03%04\n+test\n %01%02%03%04\n",
-            this.ToPatchText(patches));
+            patches.ToPatchText());
 
         patches = "XY".CreatePatches("XtestY");
         AssertEquals("patch_addPadding: Both edges partial.",
             "@@ -1,2 +1,6 @@\n X\n+test\n Y\n",
-            this.ToPatchText(patches));
-        (_, patches) = this.PatchAddPadding(patches, this.PatchOptions);
+            patches.ToPatchText());
+        (_, patches) = patches.PatchAddPadding(this.PatchOptions);
         AssertEquals("patch_addPadding: Both edges partial.",
             "@@ -2,8 +2,12 @@\n %02%03%04X\n+test\n Y%01%02%03\n",
-            this.ToPatchText(patches));
+            patches.ToPatchText());
 
         patches = "XXXXYYYY".CreatePatches("XXXXtestYYYY");
         AssertEquals("patch_addPadding: Both edges none.",
             "@@ -1,8 +1,12 @@\n XXXX\n+test\n YYYY\n",
-            this.ToPatchText(patches));
-        (_, patches) = this.PatchAddPadding(patches, this.PatchOptions);
+            patches.ToPatchText());
+        (_, patches) = patches.PatchAddPadding(this.PatchOptions);
         AssertEquals("patch_addPadding: Both edges none.",
             "@@ -5,8 +5,12 @@\n XXXX\n+test\n YYYY\n",
-            this.ToPatchText(patches));
+            patches.ToPatchText());
     }
 
     [TestMethod]
@@ -1132,42 +1141,42 @@ public class DiffMatchPatchTests : DiffMatchPatch
         };
         IEnumerable<Patch<char>> patches;
         patches = "".CreatePatches("", this.PatchOptions);
-        (string Text, bool[] Applied) results = this.ApplyPatches(patches, "Hello world.");
+        (string Text, bool[] Applied) results = patches.ApplyPatches("Hello world.", this.PatchOptions);
         bool[] boolArray = results.Applied;
         string resultStr = results.Text + "\t" + boolArray.Length;
         AssertEquals("patch_apply: Null case.", "Hello world.\t0", resultStr);
 
         patches = "The quick brown fox jumps over the lazy dog.".CreatePatches("That quick brown fox jumped over a lazy dog.", this.PatchOptions);
-        results = this.ApplyPatches(patches, "The quick brown fox jumps over the lazy dog.");
+        results = patches.ApplyPatches("The quick brown fox jumps over the lazy dog.", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Exact match.", "That quick brown fox jumped over a lazy dog.\tTrue\tTrue", resultStr);
 
-        results = this.ApplyPatches(patches, "The quick red rabbit jumps over the tired tiger.");
+        results = patches.ApplyPatches("The quick red rabbit jumps over the tired tiger.", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Partial match.", "That quick red rabbit jumped over a tired tiger.\tTrue\tTrue", resultStr);
 
-        results = this.ApplyPatches(patches, "I am the very model of a modern major general.");
+        results = patches.ApplyPatches("I am the very model of a modern major general.", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Failed match.", "I am the very model of a modern major general.\tFalse\tFalse", resultStr);
 
         patches = "x1234567890123456789012345678901234567890123456789012345678901234567890y".CreatePatches("xabcy", this.PatchOptions);
-        results = this.ApplyPatches(patches, "x123456789012345678901234567890-----++++++++++-----123456789012345678901234567890y");
+        results = patches.ApplyPatches("x123456789012345678901234567890-----++++++++++-----123456789012345678901234567890y", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Big delete, small change.", "xabcy\tTrue\tTrue", resultStr);
 
         patches = "x1234567890123456789012345678901234567890123456789012345678901234567890y".CreatePatches("xabcy", this.PatchOptions);
-        results = this.ApplyPatches(patches, "x12345678901234567890---------------++++++++++---------------12345678901234567890y");
+        results = patches.ApplyPatches("x12345678901234567890---------------++++++++++---------------12345678901234567890y", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Big delete, big change 1.", "xabc12345678901234567890---------------++++++++++---------------12345678901234567890y\tFalse\tTrue", resultStr);
 
         this.PatchOptions = this.PatchOptions with { DeleteThreshold = 0.6f };
         patches = "x1234567890123456789012345678901234567890123456789012345678901234567890y".CreatePatches("xabcy", this.PatchOptions);
-        results = this.ApplyPatches(patches, "x12345678901234567890---------------++++++++++---------------12345678901234567890y");
+        results = patches.ApplyPatches("x12345678901234567890---------------++++++++++---------------12345678901234567890y", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Big delete, big change 2.", "xabcy\tTrue\tTrue", resultStr);
@@ -1178,7 +1187,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
             MatchThreshold = 0.0f
         };
         patches = "abcdefghijklmnopqrstuvwxyz--------------------1234567890".CreatePatches("abcXXXXXXXXXXdefghijklmnopqrstuvwxyz--------------------1234567YYYYYYYYYY890", this.PatchOptions);
-        results = this.ApplyPatches(patches, "ABCDEFGHIJKLMNOPQRSTUVWXYZ--------------------1234567890");
+        results = patches.ApplyPatches("ABCDEFGHIJKLMNOPQRSTUVWXYZ--------------------1234567890", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0] + "\t" + boolArray[1];
         AssertEquals("patch_apply: Compensate for failed patch.", "ABCDEFGHIJKLMNOPQRSTUVWXYZ--------------------1234567YYYYYYYYYY890\tFalse\tTrue", resultStr);
@@ -1189,29 +1198,29 @@ public class DiffMatchPatchTests : DiffMatchPatch
         };
 
         patches = "".CreatePatches("test", this.PatchOptions);
-        string patchStr = this.ToPatchText(patches);
-        _ = this.ApplyPatches(patches, "");
-        AssertEquals("patch_apply: No side effects.", patchStr, this.ToPatchText(patches));
+        string patchStr = patches.ToPatchText();
+        _ = patches.ApplyPatches("", this.PatchOptions);
+        AssertEquals("patch_apply: No side effects.", patchStr, patches.ToPatchText());
 
         patches = "The quick brown fox jumps over the lazy dog.".CreatePatches("Woof", this.PatchOptions);
-        patchStr = this.ToPatchText(patches);
-        _ = this.ApplyPatches(patches, "The quick brown fox jumps over the lazy dog.");
-        AssertEquals("patch_apply: No side effects with major delete.", patchStr, this.ToPatchText(patches));
+        patchStr = patches.ToPatchText();
+        _ = patches.ApplyPatches("The quick brown fox jumps over the lazy dog.", this.PatchOptions);
+        AssertEquals("patch_apply: No side effects with major delete.", patchStr, patches.ToPatchText());
 
         patches = "".CreatePatches("test", this.PatchOptions);
-        results = this.ApplyPatches(patches, "");
+        results = patches.ApplyPatches("", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0];
         AssertEquals("patch_apply: Edge exact match.", "test\tTrue", resultStr);
 
         patches = "XY".CreatePatches("XtestY", this.PatchOptions);
-        results = this.ApplyPatches(patches, "XY");
+        results = patches.ApplyPatches("XY", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0];
         AssertEquals("patch_apply: Near edge exact match.", "XtestY\tTrue", resultStr);
 
         patches = "y".CreatePatches("y123", this.PatchOptions);
-        results = this.ApplyPatches(patches, "x");
+        results = patches.ApplyPatches("x", this.PatchOptions);
         boolArray = results.Applied;
         resultStr = results.Text + "\t" + boolArray[0];
         AssertEquals("patch_apply: Edge partial match.", "x123\tTrue", resultStr);
@@ -1223,14 +1232,14 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         if (expected != actual)
         {
-            throw new ArgumentException(String.Format("assertEquals (string, string) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("assertEquals (string, string) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
     }
 
     private static void AssertEquals(string error_msg, HalfMatch<char> expected, HalfMatch<char>? actual) => AssertEquals(
         error_msg,
         new Rope<char>[] { expected.Text1Prefix, expected.Text1Suffix, expected.Text2Prefix, expected.Text2Suffix, expected.Common },
-        actual != null ? new Rope<char>[] { actual.Text1Prefix, actual.Text1Suffix, actual.Text2Prefix, actual.Text2Suffix, actual.Common } : null);
+        actual is HalfMatch<char> a ? new Rope<char>[] { a.Text1Prefix, a.Text1Suffix, a.Text2Prefix, a.Text2Suffix, a.Common } : null);
 
     private static void AssertEquals(string error_msg, Rope<char>[] expected, Rope<char>[]? actual)
     {
@@ -1241,13 +1250,13 @@ public class DiffMatchPatchTests : DiffMatchPatch
 
         if (expected.Length != actual.Length )
         {
-            throw new ArgumentException(String.Format("assertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("assertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Length; i++)
         {
             if (expected[i] != actual[i])
             {
-                throw new ArgumentException(String.Format("assertEquals (string[], string[]) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("assertEquals (string[], string[]) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1256,13 +1265,13 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         if (expected.Count != actual.Count)
         {
-            throw new ArgumentException(String.Format("assertEquals (List<string>, List<string>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("assertEquals (List<string>, List<string>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Count; i++)
         {
             if (expected[i] != actual[i])
             {
-                throw new ArgumentException(String.Format("assertEquals (List<string>, List<string>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("assertEquals (List<string>, List<string>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1271,13 +1280,13 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         if (expected.Count != actual.Count)
         {
-            throw new ArgumentException(String.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Count; i++)
         {
             if (!expected[i].Equals(actual[i]))
             {
-                throw new ArgumentException(String.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1286,7 +1295,7 @@ public class DiffMatchPatchTests : DiffMatchPatch
     {
         if (!expected.Equals(actual))
         {
-            throw new ArgumentException(String.Format("assertEquals (Diff, Diff) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("assertEquals (Diff, Diff) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
     }
 

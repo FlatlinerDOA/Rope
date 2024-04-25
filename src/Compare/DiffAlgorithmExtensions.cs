@@ -2,7 +2,9 @@
 * Diff Match and Patch
 * Copyright 2018 The diff-match-patch Authors.
 * https://github.com/google/diff-match-patch
-* Copyright 2024 Andrew Chisholm.
+*
+* Copyright 2024 Andrew Chisholm (FlatlinerDOA).
+* https://github.com/FlatlinerDOA/Rope
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -136,6 +138,91 @@ public static class DiffAlgorithmExtensions
     }
 
     /// <summary>
+    /// Given the original text1, and an encoded string which describes the
+    /// operations required to transform text1 into text2, compute the full diff.
+    /// </summary>
+    /// <param name="sourceText">Source string for the diff.</param>
+    /// <param name="delta">Delta text.</param>
+    /// <returns>Array of Diff objects or null if invalid.</returns>
+    /// <exception cref="ArgumentException">If invalid input.</exception>
+    [Pure]
+    public static Rope<Diff<char>> ConvertDeltaToDiff(this Rope<char> sourceText, Rope<char> delta)
+    {
+        var diffs = Rope<Diff<char>>.Empty;
+
+        // Cursor in text1
+        int pointer = 0;
+        var tokens = delta.Split('\t');
+        foreach (var token in tokens)
+        {
+            if (token.Length == 0)
+            {
+                // Blank tokens are ok (from a trailing \t).
+                continue;
+            }
+
+            // Each token begins with a one character parameter which specifies the
+            // operation of this token (delete, insert, equality).
+            var param = token.Slice(1);
+            switch (token[0])
+            {
+                case '+':
+                    param = param.DiffDecode();
+                    diffs = diffs.Add(new Diff<char>(Operation.INSERT, param));
+                    break;
+                case '-':
+                // Fall through.
+                case '=':
+                    int n;
+                    try
+                    {
+                        n = Convert.ToInt32(param.ToString());
+                    }
+                    catch (FormatException e)
+                    {
+                        throw new ArgumentException(("Invalid number in diff_fromDelta: " + param).ToString(), e);
+                    }
+                    if (n < 0)
+                    {
+                        throw new ArgumentException(("Negative number in diff_fromDelta: " + param).ToString());
+                    }
+
+                    Rope<char> text;
+                    try
+                    {
+                        text = sourceText.Slice(pointer, n);
+                        pointer += n;
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        throw new ArgumentException($"Delta length ({pointer}) larger than source text length ({sourceText.Length}).", e);
+                    }
+
+                    if (token[0] == '=')
+                    {
+                        diffs = diffs.Add(new Diff<char>(Operation.EQUAL, text));
+                    }
+                    else
+                    {
+                        diffs = diffs.Add(new Diff<char>(Operation.DELETE, text));
+                    }
+
+                    break;
+                default:
+                    // Anything else is an error.
+                    throw new ArgumentException($"Invalid diff operation in diff_fromDelta: {token[0]}");
+            }
+        }
+
+        if (pointer != sourceText.Length)
+        {
+            throw new ArgumentException("Delta length (" + pointer + ") smaller than source text length (" + sourceText.Length + ").");
+        }
+
+        return diffs;
+    }
+
+    /// <summary>
     /// Find the differences between two texts. Assumes that the texts do not
     /// have any common prefix or suffix.
     /// </summary>
@@ -186,8 +273,8 @@ public static class DiffAlgorithmExtensions
         }
 
         // Check to see if the problem can be split in two.
-        var hm = DiffHalfMatch(text1, text2, options);
-        if (hm != null)
+        var hmOrNull = DiffHalfMatch(text1, text2, options);
+        if (hmOrNull is HalfMatch<T> hm)
         {
             // A half-match was found, send both pairs off for separate processing.
             var diffs_a = Diff(hm.Text1Prefix, hm.Text2Prefix, options, cancel);
@@ -1167,38 +1254,42 @@ public static class DiffAlgorithmExtensions
         }
 
         // First check if the second quarter is the seed for a half-match.
-        var hm1 = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 3) / 4);
+        var hm1OrNull = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 3) / 4);
+        
         // Check again based on the third quarter.
-        var hm2 = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 1) / 2);
-        if (hm1 == null && hm2 == null)
-        {
-            return null;
-        }
+        var hm2OrNull = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 1) / 2);
 
-        HalfMatch<T>? hm;
-        if (hm2 == null)
+        HalfMatch<T> hm;
+        if (hm1OrNull is HalfMatch<T> hm1)
         {
-            hm = hm1;
+            if (hm2OrNull is HalfMatch<T> hm2)
+            {
+                // Both matched.  Select the longest.
+                hm = hm1.Common.Length > hm2.Common.Length ? hm1 : hm2;
+            }
+            else
+            {
+                hm = hm1;
+            }
         }
-        else if (hm1 == null)
+        else if (hm2OrNull is HalfMatch<T> hm2)
         {
             hm = hm2;
         }
-        else
+        else 
         {
-            // Both matched.  Select the longest.
-            hm = hm1.Common.Length > hm2.Common.Length ? hm1 : hm2;
-        }
+            // Both null;
+            return null;
+        }        
 
         // A half-match was found, sort out the return data.
         if (text1.Length > text2.Length)
         {
             return hm;
-            //return new string[]{hm[0], hm[1], hm[2], hm[3], hm[4]};
         }
         else
         {
-            return hm!.Swap();
+            return hm.Swap();
         }
     }
 

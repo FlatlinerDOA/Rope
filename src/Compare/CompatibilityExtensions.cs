@@ -3,6 +3,9 @@
 * Copyright 2018 The diff-match-patch Authors.
 * https://github.com/google/diff-match-patch
 *
+* Copyright 2024 Andrew Chisholm (FlatlinerDOA).
+* https://github.com/FlatlinerDOA/Rope
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
