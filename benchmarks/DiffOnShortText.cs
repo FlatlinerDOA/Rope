@@ -15,5 +15,5 @@ public class DiffOnShortText
     public void DiffMain()
     {
         _ = BenchmarkData.ShortDiffText1.Diff(BenchmarkData.ShortDiffText2);
-    }  
+    }
 }

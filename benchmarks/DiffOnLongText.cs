@@ -2,6 +2,7 @@
 // All Right Reserved.
 
 using BenchmarkDotNet.Attributes;
+using DiffMatchPatch;
 using Rope;
 using Rope.Compare;
 
@@ -11,8 +12,17 @@ namespace Benchmarks;
 public class DiffOnLongText
 {
     [Benchmark]
-    public void SpeedTest()
+    public void RopeOfCharDiff()
     {
-        _ = BenchmarkData.LongDiffText1.Diff(BenchmarkData.LongDiffText2, DiffOptions<char>.LineLevel with { TimeoutSeconds = 0 });
+        var options = DiffOptions<char>.LineLevel with { TimeoutSeconds = 0 };
+        _ = BenchmarkData.LongDiffText1.Diff(BenchmarkData.LongDiffText2, options);
+    }
+
+    [Benchmark]
+    public void DiffMatchPatchDiff()
+    {
+        var diff = new diff_match_patch();
+        diff.Diff_Timeout = 0;
+        diff.diff_main(BenchmarkData.LongDiffText1String, BenchmarkData.LongDiffText2String);
     }
 }

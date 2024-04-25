@@ -242,7 +242,11 @@ public sealed class RopeTests
 		var a = "I'm".ToRope() + " sorry Dave, I can't do that.".ToRope();
 		var b = "I'm sor".ToRope() + "ry Janine, I can't do that for you.".ToRope();
 		Assert.AreEqual("I'm sorry ".Length, a.CommonPrefixLength(b));
-	}
+
+        var ax = "I'm sorry".ToRope();
+        var bx = "I".ToRope() + "'ve tried".ToRope();
+        Assert.AreEqual("I'".Length, ax.CommonPrefixLength(bx));
+    }
 
 	[TestMethod]
 	public void CommonPrefixLengthEqual()
@@ -266,7 +270,11 @@ public sealed class RopeTests
 		var a = "I'm sorry Dave, I can't ".ToRope() + "do that".ToRope();
 		var b = "I'm sorry Janine, I can't do".ToRope() + " that".ToRope();
 		Assert.AreEqual("e, I can't do that".Length, a.CommonSuffixLength(b));
-	}
+
+        var ax = "Tests.".ToRope();
+        var bx = "Vests".ToRope() + ".".ToRope();
+        Assert.AreEqual("ests.".Length, ax.CommonSuffixLength(bx));
+    }
 
 	[TestMethod]
 	public void CommonSuffixLengthEqual()
@@ -287,14 +295,14 @@ public sealed class RopeTests
 	public void RemoveZeroLengthDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.RemoveRange(10, 0));
+		Assert.AreEqual(a, a.RemoveRange(10, 0));
 	}
 
 	[TestMethod]
 	public void RemoveAtTailDoesNothing()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.RemoveRange(a.Length));
+		Assert.AreEqual(a, a.RemoveRange(a.Length));
 	}
 
 	[TestMethod]
@@ -302,7 +310,7 @@ public sealed class RopeTests
 	public void RemoveBeyondTailArgumentOutOfRangeException()
 	{
 		var a = "I'm sorry Dave, I can't do that.".ToRope();
-		Assert.AreSame(a, a.RemoveRange(a.Length + 1));
+		Assert.AreEqual(a, a.RemoveRange(a.Length + 1));
 	}
 
 	[TestMethod]
@@ -317,21 +325,21 @@ public sealed class RopeTests
 	[ExpectedException(typeof(IndexOutOfRangeException))]
     public void PartitionedElementAtIndexOutOfRangeException() => ("abc".ToRope() + "def".ToRope()).ElementAt(6);
 
-	[TestMethod]
-	[ExpectedException(typeof(ArgumentNullException))]
-#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-    public void ArgumentNullLeft() => new Rope<char>(null, Rope<char>.Empty);
-#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
+//	[TestMethod]
+//	[ExpectedException(typeof(ArgumentNullException))]
+//#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+//    public void ArgumentNullLeft() => new Rope<char>((Rope<char>)(object)null, Rope<char>.Empty);
+//#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
+
+//    [TestMethod]
+//	[ExpectedException(typeof(ArgumentNullException))]
+//#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+//    public void ArgumentNullRight() => new Rope<char>(Rope<char>.Empty, (Rope<char>)(object)null);
+//#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
     [TestMethod]
-	[ExpectedException(typeof(ArgumentNullException))]
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-    public void ArgumentNullRight() => new Rope<char>(Rope<char>.Empty, null);
-#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
-
-    [TestMethod]
-#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-    public void NullNotEqualToEmptyRope() => Assert.IsFalse(null == Rope<char>.Empty);
+    public void NullNotEqualToEmptyRope() => Assert.IsFalse(object.Equals(null, Rope<char>.Empty));
 #pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
     [TestMethod]
@@ -347,7 +355,7 @@ public sealed class RopeTests
 	public void StructuralNotEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() != "ab".ToRope() + "bc".ToRope());
 
 	[TestMethod]
-	public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals(null));
+	public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals((object)null));
 
 	[TestMethod]
 	public void EmptyRopeEqualsEmptyRope() => Assert.IsTrue(Rope<char>.Empty.Equals(Rope<char>.Empty));
