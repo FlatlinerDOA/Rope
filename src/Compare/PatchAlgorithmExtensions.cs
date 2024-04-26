@@ -410,7 +410,7 @@ public static partial class PatchAlgorithmExtensions
                 {
                     // Imperfect match.  Run a diff to get a framework of equivalent
                     // indices.
-                    var diffs = text1.Diff(text2, (diffOptions ?? DiffOptions<char>.Default) with { IsChunkingEnabled = false });
+                    var diffs = text1.Diff(text2, (diffOptions ?? DiffOptions<char>.Default).WithChunking(false));
                     if (text1.Length > options.MaxLength && diffs.CalculateEditDistance() / (float)text1.Length > options.DeleteThreshold)
                     {
                         // The end points match, but the content is unacceptably bad.

@@ -22,6 +22,7 @@
 namespace Rope.Compare;
 
 using System;
+using System.Drawing;
 
 /// <summary>
 /// Record struct representing one diff operation.
@@ -37,4 +38,8 @@ public readonly record struct Diff<T>(Operation Operation, Rope<T> Text) where T
     public Diff<T> Append(Rope<T> text) => this with { Text = this.Text.AddRange(text) };
 
     public Diff<T> Prepend(Rope<T> text) => this with { Text = text.AddRange(this.Text) };
+
+    public bool Equals(Diff<T> other) => this.Operation == other.Operation && this.Text == other.Text;
+
+    public override int GetHashCode() => HashCode.Combine(this.Operation, this.Text.GetHashCode());    
 }

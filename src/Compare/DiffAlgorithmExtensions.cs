@@ -42,7 +42,8 @@ public static class DiffAlgorithmExtensions
     /// </param>
     /// <returns>List of Diff objects.</returns>
     [Pure]
-    public static Rope<Diff<char>> Diff(this string sourceText, string targetText, bool checkLines = true) => sourceText.ToRope().Diff(targetText.ToRope(), DiffOptions<char>.LineLevel with { IsChunkingEnabled = checkLines });
+    public static Rope<Diff<char>> Diff(this string sourceText, string targetText, bool checkLines = true) =>
+        sourceText.ToRope().Diff(targetText.ToRope(), DiffOptions<char>.LineLevel.WithChunking(checkLines));
 
     /// <summary>
     /// Find the differences between two texts.
@@ -57,7 +58,8 @@ public static class DiffAlgorithmExtensions
     /// otherwise uses <see cref="DiffOptions{char}.Generic"/>.</param>
     /// <returns>List of Diff objects.</returns>
     [Pure]
-    public static Rope<Diff<char>> Diff(this string sourceText, string targetText, DiffOptions<char> options) => sourceText.ToRope().Diff(targetText.ToRope(), options);
+    public static Rope<Diff<char>> Diff(this string sourceText, string targetText, DiffOptions<char> options) =>
+        sourceText.ToRope().Diff(targetText.ToRope(), options);
 
     /// <summary>
     /// Find the differences between two texts.
@@ -343,7 +345,7 @@ public static class DiffAlgorithmExtensions
                         // Delete the offending records and add the merged ones.
                         diffs = diffs.RemoveRange(pointer - count_delete - count_insert, count_delete + count_insert);
                         pointer = pointer - count_delete - count_insert;
-                        var subDiff = Diff(text_delete, text_insert, options with { IsChunkingEnabled = false }, cancel);
+                        var subDiff = Diff(text_delete, text_insert, options.WithChunking(false), cancel);
                         diffs = diffs.InsertRange(pointer, subDiff);
                         pointer = pointer + subDiff.Count;
                     }
@@ -360,14 +362,20 @@ public static class DiffAlgorithmExtensions
         return diffs;
     }
 
-    internal static Rope<Diff<T>> DiffBisect<T>(this Rope<T> text1, Rope<T> text2, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
+    internal static Rope<Diff<T>> DiffBisect<T>(this Rope<T> text1Rope, Rope<T> text2Rope, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
         // Cache the text lengths to prevent multiple calls.
+        ////File.AppendAllText(@"D:\ChizDev\Rope\benchmarks\statslog.csv", $"Bisect,{text1Rope.Length},{text1Rope.Depth},{text2Rope.Length},{text2Rope.Depth}\n");
+        var text1Memory = text1Rope.ToMemory();
+        var text2Memory = text2Rope.ToMemory();
+        var text1 = text1Memory.Span;
+        var text2 = text2Memory.Span;
         var text1_length = text1.Length;
         var text2_length = text2.Length;
         var max_d = (int)(text1_length + text2_length + 1) / 2;
         var v_offset = max_d;
         var v_length = 2 * max_d;
+        
         var v1 = new int[v_length].AsSpan();
         var v2 = new int[v_length].AsSpan();
         v1.Fill(-1);
@@ -442,7 +450,7 @@ public static class DiffAlgorithmExtensions
                         if (x1 >= x2)
                         {
                             // Overlap detected.
-                            return DiffBisectSplit(text1, text2, x1, y1, options, cancel);
+                            return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
                         }
                     }
                 }
@@ -493,7 +501,7 @@ public static class DiffAlgorithmExtensions
                         if (x1 >= x2)
                         {
                             // Overlap detected.
-                            return DiffBisectSplit(text1, text2, x1, y1, options, cancel);
+                            return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
                         }
                     }
                 }
@@ -502,7 +510,7 @@ public static class DiffAlgorithmExtensions
 
         // Diff took too long and hit the deadline or
         // number of diffs equals number of characters, no commonality at all.
-        return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1), new Diff<T>(Operation.INSERT, text2) });
+        return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1Rope), new Diff<T>(Operation.INSERT, text2Rope) });
     }
 
     /// <summary>
@@ -526,7 +534,7 @@ public static class DiffAlgorithmExtensions
         var text2b = text2.Slice(y);
 
         // Compute both diffs serially.
-        var optionsWithoutCheckLines = options with { IsChunkingEnabled = false };
+        var optionsWithoutCheckLines = options.WithChunking(false);
         var diffs = Diff(text1a, text2a, optionsWithoutCheckLines, cancel);
         var diffsb = Diff(text1b, text2b, optionsWithoutCheckLines, cancel);
         return diffs.Concat(diffsb);

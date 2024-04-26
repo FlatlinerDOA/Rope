@@ -58,6 +58,10 @@ public record class DiffOptions<T>(float TimeoutSeconds, short EditCost, bool Is
 
     public CancellationTimer StartTimer() => new CancellationTimer(this.TimeoutSeconds);
 
+    public DiffOptions<T> WithChunking(bool isChunkingEnabled) => this.IsChunkingEnabled == isChunkingEnabled ?
+        this :
+        this with { IsChunkingEnabled = isChunkingEnabled };
+
     public sealed class CancellationTimer : IDisposable
     {
         private readonly CancellationTokenSource source;

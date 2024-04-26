@@ -759,22 +759,22 @@ public class DiffMatchPatchTests
     {
         // Perform a trivial diff.
         var diffs = new Rope<Diff<char>>(Array.Empty<Diff<char>>());
-        AssertEquals("diff_main: Null case.", diffs, "".Diff("", false));
+        AssertEquals("diff_main: Null case.", diffs, "".Diff("", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "abc") });
-        AssertEquals("diff_main: Equality.", diffs, "abc".Diff("abc", false));
+        AssertEquals("diff_main: Equality.", diffs, "abc".Diff("abc", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "ab"), new Diff<char>(Operation.INSERT, "123"), new Diff<char>(Operation.EQUAL, "c") });
-        AssertEquals("diff_main: Simple insertion.", diffs, "abc".Diff("ab123c", false));
+        AssertEquals("diff_main: Simple insertion.", diffs, "abc".Diff("ab123c", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "123"), new Diff<char>(Operation.EQUAL, "bc") });
-        AssertEquals("diff_main: Simple deletion.", diffs, "a123bc".Diff("abc", false));
+        AssertEquals("diff_main: Simple deletion.", diffs, "a123bc".Diff("abc", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.INSERT, "123"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.INSERT, "456"), new Diff<char>(Operation.EQUAL, "c") });
-        AssertEquals("diff_main: Two insertions.", diffs, "abc".Diff("a123b456c", false));
+        AssertEquals("diff_main: Two insertions.", diffs, "abc".Diff("a123b456c", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "123"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.DELETE, "456"), new Diff<char>(Operation.EQUAL, "c") });
-        AssertEquals("diff_main: Two deletions.", diffs, "a123b456c".Diff("abc", false));
+        AssertEquals("diff_main: Two deletions.", diffs, "a123b456c".Diff("abc", this.DiffOptions.WithChunking(false)));
 
         // Perform a real diff.
         // Switch off the timeout.
@@ -784,22 +784,22 @@ public class DiffMatchPatchTests
         AssertEquals("diff_main: Simple case #1.", diffs, "a".Diff("b", false));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "Apple"), new Diff<char>(Operation.INSERT, "Banana"), new Diff<char>(Operation.EQUAL, "s are a"), new Diff<char>(Operation.INSERT, "lso"), new Diff<char>(Operation.EQUAL, " fruit.") });
-        AssertEquals("diff_main: Simple case #2.", diffs, "Apples are a fruit.".Diff("Bananas are also fruit.", false));
+        AssertEquals("diff_main: Simple case #2.", diffs, "Apples are a fruit.".Diff("Bananas are also fruit.", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "\u0680"), new Diff<char>(Operation.EQUAL, "x"), new Diff<char>(Operation.DELETE, "\t"), new Diff<char>(Operation.INSERT, new string(new char[] { (char)0 })) });
-        AssertEquals("diff_main: Simple case #3.", diffs, "ax\t".Diff("\u0680x" + (char)0, false));
+        AssertEquals("diff_main: Simple case #3.", diffs, "ax\t".Diff("\u0680x" + (char)0, this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "1"), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "y"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.DELETE, "2"), new Diff<char>(Operation.INSERT, "xab") });
-        AssertEquals("diff_main: Overlap #1.", diffs, "1ayb2".Diff("abxab", false));
+        AssertEquals("diff_main: Overlap #1.", diffs, "1ayb2".Diff("abxab", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "xaxcx"), new Diff<char>(Operation.EQUAL, "abc"), new Diff<char>(Operation.DELETE, "y") });
-        AssertEquals("diff_main: Overlap #2.", diffs, "abcy".Diff("xaxcxabc", false));
+        AssertEquals("diff_main: Overlap #2.", diffs, "abcy".Diff("xaxcxabc", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "ABCD"), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "="), new Diff<char>(Operation.INSERT, "-"), new Diff<char>(Operation.EQUAL, "bcd"), new Diff<char>(Operation.DELETE, "="), new Diff<char>(Operation.INSERT, "-"), new Diff<char>(Operation.EQUAL, "efghijklmnopqrs"), new Diff<char>(Operation.DELETE, "EFGHIJKLMNOefg") });
-        AssertEquals("diff_main: Overlap #3.", diffs, "ABCDa=bcd=efghijklmnopqrsEFGHIJKLMNOefg".Diff("a-bcd-efghijklmnopqrs", false));
+        AssertEquals("diff_main: Overlap #3.", diffs, "ABCDa=bcd=efghijklmnopqrsEFGHIJKLMNOefg".Diff("a-bcd-efghijklmnopqrs", this.DiffOptions.WithChunking(false)));
 
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, " "), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.INSERT, "nd"), new Diff<char>(Operation.EQUAL, " [[Pennsylvania]]"), new Diff<char>(Operation.DELETE, " and [[New") });
-        AssertEquals("diff_main: Large equality.", diffs, "a [[Pennsylvania]] and [[New".Diff(" and [[Pennsylvania]]", false));
+        AssertEquals("diff_main: Large equality.", diffs, "a [[Pennsylvania]] and [[New".Diff(" and [[Pennsylvania]]", this.DiffOptions.WithChunking(false)));
 
         this.DiffOptions = this.DiffOptions with { TimeoutSeconds = 0.1f }; // 100ms
         string a = "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n";
@@ -827,16 +827,16 @@ public class DiffMatchPatchTests
         // Must be long to pass the 100 char cutoff.
         a = "1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n";
         b = "abcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\n";
-        AssertEquals("diff_main: Simple line-mode.", a.Diff(b, true), a.Diff(b, false));
+        AssertEquals("diff_main: Simple line-mode.", a.Diff(b, this.DiffOptions.WithChunking(true)), a.Diff(b, this.DiffOptions.WithChunking(false)));
 
         a = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
         b = "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij";
-        AssertEquals("diff_main: Single line-mode.", a.Diff(b, true), a.Diff(b, false));
+        AssertEquals("diff_main: Single line-mode.", a.Diff(b, this.DiffOptions.WithChunking(true)), a.Diff(b, this.DiffOptions.WithChunking(false)));
 
         a = "1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n";
         b = "abcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n";
-        var texts_linemode = a.Diff(b, true).ToSourceAndTarget();
-        var texts_textmode = a.Diff(b, false).ToSourceAndTarget();
+        var texts_linemode = a.Diff(b, this.DiffOptions.WithChunking(true)).ToSourceAndTarget();
+        var texts_textmode = a.Diff(b, this.DiffOptions.WithChunking(false)).ToSourceAndTarget();
         AssertEquals("diff_main: Overlap line-mode. Source", texts_textmode.Source, texts_linemode.Source);
         AssertEquals("diff_main: Overlap line-mode. Destination", texts_textmode.Target, texts_linemode.Target);
 
