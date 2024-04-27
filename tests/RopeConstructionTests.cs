@@ -59,15 +59,15 @@ public class RopeConstructionTests
     {
         var actual = new Rope<char>("te".ToRope() + "st".ToRope(), Rope<char>.Empty);
 
-        // Small concatenations get balanced immediately
-        Assert.IsFalse(actual.IsNode);
+        Assert.IsTrue(actual.IsNode);
+        Assert.IsTrue(actual.IsBalanced);
         Assert.AreEqual(4, actual.Length);
         Assert.AreEqual("test".ToRope(), actual);
 
 
-
         actual = new Rope<char>(MediumText[..256].ToRope() + MediumText[256..].ToRope(), Rope<char>.Empty);
         Assert.IsTrue(actual.IsNode);
+        Assert.IsTrue(actual.IsBalanced);
         Assert.AreEqual(MediumText.Length, actual.Length);
         Assert.AreEqual(MediumText, actual);
     }
@@ -86,13 +86,14 @@ public class RopeConstructionTests
     {
         var actual = new Rope<char>(Rope<char>.Empty, "te".ToRope() + "st".ToRope());
 
-        // Small concatenations get balanced immediately
-        Assert.IsFalse(actual.IsNode);
+        Assert.IsTrue(actual.IsNode);
+        Assert.IsTrue(actual.IsBalanced);
         Assert.AreEqual(4, actual.Length);
         Assert.AreEqual("test".ToRope(), actual);
 
         actual = new Rope<char>(Rope<char>.Empty, MediumText[..256].ToRope() + MediumText[256..].ToRope());
         Assert.IsTrue(actual.IsNode);
+        Assert.IsTrue(actual.IsBalanced);
         Assert.AreEqual(MediumText, actual);
     }
 

@@ -21,7 +21,7 @@ internal class TestData
 
         var chars = Enumerable.Range(32, length).Select(i => (char)i).ToArray();
         var expected = new string(chars);
-        var rope = chars.Chunk(chunkSize).Select(t => t.ToRope()).Aggregate(Rope<char>.Empty, (prev, next) => new Rope<char>(prev, next));
+        var rope = chars.Chunk(chunkSize).Select(t => t.ToRope()).Combine();
         return (expected, rope);
     }
 }

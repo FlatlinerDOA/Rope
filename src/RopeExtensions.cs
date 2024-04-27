@@ -1,11 +1,41 @@
 using System.Diagnostics.Contracts;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Rope;
 
 public static class RopeExtensions
 {
-	internal static int IntPow(this int x, uint pow)
+    /// <summary>
+    /// Maximum number of bytes before the GC basically chucks our buffers on the garbage heap.
+    /// </summary>
+    public const int LargeObjectHeapBytes = 85_000 - 24;
+
+    internal static int CalculateAlignedBufferLength<T>(int cacheLineSize = 64)
+    {
+        var elementSize = Unsafe.SizeOf<T>();
+        var numberOfElements = LargeObjectHeapBytes / elementSize;
+        
+        // Calculate the initial buffer size.
+        var bufferSize = numberOfElements * elementSize;
+
+        // Calculate the padding needed to make the buffer size a multiple of the cache line size.
+        var padding = cacheLineSize - (bufferSize % cacheLineSize);
+
+        // If the buffer size is already a multiple of the cache line size, padding will be equal to cacheLineSize. We don't need extra padding in that case.
+        if (padding == cacheLineSize)
+        {
+            padding = 0;
+        }
+
+        // Return the aligned buffer size.
+        var alignedBufferSize = bufferSize + padding;
+        
+        // Calculate the number of elements that can fit in the aligned buffer size.
+        return alignedBufferSize / elementSize;
+    }
+
+    internal static int IntPow(this int x, uint pow)
 	{
 		int ret = 1;
 		for (var p = 0; p < pow; p++)

@@ -30,11 +30,6 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     public const int MaxTreeDepth = 46;
 
 	/// <summary>
-	/// Maximum number of bytes before the GC basically chucks our buffers on the garbage heap.
-	/// </summary>
-	public const int LargeObjectHeapBytes = 85_000 - 24;
-
-	/// <summary>
 	/// Defines the maximum depth descrepancy between left and right to cause a re-split of one side when balancing.
 	/// </summary>
 	public const int MaxDepthImbalance = 4;
@@ -47,7 +42,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 	/// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
 	/// This is calculated to never require Large Object Heap allocations.
 	/// </summary>
-	public static readonly int MaxLeafLength = LargeObjectHeapBytes / Unsafe.SizeOf<T>();
+	public static readonly int MaxLeafLength = RopeExtensions.CalculateAlignedBufferLength<T>();
 
 	/// <summary>
 	/// Gets the maximum number of elements any rope can have. 
@@ -456,7 +451,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 		}
 
 		var (left, right) = this.SplitAt(index);
-		return new Rope<T>(left, new Rope<T>(items, right));
+		return new Rope<T>(left, new Rope<T>(items, right)).Balanced();
 	}
 
 	/// <summary>
@@ -640,7 +635,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 		if (this.data is RopeNode node)
 		{
             ///rebalances.Add(1);
-            if (this.Length <= 1024) // MaxLeafLength
+            if (this.Length <= MaxLeafLength)
             {
                 // If short enough brute force rebalance into a single leaf.
                 return new Rope<T>(this.ToMemory());
@@ -1928,10 +1923,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 		return new Enumerator(this);
 	}
 
-    [Pure]
-	private static bool CalculateIsBalanced(long length, int depth) => length < 64 ? // treat short strings as unbalanced if they are ropes.
-		depth == 0 :
-		depth < DepthToFibonnaciPlusTwo.Length && length >= DepthToFibonnaciPlusTwo[depth];
+    [Pure] // length < 64 ? depth == 0 : // treat short strings as unbalanced if they are ropes. 
+
+    private static bool CalculateIsBalanced(long length, int depth) => depth < DepthToFibonnaciPlusTwo.Length && length >= DepthToFibonnaciPlusTwo[depth];
 
     /// <summary>
     /// Constructs a new Rope from a series of leaves into a tree.
