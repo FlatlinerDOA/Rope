@@ -307,7 +307,7 @@ public static class DiffAlgorithmExtensions
     {
         // Scan the text on a line-by-line basis first.
         (var chars1, var chars2, var linearray) = DiffChunksToChars(text1, text2, options);
-        var optionsWithoutCheckLines = new DiffOptions<char>(0, 0, false, '\n');
+        var optionsWithoutCheckLines = new DiffOptions<char>(0, 0, false, new[] { '\n' });
         var charDiffs = Diff(chars1, chars2, optionsWithoutCheckLines, cancel);
 
         // Convert the diff back to original text.
@@ -573,32 +573,43 @@ public static class DiffAlgorithmExtensions
     }
 
     ////// Experimental: Attempt at faster performance than diff_linesToCharsMunge_pure
-    ////private static Rope<T> Munge2(Rope<T> text1, ref Rope<Rope<T>> lineArray, Dictionary<Rope<T>, int> lineHash, int maxLines)
-    ////{
-    ////    var chars = Rope<T>.Empty;
-    ////    long consumed = 0;
-    ////    foreach (var line in text1.Split('\n'))
-    ////    {
-    ////        var e = lineHash.GetValueOrDefault(line, -1);
-    ////        if (e == -1)
-    ////        {
-    ////            if (lineArray.Count == maxLines)
-    ////            {
-    ////                e = lineHash.Count;
-    ////                lineArray += text1.Slice(consumed);
-    ////                break;
-    ////            }
+    internal static (Rope<char> Chars, Rope<Rope<T>> LineArray) AccumulateChunksIntoCharsSplit<T>(this Rope<T> text, Rope<Rope<T>> lineArray, Dictionary<Rope<T>, int> lineHash, int maxLines, DiffOptions<T> options) where T : IEquatable<T>
+    {
+        var chars = Rope<char>.Empty;
+        var remainder = Rope<T>.Empty;
+        foreach (var line in text.Split(options.ChunkSeparator, RopeSplitOptions.SplitAfterSeparator))
+        {
+            if (lineArray.Count >= maxLines)
+            {
+                // Bail out at 65535 because char 65536 == char 0.
+                remainder += line;
+            }
+            else
+            {
+                var nextIndex = lineArray.Count;
+                if (lineHash.TryAdd(line, nextIndex))
+                {
+                    chars = chars.Add((char)nextIndex);
+                }
+                else
+                {
+                    chars = chars.Add((char)lineHash[line]);
+                }
 
-    ////            lineArray += line;
-    ////            lineHash.Add(line, e);
-    ////        }
+                lineArray += line;
+            }
+        }
 
-    ////        chars += (char)e;
-    ////        consumed += line.Length;
-    ////    }
+        if (remainder.Length > 0)
+        {
+            var nextIndex = lineArray.Count;
+            lineArray += remainder;
+            lineHash.TryAdd(remainder, nextIndex);
+            chars = chars.Add((char)nextIndex);
+        }
 
-    ////    return chars;
-    ////}
+        return (chars, lineArray);
+    }
 
     /// <summary>
     /// Split a sequence into a list of chunks (e.g. lines). Reduce the texts to a sequence of

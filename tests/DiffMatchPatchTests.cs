@@ -167,6 +167,22 @@ public class DiffMatchPatchTests
     }
 
     [TestMethod]
+    public void AccumulateChunksIntoCharsTest()
+    {
+        var expectedDictionary = new Dictionary<Rope<char>, int>();
+        var (expectedChars, expectedLineArray) = "ABC\n123\nXYZ\nDO\nRAY\nMI\n".ToRope()
+            .AccumulateChunksIntoChars(Rope<Rope<char>>.Empty, expectedDictionary, 3, DiffOptions<char>.LineLevel);
+
+        var actualDictionary = new Dictionary<Rope<char>, int>();
+        var (actualChars, actualLineArray) = "ABC\n123\nXYZ\nDO\nRAY\nMI\n".ToRope()
+            .AccumulateChunksIntoCharsSplit(Rope<Rope<char>>.Empty, actualDictionary, 3, DiffOptions<char>.LineLevel);
+        
+        AssertEquals("Dictionary don't match", expectedDictionary, actualDictionary);
+        AssertEquals("Chars don't match", expectedChars, actualChars);
+        AssertEquals("LineArray don't match", expectedLineArray, actualLineArray);
+    }
+
+    [TestMethod]
     public void DiffCharsToLinesTest()
     {
         // First check that Diff equality works.
@@ -180,14 +196,24 @@ public class DiffMatchPatchTests
             new Diff<char>(Operation.EQUAL, "\u0001\u0002\u0001"),
             new Diff<char>(Operation.INSERT, "\u0002\u0001\u0002")
         });
+
         Rope<Rope<char>> tmpVector = Rope<Rope<char>>.Empty;
         tmpVector = tmpVector.Add("".AsMemory());
         tmpVector = tmpVector.Add("alpha\n".AsMemory());
         tmpVector = tmpVector.Add("beta\n".AsMemory());
+
         diffs = diffs.ConvertCharsToChunks(tmpVector);
-        AssertEquals("diff_charsToLines: Shared lines.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "alpha\nbeta\nalpha\n"),
-        new Diff<char>(Operation.INSERT, "beta\nalpha\nbeta\n")}), diffs);
+
+        AssertEquals(
+            "diff_charsToLines: Shared lines.",
+            new Rope<Diff<char>>(
+                new[]
+                {
+                    new Diff<char>(Operation.EQUAL, "alpha\nbeta\nalpha\n"),
+                    new Diff<char>(Operation.INSERT, "beta\nalpha\nbeta\n")
+                }),
+            diffs);
+
 
         // More than 256 to reveal any 8-bit limitations.
         int n = 300;
@@ -1232,7 +1258,7 @@ public class DiffMatchPatchTests
     {
         if (expected != actual)
         {
-            throw new ArgumentException(string.Format("assertEquals (string, string) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("AssertEquals (string, string) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
     }
 
@@ -1250,13 +1276,13 @@ public class DiffMatchPatchTests
 
         if (expected.Length != actual.Length )
         {
-            throw new ArgumentException(string.Format("assertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("AssertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Length; i++)
         {
             if (expected[i] != actual[i])
             {
-                throw new ArgumentException(string.Format("assertEquals (string[], string[]) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (string[], string[]) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1265,13 +1291,13 @@ public class DiffMatchPatchTests
     {
         if (expected.Count != actual.Count)
         {
-            throw new ArgumentException(string.Format("assertEquals (List<string>, List<string>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("AssertEquals (List<string>, List<string>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Count; i++)
         {
             if (expected[i] != actual[i])
             {
-                throw new ArgumentException(string.Format("assertEquals (List<string>, List<string>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (List<string>, List<string>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1280,13 +1306,13 @@ public class DiffMatchPatchTests
     {
         if (expected.Count != actual.Count)
         {
-            throw new ArgumentException(string.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("AssertEquals (List<Diff<char>>, List<Diff<char>>) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
         for (int i = 0; i < expected.Count; i++)
         {
             if (!expected[i].Equals(actual[i]))
             {
-                throw new ArgumentException(string.Format("assertEquals (List<Diff<char>>, List<Diff<char>>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (List<Diff<char>>, List<Diff<char>>) index {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", i, expected, actual, error_msg));
             }
         }
     }
@@ -1299,24 +1325,25 @@ public class DiffMatchPatchTests
         }
     }
 
-    private static void AssertEquals(string error_msg, Dictionary<char, long> expected, Dictionary<char, long> actual)
+    private static void AssertEquals<TKey, TValue>(string error_msg, Dictionary<TKey, TValue> expected, Dictionary<TKey, TValue> actual) where TValue : IEquatable<TValue>
     {
-        foreach (char k in actual.Keys)
+        foreach (var k in actual.Keys)
         {
             if (!expected.ContainsKey(k))
             {
-                throw new ArgumentException(string.Format("assertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, "(Missing)", actual[k], error_msg));
             }
         }
-        foreach (char k in expected.Keys)
+
+        foreach (var k in expected.Keys)
         {
             if (!actual.ContainsKey(k))
             {
-                throw new ArgumentException(string.Format("assertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, expected[k], "(Missing)", error_msg));
             }
-            if (actual[k] != expected[k])
+            if (!EqualityComparer<TValue>.Default.Equals(actual[k], expected[k]))
             {
-                throw new ArgumentException(string.Format("assertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, expected, actual, error_msg));
+                throw new ArgumentException(string.Format("AssertEquals (Dictionary<char, int>, Dictionary<char, int>) key {0} fail:\n Expected: {1}\n Actual: {2}\n{3}", k, expected[k], actual[k], error_msg));
             }
         }
     }
@@ -1325,7 +1352,7 @@ public class DiffMatchPatchTests
     {
         if (expected != actual)
         {
-            throw new ArgumentException(string.Format("assertEquals (int, int) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
+            throw new ArgumentException(string.Format("AssertEquals (int, int) fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
     }
 
@@ -1333,7 +1360,7 @@ public class DiffMatchPatchTests
     {
         if (!expected)
         {
-            throw new ArgumentException(string.Format("assertTrue fail:\n{0}", error_msg));
+            throw new ArgumentException(string.Format("AssertTrue fail:\n{0}", error_msg));
         }
     }
 
@@ -1341,12 +1368,12 @@ public class DiffMatchPatchTests
     {
         if (value != null)
         {
-            throw new ArgumentException(string.Format("assertNull fail:\n{0}", error_msg));
+            throw new ArgumentException(string.Format("AssertNull fail:\n{0}", error_msg));
         }
     }
 
     private static void AssertFail(string error_msg)
     {
-        throw new ArgumentException(string.Format("assertFail fail:\n{0}", error_msg));
+        throw new ArgumentException(string.Format("AssertFail fail:\n{0}", error_msg));
     }
 }

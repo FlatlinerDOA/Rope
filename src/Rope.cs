@@ -14,6 +14,31 @@ using System.Diagnostics.Contracts;
 using System.Diagnostics;
 using System.Text;
 using System.Buffers;
+using Rope.Compare;
+using System.Runtime.InteropServices;
+
+public enum RopeSplitOptions
+{
+	/// <summary>
+	/// Excludes the separator from the results, includes empty results.
+	/// </summary>
+	None = 0,
+
+    /// <summary>
+    /// Excludes the separator and excludes empty results.
+    /// </summary>
+    RemoveEmpty = 1,
+
+    /// <summary>
+    /// Includes the separator at the end of each result (except the last), empty results are not possible.
+    /// </summary>
+    SplitAfterSeparator = 2,
+
+    /// <summary>
+    /// Includes the separator at the start of each result (except the first), empty results are not possible.
+    /// </summary>
+    SplitBeforeSeparator = 3,
+}
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -332,23 +357,47 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 	/// Gets an enumerable of slices of this rope, splitting by the given separator sequence.
 	/// </summary>
 	/// <param name="separator">The sequence of elements to separate by, this sequenece will never be included in the returned sequence.</param>
+	/// <param name="options">Optional settings for how to deal with the separator itself.</param>
 	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
 	[Pure]
-	public readonly IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator)
+	public readonly IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator, RopeSplitOptions options = RopeSplitOptions.None)
 	{
 		Rope<T> remainder = this;
 		do
 		{
 			var i = remainder.IndexOf(separator);
-
 			if (i != -1)
 			{
-				yield return remainder.Slice(0, i);
-				remainder = remainder.Slice(i + separator.Length);
+				var chunk = remainder.Slice(
+					0,
+                    options switch
+                    {
+                        RopeSplitOptions.None => i,
+                        RopeSplitOptions.SplitBeforeSeparator => i,
+                        RopeSplitOptions.SplitAfterSeparator => i + separator.Length,
+                        _ => throw new NotImplementedException(),
+                    });
+				if (!chunk.IsEmpty || options == RopeSplitOptions.None)
+				{
+					yield return chunk;
+				}
+
+                remainder = remainder.Slice(
+                    options switch
+                    {
+                        RopeSplitOptions.None => i + separator.Length,
+                        RopeSplitOptions.SplitBeforeSeparator => i,
+                        RopeSplitOptions.SplitAfterSeparator => i + separator.Length,
+                        _ => throw new NotImplementedException(),
+                    });
 			}
 			else
 			{
-				yield return remainder;
+				if (!remainder.IsEmpty || options == RopeSplitOptions.None)
+				{
+					yield return remainder;
+				}
+
 				yield break;
 			}
 		}
@@ -494,15 +543,20 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 		return this.Slice(start, this.Length - start);
 	}
 
-	/// <summary>
-	/// Removes the tail range of elements from a given starting index (Alias for Slice).
-	/// </summary>
-	/// <param name="start">The start index to remove from.</param>
-	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
-	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	[Pure]
+    /// <summary>
+    /// Removes a single element at the specified index.
+    /// </summary>
+    /// <param name="index">The index to remove.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if index is greater than or equal to Length or less than zero.</exception>
+    /// <returns>A new instance of <see	cref="Rope{T}"/> with the single item removed if index is valid.</returns>
+    [Pure]
 	public readonly Rope<T> RemoveAt(long index)
 	{
+		if (index < 0 || index >= this.Length)
+		{
+			throw new ArgumentOutOfRangeException(nameof(index));
+		}
+
 		if (index == this.Length)
 		{
 			return this;

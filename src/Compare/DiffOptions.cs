@@ -35,17 +35,17 @@ using System;
 /// line-level diff first to identify the changed areas.
 /// If true, then run a faster slightly less optimal diff.</param>
 /// <param name="ChunkSeparator">An element that delineates one chunk from the next, the diff will attempt to use this if chunkng is enabled.</param>
-public record class DiffOptions<T>(float TimeoutSeconds, short EditCost, bool IsChunkingEnabled, T? ChunkSeparator) where T : IEquatable<T>
+public record class DiffOptions<T>(float TimeoutSeconds, short EditCost, bool IsChunkingEnabled, ReadOnlyMemory<T> ChunkSeparator) where T : IEquatable<T>
 {
     /// <summary>
     /// Slower more accurate diff settings, where diffs can be down to the element level. (Timeout default is 500ms)
     /// </summary>
-    public static readonly DiffOptions<T> Generic = new(0.5f, 4, false, default);
+    public static readonly DiffOptions<T> Generic = new(0.5f, 4, false, ReadOnlyMemory<T>.Empty);
 
     /// <summary>
     /// Slightly faster line level diff on chars only. (Timeout default is 500ms)
     /// </summary>
-    public static readonly DiffOptions<char> LineLevel = new(0.5f, 4, true, '\n');
+    public static readonly DiffOptions<char> LineLevel = new(0.5f, 4, true, new[] { '\n' });
 
     /// <summary>
     /// Gets the defaults options to use.

@@ -25,6 +25,8 @@ namespace Rope.UnitTests
         [DataRow(5, 2, 2)]
         [DataRow(5, 2, 3)]
         [DataRow(5, 2, 5)]
+        [DataRow(5, 5, 5)]
+        [DataRow(5, 5, 4)]
         [DataRow(256, 3, 4)]
         [DataRow(256, 24, 3)]
         public void SliceStart(int textLength, int chunkSize, int startIndex)
@@ -50,6 +52,8 @@ namespace Rope.UnitTests
         [DataRow(5, 2, 2, 3)]
         [DataRow(5, 2, 3, 2)]
         [DataRow(5, 2, 4, 1)]
+        [DataRow(5, 2, 5, 0)]
+        [DataRow(5, 5, 4, 1)]
         [DataRow(256, 3, 4, 200)]
         [DataRow(256, 24, 3, 200)]
         public void SliceStartAndLength(int textLength, int chunkSize, int startIndex, int length)
@@ -164,6 +168,70 @@ namespace Rope.UnitTests
             {
                 rope = rope.InsertSorted(rank, comparer);
             }
+        }
+
+        [TestMethod]
+        [DataRow(0, 0, 0)]
+        [DataRow(1, 1, 1)]
+        [DataRow(2, 1, 2)]
+        [DataRow(2, 2, 2)]
+        [DataRow(5, 2, 5)]
+        [DataRow(5, 5, 5)]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void RemoveAtOutOfRange(int textLength, int chunkSize, int startIndex)
+        {
+            var (_, rope) = TestData.Create(textLength, chunkSize);
+            var _ = rope.RemoveAt(startIndex);
+        }
+
+        [TestMethod]
+        [DataRow(1, 1, 0)]
+        [DataRow(2, 1, 0)]
+        [DataRow(2, 1, 1)]
+        [DataRow(2, 2, 1)]
+        [DataRow(3, 2, 2)]
+        [DataRow(5, 2, 0)]
+        [DataRow(5, 2, 2)]
+        [DataRow(5, 2, 3)]
+        [DataRow(5, 5, 4)]
+        [DataRow(256, 3, 4)]
+        [DataRow(256, 24, 3)]
+        public void RemoveAt(int textLength, int chunkSize, int startIndex)
+        {
+            var (text, rope) = TestData.Create(textLength, chunkSize);
+            var list = text.ToList();
+            list.RemoveAt(startIndex);
+            var expected = new string(list.ToArray());
+            var actual = rope.RemoveAt(startIndex);
+            Assert.AreEqual(expected, actual.ToString());
+        }
+
+        [TestMethod]
+        [DataRow(0, 0, 0, 0)]
+        [DataRow(1, 1, 0, 1)]
+        [DataRow(1, 1, 1, 0)]
+        [DataRow(2, 1, 0, 1)]
+        [DataRow(2, 1, 1, 1)]
+        [DataRow(2, 1, 2, 0)]
+        [DataRow(2, 1, 0, 2)]
+        [DataRow(2, 2, 1, 1)]
+        [DataRow(2, 2, 2, 0)]
+        [DataRow(3, 2, 2, 1)]
+        [DataRow(5, 2, 0, 5)]
+        [DataRow(5, 2, 2, 3)]
+        [DataRow(5, 2, 3, 2)]
+        [DataRow(5, 2, 4, 1)]
+        [DataRow(5, 2, 5, 0)]
+        [DataRow(5, 5, 4, 1)]
+        [DataRow(5, 5, 5, 0)]
+        [DataRow(256, 3, 4, 200)]
+        [DataRow(256, 24, 3, 200)]
+        public void RemoveRange(int textLength, int chunkSize, int startIndex, int length)
+        {
+            var (text, rope) = TestData.Create(textLength, chunkSize);
+            var expected = text.Remove(startIndex, length);
+            var actual = rope.RemoveRange(startIndex, length);
+            Assert.AreEqual(expected, actual.ToString());
         }
     }
 }

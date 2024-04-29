@@ -24,7 +24,7 @@ public class AddRangeImmutable
         }
     }
 
-    [Benchmark(Description = "Immutable\nList\n.Builder")]
+    [Benchmark(Description = "ImmutableList\n.Builder")]
     public void ImmutableListBuilderOfChar()
     {
         var s = ImmutableList<char>.Empty.ToBuilder();
@@ -36,7 +36,7 @@ public class AddRangeImmutable
         }
     }
 
-    [Benchmark(Description = "Immutable\nList")]
+    [Benchmark(Description = "ImmutableList")]
     public void ImmutableListOfChar()
     {
         var s = ImmutableList<char>.Empty.AddRange(BenchmarkData.LoremIpsum);
@@ -46,7 +46,7 @@ public class AddRangeImmutable
         }
     }
 
-    [Benchmark(Description = "Immutable\nArray")]
+    [Benchmark(Description = "ImmutableArray")]
     public void ImmutableArrayOfChar()
     {
         var s = ImmutableArray<char>.Empty.AddRange(BenchmarkData.LoremIpsum.AsSpan());
