@@ -608,7 +608,7 @@ public static partial class PatchAlgorithmExtensions
     /// <param name="options"></param>
     /// <returns>The padding string added to each side.</returns>
     [Pure]
-    internal static (Rope<char> NullPadding, Rope<Patch<char>> BumpedPatches) PatchAddPadding(this IEnumerable<Patch<char>> patches, PatchOptions options)
+    internal static (Rope<char> NullPadding, Rope<Patch<char>> BumpedPatches) PatchAddPadding(this Rope<Patch<char>> patches, PatchOptions options)
     {
         short paddingLength = options.Margin;
         var nullPadding = Rope<char>.Empty;

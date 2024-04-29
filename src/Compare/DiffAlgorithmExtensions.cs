@@ -23,6 +23,7 @@
 namespace Rope.Compare;
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -365,152 +366,164 @@ public static class DiffAlgorithmExtensions
     internal static Rope<Diff<T>> DiffBisect<T>(this Rope<T> text1Rope, Rope<T> text2Rope, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
         // Cache the text lengths to prevent multiple calls.
-        ////File.AppendAllText(@"D:\ChizDev\Rope\benchmarks\statslog.csv", $"Bisect,{text1Rope.Length},{text1Rope.Depth},{text2Rope.Length},{text2Rope.Depth}\n");
+        //File.AppendAllText(@"D:\ChizDev\Rope\benchmarks\statslog.csv", $"Bisect,{text1Rope.Length},{text1Rope.Depth},{text2Rope.Length},{text2Rope.Depth}\n");
         var text1Memory = text1Rope.ToMemory();
         var text2Memory = text2Rope.ToMemory();
         var text1 = text1Memory.Span;
         var text2 = text2Memory.Span;
+        //var text1 = new Rope<T>(text1Rope.ToMemory());
+        //var text2 = new Rope<T>(text2Rope.ToMemory());
         var text1_length = text1.Length;
         var text2_length = text2.Length;
         var max_d = (int)(text1_length + text2_length + 1) / 2;
         var v_offset = max_d;
         var v_length = 2 * max_d;
-        
-        var v1 = new int[v_length].AsSpan();
-        var v2 = new int[v_length].AsSpan();
-        v1.Fill(-1);
-        v2.Fill(-1);
-        v1[v_offset + 1] = 0;
-        v2[v_offset + 1] = 0;
-        var delta = (int)(text1_length - text2_length);
-        // If the total number of characters is odd, then the front path will
-        // collide with the reverse path.
-        bool front = (delta % 2 != 0);
-        // Offsets for start and end of k loop.
-        // Prevents mapping of space beyond the grid.
-        int k1start = 0;
-        int k1end = 0;
-        int k2start = 0;
-        int k2end = 0;
-        for (int d = 0; d < max_d; d++)
+
+        var v1Buffer = ArrayPool<int>.Shared.Rent(v_length);
+        var v2Buffer = ArrayPool<int>.Shared.Rent(v_length);
+        try
         {
-            // Bail out if deadline is reached.
-            if (cancel.IsCancellationRequested)
+            var v1 = v1Buffer.AsSpan().Trim(v_length);
+            var v2 = v2Buffer.AsSpan().Trim(v_length);
+            v1.Fill(-1);
+            v2.Fill(-1);
+            v1[v_offset + 1] = 0;
+            v2[v_offset + 1] = 0;
+            var delta = (int)(text1_length - text2_length);
+            // If the total number of characters is odd, then the front path will
+            // collide with the reverse path.
+            bool front = (delta % 2 != 0);
+            // Offsets for start and end of k loop.
+            // Prevents mapping of space beyond the grid.
+            int k1start = 0;
+            int k1end = 0;
+            int k2start = 0;
+            int k2end = 0;
+            for (int d = 0; d < max_d; d++)
             {
-                break;
-            }
-
-            // Walk the front path one step.
-            for (var k1 = -d + k1start; k1 <= d - k1end; k1 += 2)
-            {
-                var k1_offset = v_offset + k1;
-                int x1;
-                if (k1 == -d || k1 != d && v1[k1_offset - 1] < v1[k1_offset + 1])
+                // Bail out if deadline is reached.
+                if (cancel.IsCancellationRequested)
                 {
-                    x1 = v1[k1_offset + 1];
-                }
-                else
-                {
-                    x1 = v1[k1_offset - 1] + 1;
+                    break;
                 }
 
-                int y1 = x1 - k1;
-                while (x1 < text1_length && y1 < text2_length && text1[x1].Equals(text2[y1]))
+                // Walk the front path one step.
+                for (var k1 = -d + k1start; k1 <= d - k1end; k1 += 2)
                 {
-                    x1++;
-                    y1++;
-                }
-
-                // EXPERIMENTAL: Slice + CommonPrefixLength, seems to allocate GB's!??
-                // if (x1 < text1_length && y1 < text2_length)
-                // {
-                //     var prefix = (int)text1[x1..].CommonPrefixLength(text2[y1..]);
-                //     x1 += prefix;
-                //     y1 += prefix;
-                // }
-
-                v1[k1_offset] = x1;
-                if (x1 > text1_length)
-                {
-                    // Ran off the right of the graph.
-                    k1end += 2;
-                }
-                else if (y1 > text2_length)
-                {
-                    // Ran off the bottom of the graph.
-                    k1start += 2;
-                }
-                else if (front)
-                {
-                    var k2_offset = v_offset + delta - k1;
-                    if (k2_offset >= 0 && k2_offset < v_length && v2[k2_offset] != -1)
+                    var k1_offset = v_offset + k1;
+                    int x1;
+                    if (k1 == -d || k1 != d && v1[k1_offset - 1] < v1[k1_offset + 1])
                     {
-                        // Mirror x2 onto top-left coordinate system.
-                        var x2 = text1_length - v2[k2_offset];
-                        if (x1 >= x2)
+                        x1 = v1[k1_offset + 1];
+                    }
+                    else
+                    {
+                        x1 = v1[k1_offset - 1] + 1;
+                    }
+
+                    int y1 = x1 - k1;
+                    while (x1 < text1_length && y1 < text2_length && text1[x1].Equals(text2[y1]))
+                    {
+                        x1++;
+                        y1++;
+                    }
+
+                    // EXPERIMENTAL: Slice + CommonPrefixLength, seems to allocate GB's!??
+                    // if (x1 < text1_length && y1 < text2_length)
+                    // {
+                    //     var prefix = (int)text1[x1..].CommonPrefixLength(text2[y1..]);
+                    //     x1 += prefix;
+                    //     y1 += prefix;
+                    // }
+
+                    v1[k1_offset] = x1;
+                    if (x1 > text1_length)
+                    {
+                        // Ran off the right of the graph.
+                        k1end += 2;
+                    }
+                    else if (y1 > text2_length)
+                    {
+                        // Ran off the bottom of the graph.
+                        k1start += 2;
+                    }
+                    else if (front)
+                    {
+                        var k2_offset = v_offset + delta - k1;
+                        if (k2_offset >= 0 && k2_offset < v_length && v2[k2_offset] != -1)
                         {
-                            // Overlap detected.
-                            return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
+                            // Mirror x2 onto top-left coordinate system.
+                            var x2 = text1_length - v2[k2_offset];
+                            if (x1 >= x2)
+                            {
+                                // Overlap detected.
+                                return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
+                            }
+                        }
+                    }
+                }
+
+                // Walk the reverse path one step.
+                for (var k2 = -d + k2start; k2 <= d - k2end; k2 += 2)
+                {
+                    var k2_offset = v_offset + k2;
+                    int x2;
+                    if (k2 == -d || k2 != d && v2[k2_offset - 1] < v2[k2_offset + 1])
+                    {
+                        x2 = v2[k2_offset + 1];
+                    }
+                    else
+                    {
+                        x2 = v2[k2_offset - 1] + 1;
+                    }
+
+                    var y2 = x2 - k2;
+                    while (x2 < text1_length && y2 < text2_length && text1[text1_length - x2 - 1].Equals(text2[text2_length - y2 - 1]))
+                    {
+                        x2++;
+                        y2++;
+                    }
+
+                    v2[k2_offset] = x2;
+                    if (x2 > text1_length)
+                    {
+                        // Ran off the left of the graph.
+                        k2end += 2;
+                    }
+                    else if (y2 > text2_length)
+                    {
+                        // Ran off the top of the graph.
+                        k2start += 2;
+                    }
+                    else if (!front)
+                    {
+                        var k1_offset = v_offset + delta - k2;
+                        if (k1_offset >= 0 && k1_offset < v_length && v1[k1_offset] != -1)
+                        {
+                            var x1 = v1[k1_offset];
+                            var y1 = v_offset + x1 - k1_offset;
+
+                            // Mirror x2 onto top-left coordinate system.
+                            x2 = (int)(text1_length - v2[k2_offset]);
+                            if (x1 >= x2)
+                            {
+                                // Overlap detected.
+                                return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
+                            }
                         }
                     }
                 }
             }
 
-            // Walk the reverse path one step.
-            for (var k2 = -d + k2start; k2 <= d - k2end; k2 += 2)
-            {
-                var k2_offset = v_offset + k2;
-                int x2;
-                if (k2 == -d || k2 != d && v2[k2_offset - 1] < v2[k2_offset + 1])
-                {
-                    x2 = v2[k2_offset + 1];
-                }
-                else
-                {
-                    x2 = v2[k2_offset - 1] + 1;
-                }
-
-                var y2 = x2 - k2;
-                while (x2 < text1_length && y2 < text2_length && text1[text1_length - x2 - 1].Equals(text2[text2_length - y2 - 1]))
-                {
-                    x2++;
-                    y2++;
-                }
-
-                v2[k2_offset] = x2;
-                if (x2 > text1_length)
-                {
-                    // Ran off the left of the graph.
-                    k2end += 2;
-                }
-                else if (y2 > text2_length)
-                {
-                    // Ran off the top of the graph.
-                    k2start += 2;
-                }
-                else if (!front)
-                {
-                    var k1_offset = v_offset + delta - k2;
-                    if (k1_offset >= 0 && k1_offset < v_length && v1[k1_offset] != -1)
-                    {
-                        var x1 = v1[k1_offset];
-                        var y1 = v_offset + x1 - k1_offset;
-
-                        // Mirror x2 onto top-left coordinate system.
-                        x2 = (int)(text1_length - v2[k2_offset]);
-                        if (x1 >= x2)
-                        {
-                            // Overlap detected.
-                            return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
-                        }
-                    }
-                }
-            }
+            // Diff took too long and hit the deadline or
+            // number of diffs equals number of characters, no commonality at all.
+            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1Rope), new Diff<T>(Operation.INSERT, text2Rope) });
         }
-
-        // Diff took too long and hit the deadline or
-        // number of diffs equals number of characters, no commonality at all.
-        return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1Rope), new Diff<T>(Operation.INSERT, text2Rope) });
+        finally
+        {
+            ArrayPool<int>.Shared.Return(v2Buffer);
+            ArrayPool<int>.Shared.Return(v1Buffer);
+        }
     }
 
     /// <summary>
@@ -567,8 +580,8 @@ public static class DiffAlgorithmExtensions
         // var chars2 = Munge2(text1, ref lineArray, lineHash, 65535);
 
         // Allocate 2/3rds of the space for text1, the rest for text2.
-        (var chars1, lineArray) = AccumulateChunksIntoChars(text1, lineArray, lineHash, 40000, options);
-        (var chars2, lineArray) = AccumulateChunksIntoChars(text2, lineArray, lineHash, 65535, options);
+        (var chars1, lineArray) = AccumulateChunksIntoCharsSplit(text1, lineArray, lineHash, 40000, options);
+        (var chars2, lineArray) = AccumulateChunksIntoCharsSplit(text2, lineArray, lineHash, 65535, options);
         return (chars1, chars2, lineArray.Balanced());
     }
 
@@ -590,13 +603,13 @@ public static class DiffAlgorithmExtensions
                 if (lineHash.TryAdd(line, nextIndex))
                 {
                     chars = chars.Add((char)nextIndex);
+                    lineArray += line;
                 }
                 else
                 {
                     chars = chars.Add((char)lineHash[line]);
                 }
 
-                lineArray += line;
             }
         }
 

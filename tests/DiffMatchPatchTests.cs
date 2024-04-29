@@ -180,6 +180,22 @@ public class DiffMatchPatchTests
         AssertEquals("Dictionary don't match", expectedDictionary, actualDictionary);
         AssertEquals("Chars don't match", expectedChars, actualChars);
         AssertEquals("LineArray don't match", expectedLineArray, actualLineArray);
+
+
+        var expectedLineHash = new Dictionary<Rope<char>, int>();
+        expectedLineArray = Rope<Rope<char>>.Empty.Add(Rope<char>.Empty);
+        (expectedChars, expectedLineArray) = "alpha\nbeta\nalpha\n".ToRope().AccumulateChunksIntoChars(expectedLineArray, expectedLineHash, 1000, this.DiffOptions);
+        (expectedChars, expectedLineArray) = "beta\nalpha\nbeta\n".ToRope().AccumulateChunksIntoChars(expectedLineArray, expectedLineHash, 1000, this.DiffOptions);
+
+
+        var actualLineHash = new Dictionary<Rope<char>, int>();
+        actualLineArray = Rope<Rope<char>>.Empty.Add(Rope<char>.Empty);
+        (actualChars, actualLineArray) = "alpha\nbeta\nalpha\n".ToRope().AccumulateChunksIntoCharsSplit(actualLineArray, actualLineHash, 1000, this.DiffOptions);
+        (actualChars, actualLineArray) = "beta\nalpha\nbeta\n".ToRope().AccumulateChunksIntoCharsSplit(actualLineArray, actualLineHash, 1000, this.DiffOptions);
+
+        AssertEquals("Dictionary don't match", expectedLineHash, actualLineHash);
+        AssertEquals("Chars don't match", expectedChars, actualChars);
+        AssertEquals("LineArray don't match", expectedLineArray, actualLineArray);
     }
 
     [TestMethod]
@@ -1127,8 +1143,7 @@ public class DiffMatchPatchTests
     [TestMethod]
     public void PatchAddPaddingTest()
     {
-        IEnumerable<Patch<char>> patches;
-        patches = "".CreatePatches("test");
+        Rope<Patch<char>> patches = "".CreatePatches("test");
         AssertEquals("patch_addPadding: Both edges full.",
             "@@ -0,0 +1,4 @@\n+test\n",
             patches.ToPatchText());
@@ -1325,7 +1340,9 @@ public class DiffMatchPatchTests
         }
     }
 
-    private static void AssertEquals<TKey, TValue>(string error_msg, Dictionary<TKey, TValue> expected, Dictionary<TKey, TValue> actual) where TValue : IEquatable<TValue>
+    private static void AssertEquals<TKey, TValue>(string error_msg, Dictionary<TKey, TValue> expected, Dictionary<TKey, TValue> actual) 
+        where TKey : notnull 
+        where TValue : IEquatable<TValue>
     {
         foreach (var k in actual.Keys)
         {
