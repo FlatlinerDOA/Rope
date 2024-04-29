@@ -76,23 +76,14 @@ public static class RopeExtensions
 	/// <returns>A new rope or <see cref="Rope{T}.Empty"/> if the sequence is empty.</returns>
 	public static Rope<T> ToRope<T>(this IEnumerable<T> items) where T : IEquatable<T>
 	{
-		if (items is List<T> list)
-		{
-			ReadOnlySpan<T> span = CollectionsMarshal.AsSpan(list);
-			return Rope<T>.FromReadOnlySpan(ref span);
-		}
-
-        if (items is T[] array)
+        return items switch
         {
-            return new Rope<T>(array);
-        }
-
-        if (items is IReadOnlyList<T> readOnlyList)
-		{
-			return Rope<T>.FromReadOnlyList(readOnlyList);
-		}
-		
-		return Rope<T>.FromEnumerable(items);
+            Rope<T> rope => rope,
+            List<T> list => Rope<T>.FromList(list),
+            T[] array => new Rope<T>(array.AsMemory()),
+            IReadOnlyList<T> readOnlyList => Rope<T>.FromReadOnlyList(readOnlyList),
+            _ => Rope<T>.FromEnumerable(items)
+        };
 	}
 
 	/// <summary>
