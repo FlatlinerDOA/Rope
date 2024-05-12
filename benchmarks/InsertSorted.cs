@@ -10,13 +10,13 @@ namespace Benchmarks;
 public class InsertSorted
 {
     private static readonly Random random = new(42);
-    
+
     private static readonly long[] RandomLongs = Enumerable.Range(0, 65000).Select(s => random.NextInt64(32000)).ToArray();
 
     private static readonly float[] RandomFloats = Enumerable.Range(0, 65000).Select(s => random.NextSingle()).ToArray();
 
     [Benchmark]
-    public void AddRangeThenOrderLong() 
+    public void AddRangeThenOrderLong()
     {
         var rope = Rope<long>.Empty.AddRange(RandomLongs);
         var comparer = Comparer<long>.Default;
@@ -24,7 +24,7 @@ public class InsertSorted
     }
 
     [Benchmark]
-    public void InsertSortedLong() 
+    public void InsertSortedLong()
     {
         var rope = Rope<long>.Empty;
         var comparer = Comparer<long>.Default;
@@ -37,7 +37,7 @@ public class InsertSorted
     }
 
     [Benchmark]
-    public void PriorityQueueOfLong() 
+    public void PriorityQueueOfLong()
     {
         var comparer = Comparer<long>.Default;
         var queue = new PriorityQueue<long, long>(comparer);
@@ -50,7 +50,7 @@ public class InsertSorted
     }
 
     [Benchmark]
-    public void AddRangeThenOrderFloat() 
+    public void AddRangeThenOrderFloat()
     {
         var rope = Rope<float>.Empty.AddRange(RandomFloats);
         var comparer = Comparer<float>.Default;
@@ -58,7 +58,7 @@ public class InsertSorted
     }
 
     [Benchmark]
-    public void InsertSortedFloat() 
+    public void InsertSortedFloat()
     {
         var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
@@ -71,7 +71,7 @@ public class InsertSorted
     }
 
     [Benchmark]
-    public void PriorityQueueOfFloat() 
+    public void PriorityQueueOfFloat()
     {
         var comparer = Comparer<float>.Default;
         var queue = new PriorityQueue<long, float>(comparer);

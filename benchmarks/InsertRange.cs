@@ -7,7 +7,7 @@ namespace Benchmarks;
 
 [MemoryDiagnoser]
 public class InsertRange
-{ 
+{
     [Params(10, 100, 1000)]
     public int EditCount;
 

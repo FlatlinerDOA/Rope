@@ -1,8 +1,14 @@
+root = true
+
 [*.cs]
 
-# CA1806: Do not ignore method results
-dotnet_diagnostic.CA1806.severity = error
-[*.cs]
+# Indentation and spacing
+indent_size = 4
+indent_style = space
+tab_width = 4
+
+# this. and Me. preferences
+dotnet_style_qualification_for_method = true
 
 # CA1806: Do not ignore method results
 dotnet_diagnostic.CA1806.severity = error

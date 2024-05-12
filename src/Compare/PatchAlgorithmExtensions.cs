@@ -333,7 +333,7 @@ public static partial class PatchAlgorithmExtensions
     /// bool values for whether each patch was applied.</returns>
     [Pure]
     public static (Rope<char> Text, bool[] Applied) ApplyPatches(this Rope<Patch<char>> patches, Rope<char> text, PatchOptions options, DiffOptions<char>? diffOptions = null)
-    {        
+    {
         if (patches.Count == 0)
         {
             return (text, Array.Empty<bool>());

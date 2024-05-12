@@ -29,7 +29,7 @@ public class AddRangeImmutable
     {
         var s = ImmutableList<char>.Empty.ToBuilder();
         s.AddRange(BenchmarkData.LoremIpsum);
-        
+
         for (int i = 0; i < EditCount; i++)
         {
             s.AddRange(BenchmarkData.LoremIpsum);

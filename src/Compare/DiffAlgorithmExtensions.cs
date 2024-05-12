@@ -1287,7 +1287,7 @@ public static class DiffAlgorithmExtensions
 
         // First check if the second quarter is the seed for a half-match.
         var hm1OrNull = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 3) / 4);
-        
+
         // Check again based on the third quarter.
         var hm2OrNull = DiffHalfMatchAt(longtext, shorttext, (longtext.Length + 1) / 2);
 
@@ -1308,11 +1308,11 @@ public static class DiffAlgorithmExtensions
         {
             hm = hm2;
         }
-        else 
+        else
         {
             // Both null;
             return null;
-        }        
+        }
 
         // A half-match was found, sort out the return data.
         if (text1.Length > text2.Length)

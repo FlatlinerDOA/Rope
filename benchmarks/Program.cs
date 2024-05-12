@@ -13,7 +13,7 @@ namespace Benchmarks
         {
             var config = DefaultConfig.Instance.AddExporter(RPlotExporter.Default);
             var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
-            
+
             // var s = Stopwatch.StartNew();
             // var test = new DiffOnLongText();
 
