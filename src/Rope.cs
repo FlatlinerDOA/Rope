@@ -1961,51 +1961,52 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 	[Pure]
 	public readonly bool Equals(Rope<T> other)
 	{
-        if (this.Length != other.Length)
-        {
-            return false;
-        }
-
-        if (this.Length == 0)
-        {
-            // Both must be empty if lengths are equal.
-            return true;
-        }
-
-		if (this.data is ValueTuple<T> value && other.data is ValueTuple<T> otherValue)
+		return this.data switch
 		{
-			return value.Item1.Equals(otherValue.Item1);
+			ReadOnlyMemory<T> mem =>
+				other.data switch 
+				{
+					ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span),
+					_ => AlignedEquals(other)
+				},
+			ValueTuple<T> value => other.data is ValueTuple<T> otherValue && value.Item1.Equals(otherValue.Item1),
+			_ => AlignedEquals(other)
+		};
+	}
+	
+	private bool AlignedEquals(Rope<T> other) 
+	{
+		if (this.Length != other.Length)
+		{
+			return false;
 		}
 
-        if (this.data is ReadOnlyMemory<T> mem)
+		if (this.Length == 0)
 		{
-			if (other.data is ReadOnlyMemory<T> otherMem)
+			// Both must be empty if lengths are equal.
+			return true;
+		}
+		
+		var rentedBuffers = BufferPool.Rent(this.BufferCount);
+		var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
+		var buffers = rentedBuffers[..this.BufferCount];
+		var findBuffers = rentedFindBuffers[..other.BufferCount];
+		this.FillBuffers(buffers);
+		other.FillBuffers(findBuffers);
+		var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+		var matches = true;
+		while (aligned.MoveNext())
+		{
+			if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
 			{
-                return mem.Span.SequenceEqual(otherMem.Span);
-            }
+				matches = false;
+				break;
+			}
 		}
-
-        var rentedBuffers = BufferPool.Rent(this.BufferCount);
-        var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
-        var buffers = rentedBuffers[..this.BufferCount];
-        var findBuffers = rentedFindBuffers[..other.BufferCount];
-        this.FillBuffers(buffers);
-        other.FillBuffers(findBuffers);
-
-        var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
-        var matches = true;
-        while (aligned.MoveNext())
-        {
-            if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
-            {
-                matches = false;
-                break;
-            }
-        }
-
-        BufferPool.Return(rentedFindBuffers);
-        BufferPool.Return(rentedBuffers);
-        return matches;        
+		
+		BufferPool.Return(rentedFindBuffers);
+		BufferPool.Return(rentedBuffers);
+		return matches;
 	}
 	
 	/// <summary>

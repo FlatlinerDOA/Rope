@@ -64,7 +64,7 @@ A comparison could be drawn between a Rope and a StringBuilder as they use a ver
 |Create()|O(1)|O(N)|O(N)|O(1)|O(N)|O(N)|
 |this[]|O(log N)|O(log N)|O(1)|O(1)|O(log N)|O(1)|
 |Add|O(1) <sup>2.</sup>|O(log N)|O(1) <sup>3.</sup>|O(N) <sup>4.</sup>|O(log N)|O(N) <sup>4.</sup>|
-|Value-like Equality <sup>5.</sup>|✅|❌|❌|❌|❌|✅|
+|Value-like Equality <sup>5.</sup>|✅|❌|❌|❌|❌|❌|
 |More than 2 billion elements (long index)|✅|❌|❌|❌|❌|❌|
 
 * <sup>1.</sup> Thread safe as long as initial Array is not modified.
