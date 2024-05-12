@@ -137,24 +137,21 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 
 ![Equals](https://raw.githubusercontent.com/FlatlinerDOA/Rope/main/benchmarks/results/Benchmarks.Equals-barplot.png)
 
-| Method               | Length | Mean        | Error      | StdDev    | Gen0   | Gen1   | Allocated |
-|--------------------- |------- |------------:|-----------:|----------:|-------:|-------:|----------:|
-| **Rope&lt;char&gt;**           | **10**     |    **66.58 ns** |   **8.974 ns** |  **0.492 ns** | **0.0430** |      **-** |     **720 B** |
-| StringBuilder        | 10     |    24.05 ns |  11.899 ns |  0.652 ns | 0.0120 |      - |     200 B |
-| string               | 10     |    11.99 ns |  13.890 ns |  0.761 ns | 0.0057 |      - |      96 B |
-| ImmutableArray&lt;char&gt; | 10     |    17.72 ns |  25.409 ns |  1.393 ns | 0.0086 |      - |     144 B |
-| **Rope&lt;char&gt;**           | **100**    |    **66.47 ns** |  **56.171 ns** |  **3.079 ns** | **0.0430** |      **-** |     **720 B** |
-| StringBuilder        | 100    |    44.67 ns |  41.547 ns |  2.277 ns | 0.0430 |      - |     720 B |
-| string               | 100    |    26.00 ns |  26.173 ns |  1.435 ns | 0.0268 |      - |     448 B |
-| ImmutableArray&lt;char&gt; | 100    |    38.66 ns |  24.275 ns |  1.331 ns | 0.0401 |      - |     672 B |
-| **Rope&lt;char&gt;**           | **1000**   |    **65.25 ns** |  **17.280 ns** |  **0.947 ns** | **0.0430** |      **-** |     **720 B** |
-| StringBuilder        | 1000   |   226.24 ns | 287.821 ns | 15.776 ns | 0.3657 | 0.0017 |    6120 B |
-| string               | 1000   |   142.99 ns |  40.730 ns |  2.233 ns | 0.2418 | 0.0007 |    4048 B |
-| ImmutableArray&lt;char&gt; | 1000   |   174.36 ns | 113.869 ns |  6.242 ns | 0.3629 | 0.0026 |    6072 B |
-| **Rope&lt;char&gt;**           | **10000**  |    **64.06 ns** |   **9.360 ns** |  **0.513 ns** | **0.0430** |      **-** |     **720 B** |
-| StringBuilder        | 10000  | 2,099.27 ns | 512.631 ns | 28.099 ns | 3.5858 | 0.1678 |   60120 B |
-| string               | 10000  | 1,508.18 ns | 232.180 ns | 12.727 ns | 2.3880 | 0.0839 |   40048 B |
-| ImmutableArray&lt;char&gt; | 10000  | 1,677.52 ns | 471.568 ns | 25.848 ns | 3.5839 |      - |   60072 B |
+| Method        | Length | Mean       | Error     | StdDev    | Allocated |
+|-------------- |------- |-----------:|----------:|----------:|----------:|
+| **Rope&lt;char&gt;**    | **10**     |   **4.683 ns** | **0.0831 ns** | **0.0694 ns** |         **-** |
+| StringBuilder | 10     |   5.094 ns | 0.0441 ns | 0.0391 ns |         - |
+| string        | 10     |   2.155 ns | 0.0129 ns | 0.0107 ns |         - |
+| **Rope&lt;char&gt;**    | **100**    |   **4.659 ns** | **0.0323 ns** | **0.0270 ns** |         **-** |
+| StringBuilder | 100    |   6.402 ns | 0.0521 ns | 0.0487 ns |         - |
+| string        | 100    |   4.050 ns | 0.0206 ns | 0.0193 ns |         - |
+| **Rope&lt;char&gt;**    | **1000**   |   **4.653 ns** | **0.0364 ns** | **0.0323 ns** |         **-** |
+| StringBuilder | 1000   |  27.302 ns | 0.0866 ns | 0.0810 ns |         - |
+| string        | 1000   |  28.123 ns | 0.0802 ns | 0.0750 ns |         - |
+| **Rope&lt;char&gt;**    | **10000**  |   **4.600 ns** | **0.0124 ns** | **0.0116 ns** |         **-** |
+| StringBuilder | 10000  | 265.757 ns | 0.5245 ns | 0.4907 ns |         - |
+| string        | 10000  | 275.796 ns | 0.4692 ns | 0.4160 ns |         - |
+
 
 ## Performance - IndexOf
 
