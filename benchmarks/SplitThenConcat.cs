@@ -12,19 +12,6 @@ public class SplitThenConcat
     public int EditCount;
 
     [Benchmark]
-    public void ListOfChar()
-    {
-        var s = new List<char>(BenchmarkData.LoremIpsum);
-        for (int i = 0; i < EditCount; i++)
-        {
-            s.RemoveRange(321, s.Count - 322); //  =  new StringBuilder(s.ToString()[..321]);
-            s.AddRange(BenchmarkData.LoremIpsum);
-        }
-
-        ////s.ToString();
-    }
-
-    [Benchmark]
     public void RopeOfChar()
     {
         var lorem = BenchmarkData.LoremIpsum.ToRope();
@@ -46,6 +33,19 @@ public class SplitThenConcat
         {
             s.Remove(321, s.Length - 322); //  =  new StringBuilder(s.ToString()[..321]);
             s.Append(BenchmarkData.LoremIpsum);
+        }
+
+        ////s.ToString();
+    }
+
+    [Benchmark]
+    public void ListOfChar()
+    {
+        var s = new List<char>(BenchmarkData.LoremIpsum);
+        for (int i = 0; i < EditCount; i++)
+        {
+            s.RemoveRange(321, s.Count - 322); //  =  new StringBuilder(s.ToString()[..321]);
+            s.AddRange(BenchmarkData.LoremIpsum);
         }
 
         ////s.ToString();
