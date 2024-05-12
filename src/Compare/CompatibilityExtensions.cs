@@ -3,6 +3,9 @@
 * Copyright 2018 The diff-match-patch Authors.
 * https://github.com/google/diff-match-patch
 *
+* Copyright 2024 Andrew Chisholm (FlatlinerDOA).
+* https://github.com/FlatlinerDOA/Rope
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
@@ -27,46 +30,6 @@ using System.Web;
 
 public static class CompatibilityExtensions
 {
-    private static readonly UrlEncoder DiffEncoder = new DiffUrlEncoder();
-
-    // JScript splice function
-    [Pure]
-    public static (Rope<T> Deleted, Rope<T> Result) Splice<T>(this Rope<T> input, int start, int count, params T[] objects) where T : IEquatable<T>
-    {
-        var deletedRange = input.Slice(start, count);
-        input = input.RemoveRange(start, count);
-        input = input.InsertRange(start, new Rope<T>(objects.AsMemory()));
-        return (deletedRange, input);
-    }
-
-    // Java substring function
-    [Pure]
-    public static string JavaSubstring(this string s, int begin, int end) => s.Substring(begin, end - begin);
-
-    [Pure]
-    public static Rope<char> JavaSubstring(this Rope<char> s, long begin, long end) => s.Slice(begin, end - begin);
-
-    [Pure]
-    public static Rope<char> Replace(this Rope<char> s, string replace, string with) => s.Replace(replace.ToRope(), with.ToRope());
-    
-    [Pure]
-    public static Rope<char> Append(this Rope<char> s, string append) => s.AddRange(append.ToRope());
-
-    [Pure]
-    public static ReadOnlyMemory<char> JavaSubstring(this ReadOnlyMemory<char> s, int begin, int end) => s.Slice(begin, end - begin);
-
-    [Pure]
-    public static Rope<T> Concat<T>(this Rope<T> source, Rope<T> append) where T : IEquatable<T> => source.AddRange(append);
-
-    [Pure]
-    public static ReadOnlyMemory<T> Concat<T>(this ReadOnlyMemory<T> source, ReadOnlyMemory<T> append)
-    {
-        var mem = new T[source.Length + append.Length];
-        source.CopyTo(mem[0..source.Length]);
-        append.CopyTo(mem[source.Length..]);
-        return mem.AsMemory();
-    }
-
     private static readonly Rope<char> BlankLineStart1 = "\r\n\r\n".ToRope();
     private static readonly Rope<char> BlankLineStart2 = "\n\n".ToRope();
     private static readonly Rope<char> BlankLineStart3 = "\r\n\n".ToRope();
@@ -74,6 +37,49 @@ public static class CompatibilityExtensions
 
     private static readonly Rope<char> BlankLineEnd1 = "\n\n".ToRope();
     private static readonly Rope<char> BlankLineEnd2 = "\n\r\n".ToRope();
+
+    private static readonly UrlEncoder DiffEncoder = new DiffUrlEncoder();
+
+    /// <summary>
+    /// JScript splice function, removes elements and optionally inserts elements in one operation.
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the sequence.</typeparam>
+    /// <param name="input">input sequence.</param>
+    /// <param name="start">Start Index</param>
+    /// <param name="count">Number of elements to remove.</param>
+    /// <param name="insertItems">Elements to be inserted.</param>
+    /// <returns>A tuple of deleted items and the resulting sequence.</returns>
+    [Pure]
+    public static (Rope<T> Deleted, Rope<T> Result) Splice<T>(this Rope<T> input, int start, int count, params T[] insertItems) where T : IEquatable<T>
+    {
+        var deletedRange = input.Slice(start, count);
+        input = input.RemoveRange(start, count);
+        input = input.InsertRange(start, new Rope<T>(insertItems.AsMemory()));
+        return (deletedRange, input);
+    }
+
+    /// <summary>
+    /// Java substring function 
+    /// </summary>
+    /// <typeparam name="T">The type of elements in the sequence.</typeparam>
+    /// <param name="input">Input sequence.</param>
+    /// <param name="begin">Start index</param>
+    /// <param name="end">End index</param>
+    /// <returns></returns>
+    [Pure]
+    public static Rope<T> JavaSubstring<T>(this Rope<T> input, long begin, long end) where T : IEquatable<T> => input.Slice(begin, end - begin);
+
+    /// <summary>
+    /// Alias for <see cref="Rope{T}.AddRange(Rope{T})"/> to aid in replacing StringBuilder.
+    /// </summary>
+    /// <param name="input">Input sequence.</param>
+    /// <param name="append">String to append.</param>
+    /// <returns>New sequence.</returns>
+    [Pure]
+    public static Rope<char> Append(this Rope<char> input, string append) => input.AddRange(append.ToRope());
+
+    [Pure]
+    public static Rope<T> Concat<T>(this Rope<T> source, Rope<T> append) where T : IEquatable<T> => source.AddRange(append);
 
     [Pure]
     public static bool IsBlankLineStart(this Rope<char> str) =>
@@ -93,19 +99,18 @@ public static class CompatibilityExtensions
     [Pure]
     public static Rope<char> DiffDecode(this Rope<char> str) => HttpUtility.UrlDecode(str.Replace("+", "%2B").ToString()).ToRope(); // decode would change all "+" to " "
 
-
     /// <summary>
-    /// Encodes a string with a very cut down URI-style % escaping.
+    /// Encodes a sequence with a very cut down URI-style % escaping.
     /// Compatible with JavaScript's EncodeURI function.
     /// </summary>
-    /// <param name="str">The string to encode.</param>
+    /// <param name="items">The sequence to convert to strings and encode.</param>
     /// <returns>The encoded string.</returns>
     [Pure]
-    public static Rope<char> DiffEncode(this Rope<char> str) => DiffEncoder.Encode(str.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
+    public static Rope<char> DiffEncode<T>(this Rope<T> items) where T : IEquatable<T> => DiffEncoder.Encode(items.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
 
     /// <summary>
     /// C# is overzealous in the replacements. Walk back on a few.
-    /// This is ok for <see cref="Diff"/> deltas because they are output to text with a length based prefix.
+    /// This is Ok for <see cref="Diff{T}"/> deltas because they are output to text with a length based prefix.
     /// </summary>
     private sealed class DiffUrlEncoder : UrlEncoder
     {

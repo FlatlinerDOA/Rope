@@ -340,9 +340,8 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 [[Category:Journal Register publications|*]]
 """;
 
-    public static readonly Rope<char> LongDiffText1 = LongDiffText1String.ToRope();    
-    
-    public static readonly Rope<char> LongDiffText2 = """
+    public static readonly Rope<char> LongDiffText1 = LongDiffText1String.ToRope();
+    public const string LongDiffText2String = """
 This is a '''list of newspapers published by [[Journal Register Company]]'''.
 
 The company owns daily and weekly newspapers, other print media properties and newspaper-affiliated local Websites in the [[U.S.]] states of [[Connecticut]], [[Michigan]], [[New York]], [[Ohio]], [[Pennsylvania]] and [[New Jersey]], organized in six geographic "clusters":<ref>[http://www.journalregister.com/publications.html Journal Register Company: Our Publications], accessed April 21, 2010.</ref>
@@ -531,9 +530,10 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 <references />
 
 [[Category:Journal Register publications|*]]
-""".ToRope();
+""";
 
 
+    public static readonly Rope<char> LongDiffText2 =LongDiffText2String.ToRope();
     public static readonly string ShortDiffText1 = string.Concat(Enumerable.Range(0, 10).Select(t => "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n"));
 
     public static readonly string ShortDiffText2 = string.Concat(Enumerable.Range(0, 10).Select(t => "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n"));

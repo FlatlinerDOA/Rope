@@ -1,26 +1,48 @@
-﻿namespace Rope.Compare;
+﻿/*
+* Diff Match and Patch
+* Copyright 2018 The diff-match-patch Authors.
+* https://github.com/google/diff-match-patch
+*
+* Copyright 2024 Andrew Chisholm (FlatlinerDOA).
+* https://github.com/FlatlinerDOA/Rope
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+* 
+*/
+
+namespace Rope.Compare;
 
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using static System.Net.Mime.MediaTypeNames;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
+/// <summary>
+/// Series of extensions on a sequence of <see cref="Diff{T}"/> operations.
+/// </summary>
 public static class DiffExtensions
 {
-
     /// <summary>
     /// Convert a Diff list into a pretty HTML report.
     /// </summary>
     /// <param name="diffs">List of Diff objects.</param>
     /// <returns>HTML string representation of the diff.</returns>
     [Pure]
-    public static Rope<char> ToHtmlReport(this IEnumerable<Diff> diffs)
+    public static Rope<char> ToHtmlReport<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T>
     {
         var html = Rope<char>.Empty;
-        foreach (Diff aDiff in diffs)
+        foreach (Diff<T> aDiff in diffs)
         {
-            var text = aDiff.Text
+            var text = aDiff.Text.SelectMany(c => c.ToString() ?? string.Empty).ToRope()
                 .Replace("&".ToRope(), "&amp;".ToRope())
                 .Replace("<".ToRope(), "&lt;".ToRope())
                 .Replace(">".ToRope(), "&gt;".ToRope())
@@ -49,40 +71,118 @@ public static class DiffExtensions
     }
 
     /// <summary>
-    /// Compute and return the source text(all equalities and deletions).
+    /// Compute and return the source text from a list of diff operations.
+    /// Includes all equalities and deletions.
     /// </summary>
     /// <param name="diffs">List of Diff objects</param>
     /// <returns>Source text.</returns>
     [Pure]
-    public static Rope<char> ToSourceText(this IEnumerable<Diff> diffs)
+    public static Rope<T> ToSource<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
+            (from aDiff in diffs
+             where aDiff.Operation != Operation.INSERT
+             select aDiff.Text).Combine();      
+
+    /// <summary>
+    /// Compute and return the target text from a list of diff operations.
+    /// Includes all equalities and insertions.
+    /// </summary>
+    /// <param name="diffs">List of Diff objects</param>
+    /// <returns>Target text.</returns>
+    [Pure]
+    public static Rope<T> ToTarget<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
+        (from aDiff in diffs
+         where aDiff.Operation != Operation.DELETE
+         select aDiff.Text).Combine();
+
+    /// <summary>
+    /// Compute and return the source and target texts from a list of diff operations.
+    /// Includes all equalities and deletions in the source, and all equalities and insertions
+    /// in the target.
+    /// </summary>
+    /// <param name="diffs">List of Diff objects</param>
+    /// <returns>Both the Source and Target text.</returns>
+    public static (Rope<T> Source, Rope<T> Target) ToSourceAndTarget<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
+        (diffs.ToSource(), diffs.ToTarget());
+
+    /// <summary>
+    /// Given an index in the source, compute and return the equivalent index in target in terms of the diffs.
+    /// e.g. "The cat" vs "The big cat", 1->1, 5->8
+    /// </summary>
+    /// <param name="diffs">List of Diff objects.</param>
+    /// <param name="sourceIndex">Location within sourceText.</param>
+    /// <returns>Location within text2.</returns>
+    [Pure]
+    public static long TranslateToTargetIndex<T>(this IEnumerable<Diff<T>> diffs, long sourceIndex) where T : IEquatable<T>
     {
-        var text = Rope<char>.Empty;
-        foreach (Diff aDiff in diffs)
+        long chars1 = 0;
+        long chars2 = 0;
+        long last_chars1 = 0;
+        long last_chars2 = 0;
+        Diff<T> lastDiff = default;
+        foreach (var aDiff in diffs)
         {
             if (aDiff.Operation != Operation.INSERT)
             {
-                text = text.AddRange(aDiff.Text);
+                // Equality or deletion.
+                chars1 += aDiff.Text.Length;
             }
+            if (aDiff.Operation != Operation.DELETE)
+            {
+                // Equality or insertion.
+                chars2 += aDiff.Text.Length;
+            }
+            if (chars1 > sourceIndex)
+            {
+                // Overshot the location.
+                lastDiff = aDiff;
+                break;
+            }
+            last_chars1 = chars1;
+            last_chars2 = chars2;
         }
 
-        return text;
+        if (lastDiff != default && lastDiff.Operation == Operation.DELETE)
+        {
+            // The location was deleted.
+            return last_chars2;
+        }
+
+        // Add the remaining character length.
+        return last_chars2 + (sourceIndex - last_chars1);
     }
 
     /// <summary>
-    /// Compute and return the destination text (all equalities and insertions).
+    /// Crush the diff into an encoded string which describes the operations
+    /// required to transform source into target.
+    /// E.g. =3\t-2\t+ing  -> Keep 3 chars, delete 2 chars, insert 'ing'.
+    /// Operations are tab-separated. Inserted text is escaped using %xx Url-like encoding notation.
     /// </summary>
-    /// <param name="diffs">List of Diff objects</param>
-    /// <returns>Destination text.</returns>
+    /// <param name="diffs">Array of Diff objects.</param>
+    /// <returns>Delta text.</returns>
     [Pure]
-    public static Rope<char> ToDestinationText(this IEnumerable<Diff> diffs)
+    public static Rope<char> ToDelta<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T>
     {
         var text = Rope<char>.Empty;
-        foreach (Diff aDiff in diffs)
+        foreach (var aDiff in diffs)
         {
-            if (aDiff.Operation != Operation.DELETE)
+            switch (aDiff.Operation)
             {
-                text = text.AddRange(aDiff.Text);
+                case Operation.INSERT:
+                    text = text.Append("+").AddRange(aDiff.Text.DiffEncode()).Append("\t");
+                    break;
+                case Operation.DELETE:
+                    text = text.Append("-").Append(aDiff.Text.Length.ToString()).Append("\t");
+                    break;
+                case Operation.EQUAL:
+                    text = text.Append("=").Append(aDiff.Text.Length.ToString()).Append("\t");
+                    break;
             }
+        }
+
+        if (text.Length != 0)
+        {
+            // Strip off trailing tab character.
+            text = text.Slice(0, text.Length - 1);
         }
 
         return text;
@@ -95,12 +195,12 @@ public static class DiffExtensions
     /// <param name="diffs">List of Diff objects.</param>
     /// <returns>Number of changes.</returns>
     [Pure]
-    public static long CalculateEditDistance(this IEnumerable<Diff> diffs)
+    public static long CalculateEditDistance<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T>
     {
         long levenshtein = 0;
         long insertions = 0;
         long deletions = 0;
-        foreach (Diff aDiff in diffs)
+        foreach (var aDiff in diffs)
         {
             switch (aDiff.Operation)
             {

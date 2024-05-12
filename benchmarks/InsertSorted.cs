@@ -16,7 +16,15 @@ public class InsertSorted
     private static readonly float[] RandomFloats = Enumerable.Range(0, 65000).Select(s => random.NextSingle()).ToArray();
 
     [Benchmark]
-    public void RopeOfLong() 
+    public void AddRangeThenOrderLong() 
+    {
+        var rope = Rope<long>.Empty.AddRange(RandomLongs);
+        var comparer = Comparer<long>.Default;
+        _ = rope.Order(comparer).First();
+    }
+
+    [Benchmark]
+    public void InsertSortedLong() 
     {
         var rope = Rope<long>.Empty;
         var comparer = Comparer<long>.Default;
@@ -24,20 +32,33 @@ public class InsertSorted
         {
             rope = rope.InsertSorted(RandomLongs[i], comparer);
         }
+
+        _ = rope[0];
     }
 
     [Benchmark]
     public void PriorityQueueOfLong() 
     {
-        var queue = new PriorityQueue<long, long>();
+        var comparer = Comparer<long>.Default;
+        var queue = new PriorityQueue<long, long>(comparer);
         for (int i = 0; i < RandomLongs.Length; i++)
         {
             queue.Enqueue(i, RandomLongs[i]);
         }
+
+        queue.Dequeue();
     }
 
     [Benchmark]
-    public void RopeOfFloat() 
+    public void AddRangeThenOrderFloat() 
+    {
+        var rope = Rope<float>.Empty.AddRange(RandomFloats);
+        var comparer = Comparer<float>.Default;
+        _ = rope.Order(comparer).First();
+    }
+
+    [Benchmark]
+    public void InsertSortedFloat() 
     {
         var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
@@ -45,15 +66,20 @@ public class InsertSorted
         {
             rope = rope.InsertSorted(RandomFloats[i], comparer);
         }
+
+        _ = rope[0];
     }
 
     [Benchmark]
     public void PriorityQueueOfFloat() 
     {
-        var queue = new PriorityQueue<long, float>();
+        var comparer = Comparer<float>.Default;
+        var queue = new PriorityQueue<long, float>(comparer);
         for (int i = 0; i < RandomFloats.Length; i++)
         {
             queue.Enqueue(i, RandomFloats[i]);
         }
+
+        queue.Dequeue();
     }
 }

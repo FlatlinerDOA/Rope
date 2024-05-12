@@ -14,23 +14,45 @@ using System.Diagnostics.Contracts;
 using System.Diagnostics;
 using System.Text;
 using System.Buffers;
+using Rope.Compare;
+using System.Runtime.InteropServices;
+
+public enum RopeSplitOptions
+{
+	/// <summary>
+	/// Excludes the separator from the results, includes empty results.
+	/// </summary>
+	None = 0,
+
+    /// <summary>
+    /// Excludes the separator and excludes empty results.
+    /// </summary>
+    RemoveEmpty = 1,
+
+    /// <summary>
+    /// Includes the separator at the end of each result (except the last), empty results are not possible.
+    /// </summary>
+    SplitAfterSeparator = 2,
+
+    /// <summary>
+    /// Includes the separator at the start of each result (except the first), empty results are not possible.
+    /// </summary>
+    SplitBeforeSeparator = 3,
+}
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
-public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
+public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
-	private static readonly ArrayPool<ReadOnlyMemory<T>> BufferPool = ArrayPool<ReadOnlyMemory<T>>.Create(128, 16);
+    private static readonly ArrayPool<ReadOnlyMemory<T>> BufferPool = ArrayPool<ReadOnlyMemory<T>>.Create(128, 16);
+
+    private readonly record struct RopeNode(Rope<T> left, Rope<T> right);
 
     /// <summary>
     /// Maximum tree depth allowed.
     /// </summary>
     public const int MaxTreeDepth = 46;
-
-	/// <summary>
-	/// Maximum number of bytes before the GC basically chucks our buffers on the garbage heap.
-	/// </summary>
-	public const int LargeObjectHeapBytes = 85_000 - 24;
 
 	/// <summary>
 	/// Defines the maximum depth descrepancy between left and right to cause a re-split of one side when balancing.
@@ -45,7 +67,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
 	/// This is calculated to never require Large Object Heap allocations.
 	/// </summary>
-	public static readonly int MaxLeafLength = LargeObjectHeapBytes / Unsafe.SizeOf<T>();
+	public static readonly int MaxLeafLength = RopeExtensions.CalculateAlignedBufferLength<T>();
 
 	/// <summary>
 	/// Gets the maximum number of elements any rope can have. 
@@ -69,39 +91,52 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// </summary>
 	private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, MaxTreeDepth).Select(d => Fibonnaci(d) + 2).ToArray();
 
-	/// <summary>Left slice of the raw buffer</summary>
-	private readonly Rope<T>? left;
-
-	/// <summary>Right slice of the raw buffer (null if a leaf node.)</summary>
-	private readonly Rope<T>? right;
-
-	/// <summary>Data is the raw underlying buffer, or a cached copy of the ToMemory call (for efficiency).</summary>
-	private readonly ReadOnlyMemory<T> data;
+	private readonly object data;
 
 	/// <summary>
 	/// Creates a new instance of Rope{T}. Use Empty instead.
 	/// </summary>
-	private Rope()
+	public Rope()
 	{
 		// Empty rope is just a leaf node.
 		this.data = ReadOnlyMemory<T>.Empty;
 		this.IsBalanced = true;
-	}
+        this.BufferCount = 1;
+    }
 
-	/// <summary>
-	/// Creates a new instance of Rope{T}.
-	/// </summary>
-	/// <param name="data">The data to wrap in a leaf node.</param>
-	public Rope(ReadOnlyMemory<T> data)
+    public Rope(T value)
+    {
+        // Single value needs to be ValueTuple to be able to hold nullable references.
+        this.data = ValueTuple.Create(value);
+        this.IsBalanced = true;
+		this.Length = 1;
+        this.BufferCount = 1;
+    }
+
+	// TODO: Try two element, and maybe three element tuples.
+    //public Rope(T a, T b)
+    //{
+    //    // Two values is just a leaf node.
+    //    this.data = ValueTuple.Create(a, b);
+    //    this.IsBalanced = true;
+    //    this.Length = 2;
+    //    this.BufferCount = 1;
+    //}
+
+    /// <summary>
+    /// Creates a new instance of Rope{T}.
+    /// </summary>
+    /// <param name="data">The data to wrap in a leaf node.</param>
+    public Rope(ReadOnlyMemory<T> data)
 	{
 		// NOTE: Previously we would split the rope immediately, it has been determined through benchmarking that
 		// this is only really necessary when performing edits. In most cases it is best to just wrap the memory
 		// and then decide how to split that memory, based on the edit required.
 
 		// Always initialize a leaf node when given memory directly.
-		this.data = data;
+		this.data = data.Length == 1 ? ValueTuple.Create(data.Span[0]) : data;
 		this.IsBalanced = true;
-		this.Length = this.data.Length;
+		this.Length = data.Length;
 		this.BufferCount = 1;
 	}
 
@@ -111,84 +146,119 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="left">The left child node.</param>
 	/// <param name="right">The right child node.</param>
 	/// <exception cref="ArgumentNullException">Thrown if either the left or right node is null.</exception>
-	public Rope(Rope<T> left, Rope<T> right)
+	internal Rope(Rope<T> left, Rope<T> right)
 	{
-		if (ReferenceEquals(left, null))
-		{
-			throw new ArgumentNullException(nameof(left));
-		}
-
-		if (ReferenceEquals(right, null))
-		{
-			throw new ArgumentNullException(nameof(right));
-		}
-
 		if (right.Length == 0)
 		{
-			if (left.IsNode)
+			if (left.data is RopeNode leftNode)
 			{
-				this.left = left.left;
-				this.right = left.right;
-				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+				var node = leftNode;
+				this.data = node;
+				this.Depth = Math.Max(node.left.Depth, node.right.Depth) + 1;
 				this.Length = left.Length;
-                this.BufferCount = this.left.BufferCount + this.right.BufferCount;
-                this.IsBalanced = this.CalculateIsBalanced();
+				this.BufferCount = node.left.BufferCount + node.right.BufferCount;
+				this.IsBalanced = CalculateIsBalanced(this.Length, this.Depth);
 			}
-			else
+			else if (left.data is ReadOnlyMemory<T> leftData)
 			{
-				this.data = left.data;
-                this.BufferCount = 1;
-                this.Length = this.data.Length;
+				if (leftData.Length == 1)
+				{
+					this.data = ValueTuple.Create(leftData.Span[0]);
+				}
+				else
+				{
+					this.data = leftData;
+				}
+
+				this.BufferCount = 1;
+				this.Length = leftData.Length;
 				this.IsBalanced = true;
 			}
-		}
-		else if (left.Length == 0)
+			else if (left.data is ValueTuple<T> value)
+			{
+				this.data = value;
+                this.BufferCount = 1;
+                this.Length = 1;
+                this.IsBalanced = true;
+            }
+            else
+            {
+                this.data = ReadOnlyMemory<T>.Empty;
+                this.IsBalanced = true;
+            }
+        }
+        else if (left.Length == 0)
 		{
-			if (right.IsNode)
-			{
-				this.left = right.left;
-				this.right = right.right;
-				this.Depth = Math.Max(this.left.Depth, this.right.Depth) + 1;
+			if (right.data is RopeNode rightNode)
+            {
+				this.data = new RopeNode(rightNode.left, rightNode.right);
+				this.Depth = Math.Max(rightNode.left.Depth, rightNode.right.Depth) + 1;
                 this.Length = right.Length;
-                this.BufferCount = this.left.BufferCount + this.right.BufferCount;
-                this.IsBalanced = this.CalculateIsBalanced();
-			}
+                this.BufferCount = rightNode.left.BufferCount + rightNode.right.BufferCount;
+                this.IsBalanced = CalculateIsBalanced(this.Length, this.Depth);
+            }
+			else if (right.data is ValueTuple<T> value)
+            {
+                this.data = value;
+                this.BufferCount = 1;
+                this.Length = 1;
+                this.IsBalanced = true;
+            }
+			else if (right.data is ReadOnlyMemory<T> rightData)
+            {
+                if (rightData.Length == 1)
+                {
+                    this.data = ValueTuple.Create(rightData.Span[0]);
+                }
+                else
+                {
+                    this.data = rightData;
+                }
+
+                this.BufferCount = 1;
+                this.Length = rightData.Length;
+				this.IsBalanced = true;
+            }
 			else
 			{
-				this.data = right.data;
-                this.BufferCount = 1;
-                this.Length = this.data.Length;
-				this.IsBalanced = true;
-			}
-		}
+                this.data = ReadOnlyMemory<T>.Empty;
+                this.IsBalanced = true;
+            }
+        }
 		else
 		{
-			this.data = ReadOnlyMemory<T>.Empty;
-			this.left = left;
-			this.right = right;
+			this.data = new RopeNode(left, right);
 			this.Depth = Math.Max(left.Depth, right.Depth) + 1;
-            this.Length = this.left.Length + this.right.Length;
-            this.BufferCount = this.left.BufferCount + this.right.BufferCount;
-            this.IsBalanced = this.CalculateIsBalanced();
+			Debug.Assert(this.Depth < MaxTreeDepth, "Too deep!");
+            this.Length = left.Length + right.Length;
+            this.BufferCount = left.BufferCount + right.BufferCount;
+            this.IsBalanced = CalculateIsBalanced(this.Length, this.Depth);
 
-			// if (newDepth > MaxTreeDepth)
-			// {
-			// 	// This is the only point at which we are actually increasing the depth beyond the limit, this is where a re-balance may be necessary.
-			// 	this.left = left.Balanced();
-			// 	this.right = right.Balanced();
-			// 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
-			// }
-		}
+            // if (newDepth > MaxTreeDepth)
+            // {
+            // 	// This is the only point at which we are actually increasing the depth beyond the limit, this is where a re-balance may be necessary.
+            // 	this.left = left.Balanced();
+            // 	this.right = right.Balanced();
+            // 	this.Depth =  Math.Max(this.left.Depth, this.right.Depth) + 1;
+            // }
+        }
+
+		Debug.Assert(this.data is ReadOnlyMemory<T> or RopeNode or ValueTuple<T>, "Bad data type");
 	}
 
-	public T this[long index] => this.ElementAt(index);
+	public readonly T this[long index] => this.ElementAt(index);
 
 	/// <summary>
-	/// Gets a range of elements in the form of a new instance of <see cref="Rope{T}"/>.
+	/// Defines how many leaf node buffers this rope contains.
 	/// </summary>
-	/// <param name="range">The range to select.</param>
-	/// <returns>A new rope instance if the slice does not cover the entire sequence, otherwise returns the original instance.</returns>
-	public Rope<T> this[Range range]
+    public int BufferCount { get; }
+
+    /// <summary>
+    /// Gets a range of elements in the form of a new instance of <see cref="Rope{T}"/>.
+    /// </summary>
+    /// <param name="range">The range to select.</param>
+    /// <returns>A new rope instance if the slice does not cover the entire sequence, otherwise returns the original instance.</returns>
+    public readonly Rope<T> this[Range range]
 	{
 		get
 		{
@@ -200,19 +270,17 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <summary>
 	/// Gets the left or prefix branch of the rope. May be null if this is a leaf node.
 	/// </summary>
-	public Rope<T>? Left => this.left;
+	public Rope<T>? Left => this.data is RopeNode n ? n.left : default;
 
 	/// <summary>
 	/// Gets the right or suffix branch of the rope. May be null if this is a leaf node.
 	/// </summary>
-	public Rope<T>? Right => this.right;
+	public Rope<T>? Right => this.data is RopeNode n ? n.right : default;
 
 	/// <summary>
 	/// Gets a value indicating whether this is a Node and Left and Right will be non-null, 
 	/// otherwise it is a leaf and just wraps a slice of read only memory.
 	/// </summary>
-	[MemberNotNullWhen(true, nameof(this.left))]
-	[MemberNotNullWhen(true, nameof(this.right))]
 	[MemberNotNullWhen(true, nameof(this.Left))]
 	[MemberNotNullWhen(true, nameof(this.Right))]
 	public bool IsNode => this.Depth != 0;
@@ -220,7 +288,12 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <summary>
 	/// Gets the length of the left Node if this is a node (the split-point essentially), otherwise the length of the data. 
 	/// </summary>
-	public long Weight => this.left?.Length ?? this.data.Length;
+	public long Weight => this.data switch
+	{
+        ValueTuple<T> => 1,
+        RopeNode n => n.left.Length,
+		ReadOnlyMemory<T> m => m.Length, _ => 0
+	};
 
 	/// <summary>
 	/// Gets the length of the rope in terms of the number of elements it contains.
@@ -244,20 +317,15 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <returns>The element at the specified index.</returns>
 	/// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
 	[Pure]
-	public T ElementAt(long index)
-	{
-		if (this.IsNode)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly T ElementAt(long index) =>
+		this.data switch
 		{
-			if (this.left.Length <= index)
-			{
-				return this.right.ElementAt(index - this.left.Length);
-			}
-
-			return this.left.ElementAt(index);
-		}
-
-		return this.data.Span[(int)index];
-	}
+			ValueTuple<T> value => index == 0 ? value.Item1 : throw new IndexOutOfRangeException(nameof(index)),
+            ReadOnlyMemory<T> memory => memory.Span[(int)index],
+            RopeNode node => node.left.Length <= index ? node.right.ElementAt(index - node.left.Length) : node.left.ElementAt(index),
+			_ => throw new IndexOutOfRangeException(nameof(index)),
+		};
 
 	/// <summary>
 	/// Gets an enumerable of slices of this rope, splitting by the given separator element.
@@ -265,7 +333,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="separator">The element to separate by, this element will never be included in the returned sequence.</param>
 	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
 	[Pure]
-	public IEnumerable<Rope<T>> Split(T separator)
+	public readonly IEnumerable<Rope<T>> Split(T separator)
 	{
 		Rope<T> remainder = this;
 		do
@@ -289,61 +357,95 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// Gets an enumerable of slices of this rope, splitting by the given separator sequence.
 	/// </summary>
 	/// <param name="separator">The sequence of elements to separate by, this sequenece will never be included in the returned sequence.</param>
+	/// <param name="options">Optional settings for how to deal with the separator itself.</param>
 	/// <returns>Zero or more ropes splitting the rope by it's separator.</returns>
 	[Pure]
-	public IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator)
+	public readonly IEnumerable<Rope<T>> Split(ReadOnlyMemory<T> separator, RopeSplitOptions options = RopeSplitOptions.None)
 	{
 		Rope<T> remainder = this;
 		do
 		{
 			var i = remainder.IndexOf(separator);
-
 			if (i != -1)
 			{
-				yield return remainder.Slice(0, i);
-				remainder = remainder.Slice(i + separator.Length);
+				var chunk = remainder.Slice(
+					0,
+                    options switch
+                    {
+                        RopeSplitOptions.None => i,
+                        RopeSplitOptions.SplitBeforeSeparator => i,
+                        RopeSplitOptions.SplitAfterSeparator => i + separator.Length,
+                        _ => throw new NotImplementedException(),
+                    });
+				if (!chunk.IsEmpty || options == RopeSplitOptions.None)
+				{
+					yield return chunk;
+				}
+
+                remainder = remainder.Slice(
+                    options switch
+                    {
+                        RopeSplitOptions.None => i + separator.Length,
+                        RopeSplitOptions.SplitBeforeSeparator => i,
+                        RopeSplitOptions.SplitAfterSeparator => i + separator.Length,
+                        _ => throw new NotImplementedException(),
+                    });
 			}
 			else
 			{
-				yield return remainder;
+				if (!remainder.IsEmpty || options == RopeSplitOptions.None)
+				{
+					yield return remainder;
+				}
+
 				yield break;
 			}
 		}
 		while (true);
 	}
 
-	/// <summary>
-	/// Splits a rope in two to pieces a left and a right half at the specified index.
-	/// </summary>
-	/// <param name="i">The index to split the two halves at.</param>
-	/// <exception cref="ArgumentOutOfRangeException">Thrown if index to split at is out of range.</exception>
-	/// <returns></returns>
-	[Pure]
-	public (Rope<T> Left, Rope<T> Right) SplitAt(long i)
-	{
-		if (this.IsNode)
-		{
-			if (i == 0)
-			{
-				return (Empty, this);
-			}
-			else if (i == this.Length)
-			{
-				return (this, Empty);
-			}
-			else if (i <= this.Weight)
-			{
-				var (newLeft, newRight) = this.left.SplitAt(i);
-				return (newLeft, new Rope<T>(newRight, this.right));
-			}
-			else
-			{
-				var (a, b) = this.right.SplitAt(i - this.Weight);
-				return (new Rope<T>(this.left, a), b);
-			}
-		}
+	public readonly (Rope<T> Left, Rope<T> Right) SplitAt(long i) => this.SplitAt(i, 100);
 
-		return (new Rope<T>(this.data[..(int)i]), new Rope<T>(this.data[(int)i..]));
+    /// <summary>
+    /// Splits a rope in two to pieces a left and a right half at the specified index.
+    /// </summary>
+    /// <param name="i">The index to split the two halves at.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if index to split at is out of range.</exception>
+    /// <returns></returns>
+    [Pure]
+	private readonly (Rope<T> Left, Rope<T> Right) SplitAt(long i, int recursionRemaining)
+	{
+		Debug.Assert(recursionRemaining > 0, $"Infinite loop? {this.Depth} {this.Length} {i}");
+		switch (this.data)
+		{
+			case ValueTuple<T>:
+				return i == 0 ? (Empty, this) :
+					i == 1 ? (this, Empty) :
+					throw new ArgumentOutOfRangeException(nameof(i));
+            case ReadOnlyMemory<T> m:
+                return (new Rope<T>(m[..(int)i]), new Rope<T>(m[(int)i..]));
+            case RopeNode node:
+				if (i == 0)
+				{
+					return (Empty, this);
+				}
+				else if (i == this.Length)
+				{
+					return (this, Empty);
+				}
+				else if (i <= this.Weight)
+				{
+					var (newLeft, newRight) = node.left.SplitAt(i, --recursionRemaining);
+					return (newLeft, new Rope<T>(newRight, node.right));
+				}
+				else
+				{
+					var (a, b) = node.right.SplitAt(i - this.Weight, --recursionRemaining);
+					return (new Rope<T>(node.left, a), b);
+				}
+			default:
+				throw new ArgumentOutOfRangeException(nameof(i));
+        }
 	}
 
 	/// <summary>
@@ -353,12 +455,11 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="item">The item to replace with at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the item included as a replacement.</returns>
 	[Pure]
-	public Rope<T> SetItem(long index, T item)
+	public readonly Rope<T> SetItem(long index, T item)
 	{
 		var (left, right) = this.SplitAt(index);
-		return new Rope<T>(left, new Rope<T>(new[] { item }, right.Slice(1))).Balanced();
+		return new Rope<T>(left, new Rope<T>(new Rope<T>(item), right.Slice(1))).Balanced();
 	}
-
 
 	/// <summary>
 	/// Inserts a single element at the given index.
@@ -367,9 +468,9 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
 	[Pure]
-	public Rope<T> Insert(long index, T item)
+	public readonly Rope<T> Insert(long index, T item)
 	{
-		return this.InsertRange(index, new Rope<T>(new[] { item }.AsMemory()));
+		return this.InsertRange(index, new Rope<T>(item));
 	}
 
 	/// <summary>
@@ -379,19 +480,20 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="items">The items to insert at the given index.</param>
 	/// <returns>A new instance of the full <see cref="Rope{T}"/> with the the items added at the specified index.</returns>
 	[Pure]
-	public Rope<T> InsertRange(long index, ReadOnlyMemory<T> items)
+	public readonly Rope<T> InsertRange(long index, ReadOnlyMemory<T> items)
 	{
 		return this.InsertRange(index, new Rope<T>(items));
 	}
 
-	/// <summary>
-	/// Inserts a sequence of elements at the given index.
-	/// </summary>
-	/// <param name="index">The index to insert at.</param>
-	/// <param name="items">The items to insert at the given index.</param>
-	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
-	[Pure]
-	public Rope<T> InsertRange(long index, Rope<T> items)
+    /// <summary>
+    /// Inserts a sequence of elements at the given index.
+    /// </summary>
+    /// <param name="index">The index to insert at.</param>
+    /// <param name="items">The items to insert at the given index.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
+    /// <returns>A new instance of <see	cref="Rope{T}"/> with the the items added.</returns>
+    [Pure]
+	public readonly Rope<T> InsertRange(long index, Rope<T> items)
 	{
 		if (index > this.Length)
 		{
@@ -399,18 +501,18 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
 
 		var (left, right) = this.SplitAt(index);
-		return new Rope<T>(left, new Rope<T>(items, right));
+		return new Rope<T>(left, new Rope<T>(items, right)).Balanced();
 	}
 
-	/// <summary>
-	/// Removes a subset of elements for a given range.
-	/// </summary>
-	/// <param name="start">The start index to remove from.</param>
-	/// <param name="length">The number of items to be removed.</param>
-	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
-	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
-	[Pure]
-	public Rope<T> RemoveRange(long start, long length)
+    /// <summary>
+    /// Removes a subset of elements for a given range.
+    /// </summary>
+    /// <param name="start">The start index to remove from.</param>
+    /// <param name="length">The number of items to be removed.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if start is greater than Length, or start + length exceeds the Length.</exception>
+    /// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if length is non-zero. Otherwise returns the original instance.</returns>
+    [Pure]
+	public readonly Rope<T> RemoveRange(long start, long length)
 	{
 		if (length == 0)
 		{
@@ -422,42 +524,67 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			return Empty;
 		}
 
-		return new Rope<T>(this.Slice(0, start), this.Slice(start + length));
+		return new Rope<T>(this.RemoveRange(start), this.Slice(start + length));
 	}
 
-	/// <summary>
-	/// Removes the tail range of elements from a given starting index (Alias for Slice).
-	/// </summary>
-	/// <param name="start">The start index to remove from.</param>
-	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
-	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	[Pure]
-	public Rope<T> RemoveRange(long start)
-	{
-		if (start == this.Length)
+    /// <summary>
+    /// Removes the tail range of elements from a given starting index.
+    /// </summary>
+    /// <param name="startIndex">The start index to remove from (inclusive).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if start is greater than Length.</exception>
+    /// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
+    [Pure]
+	public readonly Rope<T> RemoveRange(long startIndex)
+	{ 
+        if (startIndex == 0)
+        {
+            return Empty;
+        }
+
+        if (startIndex == this.Length)
 		{
 			return this;
 		}
 
-		return this.Slice(start, this.Length - start);
-	}
+        switch (this.data)
+        {
+            // NOTE: ValueTuple<T> is an impossible case because startIndex would have to be either 0 or 1, if not it's out of range.
+            case ReadOnlyMemory<T> m:
+                return new Rope<T>(m[..(int)startIndex]);
+            case RopeNode node:
+                if (startIndex <= this.Weight)
+                {
+                    return node.left.RemoveRange(startIndex);
+                }
+                else
+                {
+                    return new Rope<T>(node.left, node.right.RemoveRange(startIndex - this.Weight));
+                }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(startIndex));
+        }
+    }
 
-	/// <summary>
-	/// Removes the tail range of elements from a given starting index (Alias for Slice).
-	/// </summary>
-	/// <param name="start">The start index to remove from.</param>
-	/// <exception cref="IndexOutOfRangeException">Thrown if start is greater than Length</exception>
-	/// <returns>A new instance of <see	cref="Rope{T}"/> with the the items removed if start is non-zero. Otherwise returns the original instance.</returns>
-	[Pure]
-	public Rope<T> RemoveAt(long index)
+    /// <summary>
+    /// Removes a single element at the specified index.
+    /// </summary>
+    /// <param name="index">The index to remove.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if index is greater than or equal to Length or less than zero.</exception>
+    /// <returns>A new instance of <see	cref="Rope{T}"/> with the single item removed if index is valid.</returns>
+    [Pure]
+	public readonly Rope<T> RemoveAt(long index)
 	{
+		if (index < 0 || index >= this.Length)
+		{
+			throw new ArgumentOutOfRangeException(nameof(index));
+		}
+
 		if (index == this.Length)
 		{
 			return this;
 		}
 
-		var (left, right) = this.SplitAt(index);
-		return new Rope<T>(left, right.Slice(1));
+		return new Rope<T>(this.RemoveRange(index), this.Slice(index + 1));
 	}
 
 	/// <summary>
@@ -467,16 +594,16 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="items">The item to append to this rope.</param>
 	/// <returns>A new rope that is the concatenation of the current sequence and the specified item.</returns>
 	[Pure]
-	public Rope<T> Add(T item) => this.AddRange(new[] { item });
+	public readonly Rope<T> Add(T item) => new Rope<T>(this, new Rope<T>(item)).Balanced();
 
-	/// <summary>
-	/// Concatenates two sequences together into a single sequence.
-	/// Performance note: This may attempt to perform a balancing.
-	/// </summary>
-	/// <param name="items">The items to append to this rope.</param>
-	/// <returns>A new rope that is the concatenation of the current sequence and the specified items.</returns>
-	[Pure]
-	public Rope<T> AddRange(Rope<T> items)
+    /// <summary>
+    /// Concatenates two sequences together into a single sequence.
+    /// Performance note: This may attempt to perform a balancing.
+    /// </summary>
+    /// <param name="items">The items to append to this rope.</param>
+    /// <returns>A new rope that is the concatenation of the current sequence and the specified items.</returns>
+    [Pure]
+	public readonly Rope<T> AddRange(Rope<T> items)
 	{
 		if (items.Length == 0)
 		{
@@ -497,9 +624,36 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="start">The start to select from.</param>
 	/// <returns>A new rope instance if start is non-zero, otherwise returns the original instance.</returns>
 	[Pure]
-	public Rope<T> Slice(long start)
+	public readonly Rope<T> Slice(long start)
 	{
-		return this.Slice(start, this.Length - start);
+        if (start == 0)
+        {
+            return this;
+        }
+
+        if (start == this.Length)
+        {
+            return Empty;
+        }
+
+        switch (this.data)
+        {
+            // NOTE: ValueTuple<T> is an impossible case because startIndex would have to be either 0 or 1, if not it's out of range.
+            case ReadOnlyMemory<T> m:
+                return new Rope<T>(m[(int)start..]);
+            case RopeNode node:
+				if (start <= this.Weight)
+                {
+                    var newLeft = node.left.Slice(start);
+                    return new Rope<T>(newLeft, node.right);
+                }
+                else
+                {
+                    return node.right.Slice(start - this.Weight);
+                }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(start));
+        }
 	}
 
 	/// <summary>
@@ -509,22 +663,26 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="length">The number of elements to return.</param>
 	/// <returns>A new rope instance if the slice does not cover the entire sequence, otherwise returns the original instance.</returns>
 	[Pure]
-	public Rope<T> Slice(long start, long length)
+	public readonly Rope<T> Slice(long start, long length)
 	{
+		if (length == 0)
+		{
+			return Empty;
+		}
+
 		if (start == 0 && length == this.Length)
 		{
 			return this;
 		}
 
-		var (head, _) = this.SplitAt(start + length);
-		return head.SplitAt(start).Right;
+		return this.Slice(start).RemoveRange(length);
 	}
 
-	[Pure]
-	public static bool operator ==(Rope<T> a, Rope<T> b) => Rope<T>.Equals(a, b);
+	//[Pure]
+	//public static bool operator ==(Rope<T> a, Rope<T> b) => Rope<T>.Equals(a, b);
 
-	[Pure]
-	public static bool operator !=(Rope<T> a, Rope<T> b) => !Rope<T>.Equals(a, b);
+	//[Pure]
+	//public static bool operator !=(Rope<T> a, Rope<T> b) => !Rope<T>.Equals(a, b);
 
 	/// <summary>
 	/// Concatenates two rope instances together into a single sequence.
@@ -556,9 +714,9 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 	[Pure]
 	public static implicit operator Rope<T>(string a) =>
-		typeof(T) == typeof(char) ? Unsafe.As<Rope<T>>(new Rope<char>(a.AsMemory())) :
-        typeof(T) == typeof(byte) ? Unsafe.As<Rope<T>>(new Rope<byte>(Encoding.UTF8.GetBytes(a))) :
-        typeof(T) == typeof(Rune) ? Unsafe.As<Rope<T>>(a.EnumerateRunes().ToRope()) :
+		typeof(T) == typeof(char) ? (Rope<T>)(object)new Rope<char>(a.AsMemory()) :
+        typeof(T) == typeof(byte) ? (Rope<T>)(object)new Rope<byte>(Encoding.UTF8.GetBytes(a)) :
+        typeof(T) == typeof(Rune) ? (Rope<T>)(object)a.EnumerateRunes().ToRope() :
         throw new InvalidCastException("Cannot implicitly convert type {typeof(T).Name} to string");
 
     /// <summary>
@@ -566,44 +724,53 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
     /// </summary>
     /// <returns>A balanced tree or the original rope if not out of range.</returns>
     [Pure]
-	public Rope<T> Balanced()
+	public readonly Rope<T> Balanced()
 	{
 		// Early return if the tree is already balanced or not a node		
-    	if (!this.IsNode || this.IsBalanced)
+    	if (this.IsBalanced)
 		{
 			return this;
 		}
 
-		rebalances.Add(1);
-
-		if (this.Length <= MaxLeafLength)
+		if (this.data is RopeNode node)
 		{
-			// If short enough brute force rebalance into a single leaf.
-			return new Rope<T>(this.ToMemory());
-		}
+            ///rebalances.Add(1);
+            if (this.Length <= MaxLeafLength)
+            {
+                // If short enough brute force rebalance into a single leaf.
+                return new Rope<T>(this.ToMemory());
+            }
 
-		// Calculate the depth difference between left and right
-		var leftDepth = this.Left.Depth;
-		var rightDepth = this.Right.Depth;
-		var depthDiff = rightDepth - leftDepth;
-		
-		////Debug.Assert(depthDiff <= MaxTreeDepth, "This tree is way too deep?");
-		if (depthDiff > MaxDepthImbalance)
-		{
-			// Example: Right is deep (10), left is shallower (6) -> +4 imbalance
-			var (newLeftPart, newRightPart) = this.Right.SplitAt(this.Right.Length / 2);
-        	return new Rope<T>(new Rope<T>(this.Left, newLeftPart).Balanced(), newRightPart.Balanced());
-		}
-		else if (depthDiff < -MaxDepthImbalance)
-		{
-			// Example: Left is deep (10), Right is shallower (6) -> -4 imbalance
-			var (newLeftPart, newRightPart) = this.Left.SplitAt(this.Left.Length / 2);
-        	return new Rope<T>(newLeftPart.Balanced(), new Rope<T>(newRightPart, this.Right).Balanced());
-		}
+            // Calculate the depth difference between left and right
+            var leftDepth = node.left.Depth;
+            var rightDepth = node.right.Depth;
+            var depthDiff = rightDepth - leftDepth;
 
-		// Recursively balance if we are already very long.
-        var (left, right) = this.SplitAt(this.Length / 2);
-        return new Rope<T>(left.Balanced(), right.Balanced());
+            ////Debug.Assert(depthDiff <= MaxTreeDepth, "This tree is way too deep?");
+            if (depthDiff > MaxDepthImbalance)
+            {
+                // Example: Right is deep (10), left is shallower (6) -> +4 imbalance
+                var (newLeftPart, newRightPart) = node.right.SplitAt(node.right.Length / 2);
+				Debug.Assert(newLeftPart.Depth < this.Depth && newRightPart.Depth < this.Depth, "Depth not improving");
+                return new Rope<T>(new Rope<T>(node.left, newLeftPart).Balanced(), newRightPart.Balanced());
+            }
+            else if (depthDiff < -MaxDepthImbalance)
+            {
+                // Example: Left is deep (10), Right is shallower (6) -> -4 imbalance
+                var (newLeftPart, newRightPart) = node.left.SplitAt(node.left.Length / 2);
+                Debug.Assert(newLeftPart.Depth < this.Depth && newRightPart.Depth < this.Depth, "Depth not improving");
+                return new Rope<T>(newLeftPart.Balanced(), new Rope<T>(newRightPart, node.right).Balanced());
+            }
+
+            // return this.Chunk(MaxLeafLength).Select(r => r.ToRope()).Combine();
+
+            // Recursively balance if we are already very long.
+            var (left, right) = this.SplitAt(this.Length / 2);
+			var (newLeft, newRight) = (left.Balanced(), right.Balanced());
+            return new Rope<T>(newLeft, newRight);
+        }
+
+		return this;
 	}
 
 	/// <summary>
@@ -636,70 +803,52 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="other">The other sequence to compare shared prefix length.</param>
 	/// <returns>A number greater than or equal to the length of the shortest of the two sequences.</returns>
 	[Pure]
-	public long CommonPrefixLength(Rope<T> other)
+	public readonly long CommonPrefixLength(Rope<T> other)
 	{
-		if (!this.IsNode && !other.IsNode)
+		if (this.Length == 0 || other.Length == 0)
 		{
-			return MemoryExtensions.CommonPrefixLength(this.data.Span, other.data.Span);
+			return 0;
+		}
+
+		if (this.data is ValueTuple<T> value)
+		{
+			return value.Equals(other[0]) ? 1 : 0;
 		}
 		
-		using var a = this.Buffers.GetEnumerator();
-		using var b = other.Buffers.GetEnumerator();
-		if (a.MoveNext() && b.MoveNext())
+		if (this.data is ReadOnlyMemory<T> mem && other is ReadOnlyMemory<T> otherMem)
+        {
+            // Finding a Leaf within another leaf.
+            return MemoryExtensions.CommonPrefixLength(mem.Span, otherMem.Span);
+        }
+
+        long common = 0;
+        var rentedBuffers = BufferPool.Rent(this.BufferCount);
+        var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
+		try
 		{
-			var aSpan = a.Current.Span;
-			var bSpan = b.Current.Span;
+			var buffers = rentedBuffers[..this.BufferCount];
+			var findBuffers = rentedFindBuffers[..other.BufferCount];
+			this.FillBuffers(buffers);
+			other.FillBuffers(findBuffers);
 
-			long globalCommon = 0;
-			while (true)
+			var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+			while (aligned.MoveNext())
 			{
-				// A buffer and b buffer are aligned match them
-				var common = MemoryExtensions.CommonPrefixLength(aSpan, bSpan);
-				if (common > 0)
+				var c = aligned.CurrentA.CommonPrefixLength(aligned.CurrentB);
+				common += c;
+				if (c != aligned.CurrentA.Length)
 				{
-					globalCommon += common;
-					
-					// A buffer is shorter than B buffer
-					if (common == aSpan.Length && common < bSpan.Length)
-					{
-						// Shift A and Slice B
-						bSpan = bSpan.Slice(common);
-						if (a.MoveNext())
-						{
-							aSpan = a.Current.Span;
-							continue;
-						}
-						else
-						{
-							return globalCommon;
-						}
-					}
-					else if (common == bSpan.Length && common < aSpan.Length)
-					{
-						// Slice A and Shift B
-						aSpan = aSpan.Slice(common);
-						if (b.MoveNext())
-						{
-							bSpan = b.Current.Span;
-							continue;
-						}
-						else
-						{
-							return globalCommon;
-						}
-					} 
-					else
-					{
-						// We have a common prefix and both spans are longer than necessary, we're done.
-						return globalCommon;
-					}
+					break;
 				}
-
-				return globalCommon;
 			}
 		}
+		finally
+		{
+			BufferPool.Return(rentedFindBuffers);
+			BufferPool.Return(rentedBuffers);
+		}
 
-		return 0;
+        return common;     
 
 		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
 		// var n = Math.Min(this.Length, other.Length);
@@ -720,10 +869,40 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="other">Other sequence to compare against.</param>
 	/// <returns>The number of characters common to the end of each sequence.</returns>
 	[Pure]
-	public long CommonSuffixLength(Rope<char> other)
+	public readonly long CommonSuffixLength(Rope<T> other)
 	{
-		// Performance analysis: https://neil.fraser.name/news/2007/10/09/
-		var n = Math.Min(this.Length, other.Length);
+        if (this.Length == 0 || other.Length == 0)
+        {
+            return 0;
+        }
+
+        if (this.data is ValueTuple<T> value)
+        {
+            return value.Item1.Equals(other[^1]) ? 1 : 0;
+        }
+
+        if (this.data is ReadOnlyMemory<T> mem && other is ReadOnlyMemory<T> otherMem)
+        {
+			// Finding a Leaf within another leaf.
+			var span = mem.Span;
+			var otherSpan = otherMem.Span;
+
+            // Performance analysis: https://neil.fraser.name/news/2007/10/09/
+            var nx = Math.Min(span.Length, otherSpan.Length);
+            for (var i = 1; i <= nx; i++)
+            {
+                if (!span[span.Length - i].Equals(otherSpan[otherSpan.Length - i]))
+                {
+                    return i - 1;
+                }
+            }
+
+            return nx;
+        }
+
+
+        // Performance analysis: https://neil.fraser.name/news/2007/10/09/
+        var n = Math.Min(this.Length, other.Length);
 		for (var i = 1; i <= n; i++)
 		{
 			if (!this.ElementAt(this.Length - i).Equals(other.ElementAt(other.Length - i)))
@@ -736,58 +915,95 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	/// <summary>
-	/// Copies the rope into a new single contiguous array of elements.
+	/// Gets the memory representation of this sequence, may allocate a new array if this instance is a tree.
 	/// </summary>
-	/// <returns>A new array filled with the contents of the sequence.</returns>
+	/// <returns>Read only memory of the rope.</returns>
 	[Pure]
-	public T[] ToArray()
+	public readonly ReadOnlyMemory<T> ToMemory()
 	{
-		if (this.IsNode)
-		{
-			// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitalized array as we are copying over the entire contents.
-			var result = GC.AllocateUninitializedArray<T>((int)this.Length);
-			var mem = result.AsMemory();
-			this.CopyTo(mem);
-			return result;
-		}
+        switch (this.data)
+        {
+			case ValueTuple<T> value:
+				return new T[] { value.Item1 }.AsMemory();
+			case ReadOnlyMemory<T> memory:
+                return memory;
+            case RopeNode:
+                // Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
+                var result = GC.AllocateUninitializedArray<T>((int)this.Length);
+                var mem = result.AsMemory();
+                this.CopyBuffers(mem);
+                return mem;
+            default:
+                return ReadOnlyMemory<T>.Empty;
+        };
+    }
 
-		return this.data.ToArray();
-	}
-	
-	/// <summary>
-	/// Copies the rope into the specified memory buffer.
-	/// </summary>
-	/// <param name="other">The target to copy to.</param>
-	public void CopyTo(Memory<T> other)
+    /// <summary>
+    /// Copies the rope into a new single contiguous array of elements.
+    /// </summary>
+    /// <returns>A new array filled with the contents of the sequence.</returns>
+    [Pure]
+	public readonly T[] ToArray()
 	{
-		if (this.IsNode)
+		switch (this.data)
 		{
-			var rentedBuffers = BufferPool.Rent(this.BufferCount);
-			var buffers = rentedBuffers[..this.BufferCount];
+            case ValueTuple<T> value:
+                return new T[] { value.Item1 };
+            case ReadOnlyMemory<T> memory:
+                return memory.ToArray();
+            case RopeNode:
+				// Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
+				var result = GC.AllocateUninitializedArray<T>((int)this.Length);
+				var mem = result.AsMemory();
+                this.CopyBuffers(mem);
+                return result;
+			default:
+                return Array.Empty<T>();
+        };
+    }
+
+    /// <summary>
+    /// Copies the rope into the specified memory buffer.
+    /// </summary>
+    /// <param name="other">The target to copy to.</param>
+    public readonly void CopyTo(Memory<T> other)
+	{
+        switch (this.data)
+        {
+			case ValueTuple<T> value:
+				other.Span[0] = value.Item1;
+				break;
+            case ReadOnlyMemory<T> memory:
+                // Leaf node so copy memory.
+                memory.CopyTo(other);
+                break;
+            case RopeNode:
+				this.CopyBuffers(other);
+				break;
+        }
+	}
+
+	private readonly void CopyBuffers(Memory<T> other)
+	{
+        var rentedBuffers = BufferPool.Rent(this.BufferCount);
+        try
+        {
+            var buffers = rentedBuffers[..this.BufferCount];
 			this.FillBuffers(buffers);
 			foreach (var b in buffers)
 			{
 				b.CopyTo(other[..b.Length]);
 				other = other[b.Length..];
 			}
-
-			// this.left.CopyTo(mem);
-			// this.right.CopyTo(mem.Slice((int)this.left.Length));
-			BufferPool.Return(rentedBuffers);
-
-			// Binary tree so copy each half.
-			// this.left.CopyTo(other);
-			// this.right.CopyTo(other.Slice((int)this.left.Length));
-		}
-		else
-		{
-			// Leaf node so copy memory.
-			this.data.CopyTo(other);
-		}
-	}
+        }
+        finally
+        {
+            BufferPool.Return(rentedBuffers);
+        }
+    }
 
 	[Pure]
-	public long IndexOf(Rope<T> find)
+	public readonly long IndexOf(Rope<T> find)
 	{
 		if (find.Length > this.Length)
 		{
@@ -803,21 +1019,39 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			return -1;
 		}
 
-		if (!this.IsNode && !find.IsNode)
+        // Finding a Leaf within another leaf.
+        switch (this.data)
 		{
-			return this.data.Span.IndexOf(find.data.Span);
-		}
+			case ValueTuple<T> value:
+                return find.data is ValueTuple<T> findValue && value.Item1.Equals(findValue.Item1) ? 0 : -1;
+			case ReadOnlyMemory<T> mem:
+				if (find.data is ReadOnlyMemory<T> findMem)
+                {
+					return mem.Span.IndexOf(findMem.Span);
+                }
+                break;
+            default:
+				break;
+        }
 
 		var rentedBuffers = BufferPool.Rent(this.BufferCount);
 		var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
-		var buffers = rentedBuffers[..this.BufferCount];
-		var findBuffers = rentedFindBuffers[..find.BufferCount];
-        this.FillBuffers(buffers);
-		find.FillBuffers(findBuffers);
-		var i = this.IndexOfDefaultEquality(buffers, findBuffers);
-        BufferPool.Return(rentedFindBuffers);
-        BufferPool.Return(rentedBuffers);
-		return i;
+        long index = -1;
+        try
+        {
+            var buffers = rentedBuffers[..this.BufferCount];
+            var findBuffers = rentedFindBuffers[..find.BufferCount];
+            this.FillBuffers(buffers);
+            find.FillBuffers(findBuffers);
+            index = this.IndexOfDefaultEquality(buffers, findBuffers);
+        }
+        finally
+        {
+            BufferPool.Return(rentedFindBuffers);
+            BufferPool.Return(rentedBuffers);
+        }
+
+        return index;
     }
 
 	/// <summary>
@@ -826,7 +1060,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="find"></param>
 	/// <returns>A number greater than or equal to zero if the sub-sequence is found, otherwise returns -1.</returns>
 	[Pure]
-	public long IndexOf<TEqualityComparer>(Rope<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+	public readonly long IndexOf<TEqualityComparer>(Rope<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
 	{
 		if (find.Length > this.Length)
 		{
@@ -888,11 +1122,19 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 
 		// Attempt 2: Flattened access to buffers and slow search (Big memory allocation overhead).
 		var buffers = BufferPool.Rent(this.BufferCount);
-		this.FillBuffers(buffers);
-		var findBuffer = find.ToMemory(); // PERF: This is BAD!!
-		var i = this.IndexOfSlow(buffers, findBuffer, comparer);
-        BufferPool.Return(buffers);
-		return i;
+        long i = -1;
+        try
+        {
+            this.FillBuffers(buffers);
+            var findBuffer = find.ToMemory(); // PERF: This is BAD!!
+            i = this.IndexOfSlow(buffers, findBuffer, comparer);
+        }
+        finally
+        {
+            BufferPool.Return(buffers);
+        }
+
+        return i;
 
 
 		// Attempt 3: WIP - Shifting through buffers and using IndexOf for fast seek.
@@ -959,43 +1201,46 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		// return -1;
 	}
 
-	public int BufferCount { get; }
-
-	private void FillBuffers(Span<ReadOnlyMemory<T>> buffers)
+	private readonly void FillBuffers(Span<ReadOnlyMemory<T>> buffers)
 	{
-		if (this.IsNode)
+		if (buffers.Length > 0)
 		{
-			this.left.FillBuffers(buffers[..this.left.BufferCount]);
-			this.right.FillBuffers(buffers[this.left.BufferCount..]);
-		}
-		else if (buffers.Length > 0)
-		{
-			buffers[0] = this.data;
-		}
-	}
-
-	private IEnumerable<ReadOnlyMemory<T>> Buffers
-	{
-		get 
-		{
-			if (this.IsNode)
+			if (this.data is ValueTuple<T> value)
 			{
-				foreach (var b in this.left.Buffers)
-				{
-					yield return b;
-				}
-
-				foreach (var b in this.right.Buffers)
-				{
-					yield return b;
-				}
+				buffers[0] = new[] { value.Item1 };
 			}
-			else
+			else if (this.data is ReadOnlyMemory<T> mem)
 			{
-				yield return this.data;
+				buffers[0] = mem;
+			}
+			else if (this.data is RopeNode node)
+			{
+				node.left.FillBuffers(buffers[..node.left.BufferCount]);
+				node.right.FillBuffers(buffers[node.left.BufferCount..]);
 			}
 		}
 	}
+
+    public readonly void WriteTo(IBufferWriter<T> writer)
+    {
+        switch (this.data)
+        {
+            case ValueTuple<T> value:
+                var span = writer.GetSpan(1);
+                span[0] = value.Item1;
+                writer.Advance(1);
+                break;
+            case ReadOnlyMemory<T> mem:
+                writer.Write(mem.Span);
+                break;
+            case RopeNode node:
+                node.left.WriteTo(writer);
+                node.right.WriteTo(writer);
+                break;
+            default:
+                break;
+        }
+    }
 
     private static int MoveToFirstElement(T element, ref ReadOnlySpan<T> current, ref ReadOnlySpan<ReadOnlyMemory<T>> currentAndRemainder)
 	{
@@ -1023,7 +1268,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
     }
 
-    private int IndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers)
+    private readonly long IndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers)
     {
         // 1. Fast forward to first element in findBuffers
         // 2. Reduce find buffer using sequence equal,
@@ -1032,8 +1277,8 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
         var remainingTargetBuffers = targetBuffers;
         var currentTargetSpan = remainingTargetBuffers[0].Span;
         var firstElement = findBuffers[0].Span[0];
-        int globalIndex = 0;
-		while (remainingTargetBuffers.Length > 0)
+        long globalIndex = 0;
+        while (remainingTargetBuffers.Length > 0)
 		{
 			// Reset find to the beginning
 			var remainingFindBuffers = findBuffers;
@@ -1131,9 +1376,9 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
         return -1; // Not found
     }
 
-    private int IndexOfSlow<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> buffers, ReadOnlyMemory<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+    private readonly long IndexOfSlow<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> buffers, ReadOnlyMemory<T> find, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
 	{
-		int globalIndex = 0; // Tracks overall position across all buffers
+		long globalIndex = 0; // Tracks overall position across all buffers
 
 		for (int bufIndex = 0; bufIndex < buffers.Length; bufIndex++)
 		{
@@ -1144,8 +1389,8 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 				var findSpan = find.Span;
 				for (int j = 0; j < findSpan.Length && match; j++)
 				{
-					int globalOffset = globalIndex + j;
-					if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out T value) || !comparer.Equals(value, findSpan[j]))
+                    long globalOffset = globalIndex + j;
+                    if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out var value) || !comparer.Equals(value, findSpan[j]))
 					{
 						match = false;
 						break;
@@ -1171,14 +1416,14 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="globalIndex">The global index to find.</param>
 	/// <param name="value">The output value</param>
 	/// <returns>true if found, otherwise false.</returns>
-	private bool TryGetValueAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, out T value)
+	private readonly bool TryGetValueAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, long globalIndex, out T? value)
 	{
-		int accumulatedLength = 0;
+		long accumulatedLength = 0;
 		foreach (var buffer in buffers)
 		{
 			if (globalIndex < accumulatedLength + buffer.Length)
 			{
-				value = buffer.Span[globalIndex - accumulatedLength];
+				value = buffer.Span[(int)(globalIndex - accumulatedLength)];
 				return true;
 			}
 
@@ -1189,7 +1434,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		return false; // Global index out of range
 	}
 
-	private bool TryGetSpanAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, int maxLength, ref ReadOnlySpan<T> value)
+	private readonly bool TryGetSpanAtGlobalIndex(ReadOnlySpan<ReadOnlyMemory<T>> buffers, int globalIndex, int maxLength, ref ReadOnlySpan<T> value)
 	{
 		int accumulatedLength = 0;
 		foreach (var buffer in buffers)
@@ -1252,7 +1497,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 // }
 
 	[Pure]
-	public long IndexOf(Rope<T> find, long offset)
+	public readonly long IndexOf(Rope<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -1264,49 +1509,53 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public long IndexOf(ReadOnlyMemory<T> find) 
+	public readonly long IndexOf(ReadOnlyMemory<T> find) 
 	{
-		if (this.IsNode)
-		{
-			// Use the complicated logic.
-			return this.IndexOf(new Rope<T>(find));
-		}
-		else
-		{
-			// Leaf is quick and easy.
-			return this.data.Span.IndexOf(find.Span);
-		}
+        switch (this.data)
+        {
+			case ValueTuple<T> value:
+				return find.Length == 1 && value.Item1.Equals(find.Span[0]) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                return memory.Span.IndexOf(find.Span);
+            case RopeNode:
+				// Use the complicated logic.
+				return this.IndexOf(new Rope<T>(find));
+            default:
+                return -1;
+        }
 	}
 
 	[Pure]
-	public long IndexOf(T find)
+	public readonly long IndexOf(T find)
 	{
-		if (this.IsNode)
-		{
-			// Node
-			var i = this.left.IndexOf(find);
-			if (i != -1)
-			{
-				return i;
-			}
+        switch (this.data)
+        {
+			case ValueTuple<T> value:
+                return value.Item1.Equals(find) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                return memory.Span.IndexOf(find);
+            case RopeNode node:
+                // Node
+                var i = node.left.IndexOf(find);
+                if (i != -1)
+                {
+                    return i;
+                }
 
-			i = this.right.IndexOf(find);
-			if (i != -1)
-			{
-				return this.left.Length + i;
-			}
-		}
-		else
-		{
-			// Leaf
-			return this.data.Span.IndexOf(find);
-		}
-
-		return -1;
+                i = node.right.IndexOf(find);
+                if (i != -1)
+                {
+                    return node.left.Length + i;
+                }
+                
+				return -1;
+            default:
+                return -1;
+        }
 	}
 
 	[Pure]
-	public long IndexOf(T find, long offset)
+	public readonly long IndexOf(T find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -1318,7 +1567,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public long IndexOf(ReadOnlyMemory<T> find, long offset)
+	public readonly long IndexOf(ReadOnlyMemory<T> find, long offset)
 	{
 		var i = this.Slice(offset).IndexOf(find);
 		if (i != -1)
@@ -1330,13 +1579,13 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public bool StartsWith(Rope<T> find) => this.Slice(0, Math.Min(this.Length, find.Length)).IndexOf(find) == 0;
+	public readonly bool StartsWith(Rope<T> find) => this.Slice(0, Math.Min(this.Length, find.Length)).IndexOf(find) == 0;
 
 	[Pure]
-	public bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
+	public readonly bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
 
 
-	public long LastIndexOf(Rope<T> find)
+	public readonly long LastIndexOf(Rope<T> find)
 	{
         if (find.Length == 0)
         {
@@ -1345,26 +1594,29 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
             return this.Length;
         }
 
-        if (this.IsNode || find.IsNode)
-        {
-            var rentedBuffers = BufferPool.Rent(this.BufferCount);
-            var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
-            var buffers = rentedBuffers[..this.BufferCount];
-            var findBuffers = rentedFindBuffers[..find.BufferCount];
-            this.FillBuffers(buffers);
-            find.FillBuffers(findBuffers);
+		if (this.data is ValueTuple<T> value && find is ValueTuple<T> findValue)
+		{
+			return value.Item1.Equals(findValue.Item1) ? 0 : -1;
+		}
 
-            var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
-
-            BufferPool.Return(rentedFindBuffers);
-            BufferPool.Return(rentedBuffers);
-            return i;
-        }
-        else
+		if (this.data is ReadOnlyMemory<T> mem && find is ReadOnlyMemory<T> findMem)
         {
             // Finding a Leaf within another leaf.
-            return this.data.Span.LastIndexOf(find.data.Span);
+            return mem.Span.LastIndexOf(findMem.Span);
         }
+
+        var rentedBuffers = BufferPool.Rent(this.BufferCount);
+        var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
+        var buffers = rentedBuffers[..this.BufferCount];
+        var findBuffers = rentedFindBuffers[..find.BufferCount];
+        this.FillBuffers(buffers);
+        find.FillBuffers(findBuffers);
+
+        var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
+
+        BufferPool.Return(rentedFindBuffers);
+        BufferPool.Return(rentedBuffers);
+        return i;
     }
 	
 	/// <summary>
@@ -1374,9 +1626,9 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="startIndex">The starting index to start searching backwards from (Optional).</param>
 	/// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
 	[Pure]
-	public long LastIndexOf(Rope<T> find, long startIndex) => this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find);
+	public readonly long LastIndexOf(Rope<T> find, long startIndex) => this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find);
 
-    private long LastIndexOfSlow(Rope<T> find, long startIndex)
+    private readonly long LastIndexOfSlow(Rope<T> find, long startIndex)
     {
         var comparer = EqualityComparer<T>.Default;
         for (var i = startIndex; i >= 0; i--)
@@ -1434,7 +1686,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		}
     }
 
-	private long LastIndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers, long findLength)
+	private readonly long LastIndexOfDefaultEquality(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers, long findLength)
     {
         // 1. Fast forward to last element in findBuffers
         // 2. Reduce find buffer using sequence equal,
@@ -1497,20 +1749,20 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public long LastIndexOf(T find, int startIndex) => this.Slice(0, startIndex + 1).LastIndexOf(new Rope<T>(new[] { find }));
+	public readonly long LastIndexOf(T find, int startIndex) => this.Slice(0, startIndex + 1).LastIndexOf(new Rope<T>(find));
 
 	[Pure]
-	public long LastIndexOf(T find) => this.LastIndexOf(new Rope<T>(new[] { find }));
+	public readonly long LastIndexOf(T find) => this.LastIndexOf(new Rope<T>(find));
 
 	[Pure]
-	public bool EndsWith(Rope<T> find)
+	public readonly bool EndsWith(Rope<T> find)
 	{
 		var i = this.LastIndexOf(find); 
 		return i != -1 && i == this.Length - find.Length;
 	}
 
 	[Pure]
-	public bool EndsWith(ReadOnlyMemory<T> find) => this.EndsWith(new Rope<T>(find));
+	public readonly bool EndsWith(ReadOnlyMemory<T> find) => this.EndsWith(new Rope<T>(find));
 
 	/// <summary>
 	/// Replaces all occurrences of the specified element with it's specified replacement.
@@ -1519,13 +1771,13 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="with">The element to replace with.</param>
 	/// <returns>A new rope with the replacements made.</returns>
 	[Pure]
-	public Rope<T> Replace(T replace, T with)
+	public readonly Rope<T> Replace(T replace, T with)
 	{
-		return this.Replace(new[] { replace }, new[] { with });
+		return this.Replace(new Rope<T>(replace), new Rope<T>(with));
 	}
 
 	[Pure]
-	public Rope<T> Replace(Rope<T> replace, Rope<T> with)
+	public readonly Rope<T> Replace(Rope<T> replace, Rope<T> with)
 	{
 		var accum = Empty;
 		var remainder = this;
@@ -1546,7 +1798,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
 	[Pure]
-	public Rope<T> Replace<TEqualityComparer>(Rope<T> replace, Rope<T> with, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
+	public readonly Rope<T> Replace<TEqualityComparer>(Rope<T> replace, Rope<T> with, TEqualityComparer comparer) where TEqualityComparer : IEqualityComparer<T>
 	{
 		var accum = Empty;
 		var remainder = this;
@@ -1566,20 +1818,27 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		return accum;
 	}
 
-	/// <summary>
-	/// Converts this to a string representation (if <typeparamref name="T"/> is a <see cref="char"/> a string of the contents is returned.)
-	/// </summary>
-	/// <returns>A string representation of the sequence.</returns>
-	[Pure]
-	public override string ToString()
+    /// <summary>
+    /// Converts this to a string representation. 
+    /// If <typeparamref name="T"/> is <see cref="char"/> a string of the contents is returned.
+    /// If <typeparamref name="T"/> is <see cref="byte"/> a UTF8 encoded string of the contents is returned.
+    /// </summary>
+    /// <returns>A string representation of the sequence.</returns>
+    [Pure]
+	public readonly override string ToString()
 	{
-		if (this is Rope<char> rc)
+		switch (this)
 		{
-			return new string(rc.ToMemory().Span);
-		}
-		
-		return $"{typeof(T).Name} ({this.Length})";
-	}
+            case Rope<char> chars:
+				return new string(chars.ToMemory().Span);
+			case Rope<byte> utf8:
+				return Encoding.UTF8.GetString(utf8.ToMemory().Span);
+            case Rope<Rune> runes:
+                return string.Concat(this.Select(rune => rune.ToString()));
+            default:
+                return string.Join("\n", this.Select(element => element.ToString()));
+        }
+    }
 
 	/// <summary>
 	/// Attempts to insert the given item in the correct sorted position, based on the comparer.
@@ -1590,7 +1849,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	/// <param name="comparer">The comparer used to find the appropriate place to insert.</param>
 	/// <returns>A new rope already balanced if necessary.</returns>
 	[Pure]
-	public Rope<T> InsertSorted<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+	public readonly Rope<T> InsertSorted<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
 	{
 		var index = this.BinarySearch(item, comparer);
 		if (index < 0)
@@ -1600,7 +1859,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		
 		var (left, right) = this.SplitAt(index);
 		// TODO: Common sorted prefix?
-		var insert = new Rope<T>(new[] { item });
+		var insert = new Rope<T>(item);
 		return left + (insert + right);
 		////return new Rope<T>(new Rope<T>(left, insert), right).Balanced();
 	}
@@ -1618,7 +1877,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	///  of the Rope.Length.
 	/// </returns>
     [Pure]
-	public long BinarySearch<TComparer>(long index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
+	public readonly long BinarySearch<TComparer>(long index, int count, T item, IComparer<T> comparer) where TComparer : IComparer<T>
     {
 		var offset = this.Slice(index, count).BinarySearch(item, comparer);
         return index + offset;
@@ -1637,22 +1896,25 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	///  of the Rope.Length.
 	/// </returns>
     [Pure]
-	public long BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
+	public readonly long BinarySearch<TComparer>(T item, TComparer comparer) where TComparer : IComparer<T>
     {
-		if (this.IsNode)
-		{
-			var r = this.right.BinarySearch(item, comparer);
-			if (r != -1)
-			{
-				return this.left.Length + r;
-			}
+        switch (this.data)
+        {
+			case ValueTuple<T> value:
+                return value.Item1.Equals(item) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                return MemoryExtensions.BinarySearch(memory.Span, item, comparer);
+            case RopeNode node:
+                var r = node.right.BinarySearch(item, comparer);
+				if (r != -1)
+				{
+					return node.left.Length + r;
+				}
 
-			var l = this.left.BinarySearch(item, comparer);
-			return l;
-		}
-		else
-		{
-        	return MemoryExtensions.BinarySearch(this.data.Span, item, comparer);
+				var l = node.left.BinarySearch(item, comparer);
+				return l;
+			default:
+				return -1;
 		}
     }
 
@@ -1669,114 +1931,81 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	///  of the Rope.Length.
 	/// </returns>
     [Pure]
-	public long BinarySearch(T item)
+	public readonly long BinarySearch(T item)
     {
-		if (this.IsNode)
+		switch (this.data)
 		{
-			var r = this.right.BinarySearch(item, Comparer<T>.Default);
-			if (r != -1)
-			{
-				return this.left.Length + r;
-			}
+			case ValueTuple<T> value:
+                return value.Item1.Equals(item) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                return MemoryExtensions.BinarySearch(memory.Span, item, Comparer<T>.Default);
+            case RopeNode node:
+                var r = node.right.BinarySearch(item, Comparer<T>.Default);
+                if (r != -1)
+                {
+                    return node.left.Length + r;
+                }
 
-			var l = this.left.BinarySearch(item, Comparer<T>.Default);
-			return l;
-		}
-		else
-		{
-        	return MemoryExtensions.BinarySearch(this.data.Span, item, Comparer<T>.Default);
-		}
+                var l = node.left.BinarySearch(item, Comparer<T>.Default);
+                return l;
+			default:
+				return -1;
+        }
     }
-
-	/// <summary>
-	/// Gets the memory representation of this sequence, may allocate a new array if this instance is a tree.
-	/// </summary>
-	/// <returns>Read only memory of the rope.</returns>
-	[Pure]
-	public ReadOnlyMemory<T> ToMemory()
-	{
-		if (this.IsNode)
-		{
-			return this.ToArray().AsMemory();
-		}
-		
-		return this.data;
-	}
-
-	public override bool Equals(object? obj)
-	{
-		if (obj is null)
-		{
-			return false;
-		}
-		
-		return obj is Rope<T> other && this.Equals(other);
-	}
 	
-	public static bool Equals(Rope<T>? a, Rope<T>? b) 
-	{
-		if (a is null)
-		{
-			return b is null;
-		}
-
-		return a.Equals(b);
-	}
-
 	/// <summary>
 	/// Gets a value indicating whether these two ropes are equivalent in terms of their content.
 	/// </summary>
 	/// <param name="other">The other sequence to compare to</param>
 	/// <returns>true if both instances hold the same sequence, otherwise false.</returns>
 	[Pure]
-	public bool Equals(Rope<T>? other)
+	public readonly bool Equals(Rope<T> other)
 	{
-        if (object.ReferenceEquals(this, other))
-        {
-            return true;
-        }
-        if (other is null)
+		return this.data switch
+		{
+			ReadOnlyMemory<T> mem =>
+				other.data switch 
+				{
+					ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span),
+					_ => AlignedEquals(other)
+				},
+			ValueTuple<T> value => other.data is ValueTuple<T> otherValue && value.Item1.Equals(otherValue.Item1),
+			_ => AlignedEquals(other)
+		};
+	}
+	
+	private bool AlignedEquals(Rope<T> other) 
+	{
+		if (this.Length != other.Length)
 		{
 			return false;
 		}
-
-        if (this.Length != other.Length)
-        {
-            return false;
-        }
-
-        if (!this.IsNode && !other.IsNode)
-        {
-            return this.data.Span.SequenceEqual(other.data.Span);
-        }
-
 
 		if (this.Length == 0)
 		{
 			// Both must be empty if lengths are equal.
 			return true;
 		}
-
-        var rentedBuffers = BufferPool.Rent(this.BufferCount);
-        var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
-        var buffers = rentedBuffers[..this.BufferCount];
-        var findBuffers = rentedFindBuffers[..other.BufferCount];
-        this.FillBuffers(buffers);
-        other.FillBuffers(findBuffers);
-
-        var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
-        var matches = true;
-        while (aligned.MoveNext())
-        {
-            if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
-            {
-                matches = false;
-                break;
-            }
-        }
-
-        BufferPool.Return(rentedFindBuffers);
-        BufferPool.Return(rentedBuffers);
+		
+		var rentedBuffers = BufferPool.Rent(this.BufferCount);
+		var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
+		var buffers = rentedBuffers[..this.BufferCount];
+		var findBuffers = rentedFindBuffers[..other.BufferCount];
+		this.FillBuffers(buffers);
+		other.FillBuffers(findBuffers);
+		var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+		var matches = true;
+		while (aligned.MoveNext())
+		{
+			if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+			{
+				matches = false;
+				break;
+			}
+		}
+		
+		BufferPool.Return(rentedFindBuffers);
+		BufferPool.Return(rentedBuffers);
 		return matches;
 	}
 	
@@ -1809,19 +2038,14 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 	}
 
     [Pure]
-	private bool CalculateIsBalanced()
-    {
-        return this.IsNode ?
-            this.Depth < DepthToFibonnaciPlusTwo.Length && this.Length >= DepthToFibonnaciPlusTwo[this.Depth] :
-            true;
-    }
+    private static bool CalculateIsBalanced(long length, int depth) => depth < DepthToFibonnaciPlusTwo.Length && length >= DepthToFibonnaciPlusTwo[depth];
 
-	/// <summary>
-	/// Constructs a new Rope from a series of leaves into a tree.
-	/// </summary>
-	/// <param name="leaves">The leaf nodes to construct into a tree.</param>
-	/// <returns>A new rope with the leaves specified.</returns>
-	[Pure]
+    /// <summary>
+    /// Constructs a new Rope from a series of leaves into a tree.
+    /// </summary>
+    /// <param name="leaves">The leaf nodes to construct into a tree.</param>
+    /// <returns>A new rope with the leaves specified.</returns>
+    [Pure]
 	public static Rope<T> Combine(Rope<Rope<T>> leaves) 
 	{
 		// Iteratively combine leaf nodes into a balanced tree
@@ -1869,17 +2093,39 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 		return Combine(leaves);
     }
 
-	/// <summary>
-	/// Copies a span into a perfectly balanced binary tree.
-	/// </summary>
-	/// <param name="items">Read only list of items to copy from</param>
-	/// <returns>A new rope or <see cref="Empty"/> if items is empty.</returns>
+    /// <summary>
+    /// Efficiently copies a List into a single leaf node.
+    /// </summary>
+    /// <param name="items">Read only list of items to copy from</param>
+    /// <returns>A new rope or <see cref="Empty"/> if items is empty.</returns>
+    [Pure]
+    public static Rope<T> FromList(List<T> list)
+    {
+        if (list.Count == 0)
+        {
+            return Rope<T>.Empty;
+        }
+
+        ReadOnlySpan<T> span = CollectionsMarshal.AsSpan(list);
+        return Rope<T>.FromReadOnlySpan(ref span);
+    }
+
+    /// <summary>
+    /// Copies a read only list into a perfectly balanced binary tree.
+    /// </summary>
+    /// <param name="items">Read only list of items to copy from</param>
+    /// <returns>A new rope or <see cref="Empty"/> if items is empty.</returns>
     [Pure]
 	public static Rope<T> FromReadOnlyList(IReadOnlyList<T> items)
     {
 		if (items.Count == 0)
 		{
 			return Rope<T>.Empty;
+		}
+
+		if (items.Count == 1)
+		{
+			return new Rope<T>(items[0]);
 		}
 
 		// Rope to hold all the constructed leaf nodes consecutively.
@@ -1915,8 +2161,13 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			return Rope<T>.Empty;
 		}
 
-		// Rope to hold all the constructed leaf nodes consecutively.
-    	var leaves = Rope<Rope<T>>.Empty;
+        if (span.Length == 1)
+        {
+            return new Rope<T>(span[0]);
+        }
+
+        // Rope to hold all the constructed leaf nodes consecutively.
+        var leaves = Rope<Rope<T>>.Empty;
 
 		// Create leaf nodes
 		for (int i = 0; i < span.Length; i += MaxLeafLength)
@@ -1944,17 +2195,7 @@ public sealed class Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T
 			return Rope<T>.Empty;
 		}
 
-		// Rope to hold all the constructed leaf nodes consecutively.
-    	var leaves = Rope<Rope<T>>.Empty;
-
-		// Create leaf nodes
-		for (int i = 0; i < memory.Length; i += MaxLeafLength)
-		{
-			var length = Math.Min(MaxLeafLength, memory.Length - i);
-			leaves += new Rope<T>(memory.Slice(i, length));
-		}
-
-		return Combine(leaves);
+		return new Rope<T>(memory);
     }
 
     /// <summary>
