@@ -40,5 +40,5 @@ public readonly record struct Diff<T>(Operation Operation, Rope<T> Text) where T
 
     public bool Equals(Diff<T> other) => this.Operation == other.Operation && this.Text == other.Text;
 
-    public override int GetHashCode() => HashCode.Combine(this.Operation, this.Text.GetHashCode());    
+    public override int GetHashCode() => HashCode.Combine(this.Operation, this.Text.GetHashCode());
 }

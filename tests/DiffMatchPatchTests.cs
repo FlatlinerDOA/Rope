@@ -22,7 +22,7 @@ using Rope.Compare;
 using System.Diagnostics;
 
 [TestClass]
-public class DiffMatchPatchTests 
+public class DiffMatchPatchTests
 {
     public DiffMatchPatchTests()
     {
@@ -67,7 +67,7 @@ public class DiffMatchPatchTests
         AssertEquals("diff_commonOverlap: No overlap.", 0, "123456".ToRope().CommonOverlapLength("abcd".ToRope()));
 
         AssertEquals("diff_commonOverlap: No overlap #2.", 0, "abcdef".ToRope().CommonOverlapLength("cdfg".ToRope()));
-        
+
         AssertEquals("diff_commonOverlap: No overlap #3.", 0, "cdfg".ToRope().CommonOverlapLength("abcdef".ToRope()));
 
         AssertEquals("diff_commonOverlap: Overlap.", 3, "123456xxx".ToRope().CommonOverlapLength("xxxabcd".ToRope()));
@@ -176,7 +176,7 @@ public class DiffMatchPatchTests
         var actualDictionary = new Dictionary<Rope<char>, int>();
         var (actualChars, actualLineArray) = "ABC\n123\nXYZ\nDO\nRAY\nMI\n".ToRope()
             .AccumulateChunksIntoCharsSplit(Rope<Rope<char>>.Empty, actualDictionary, 3, DiffOptions<char>.LineLevel);
-        
+
         AssertEquals("Dictionary don't match", expectedDictionary, actualDictionary);
         AssertEquals("Chars don't match", expectedChars, actualChars);
         AssertEquals("LineArray don't match", expectedLineArray, actualLineArray);
@@ -207,7 +207,7 @@ public class DiffMatchPatchTests
         AssertEquals("diff_charsToLines: Equality #2.", new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.EQUAL, "a"));
 
         // Convert chars up to lines.
-        var diffs = new Rope<Diff<char>>(new[] 
+        var diffs = new Rope<Diff<char>>(new[]
         {
             new Diff<char>(Operation.EQUAL, "\u0001\u0002\u0001"),
             new Diff<char>(Operation.INSERT, "\u0002\u0001\u0002")
@@ -250,7 +250,7 @@ public class DiffMatchPatchTests
         tmpVector = tmpVector.Insert(0, "".AsMemory());
         diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, chars) });
         diffs = diffs.ConvertCharsToChunks(tmpVector);
-        AssertEquals("diff_charsToLines: More than 256.", new Rope<Diff<char>>(new[] {new Diff<char>(Operation.DELETE, lines)}), diffs);
+        AssertEquals("diff_charsToLines: More than 256.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, lines) }), diffs);
 
         // More than 65536 to verify any 16-bit limitation.
         lineList = Rope<char>.Empty;
@@ -852,11 +852,11 @@ public class DiffMatchPatchTests
             a += a;
             b += b;
         }
-        
+
         var s = Stopwatch.StartNew();
         _ = a.Diff(b, this.DiffOptions);
         s.Stop();
-        
+
         // Test that we took at least the timeout period.
         AssertTrue("diff_main: Timeout min.", TimeSpan.FromSeconds(this.DiffOptions.TimeoutSeconds) <= s.Elapsed);
         // Test that we didn't take forever (be forgiving).
@@ -905,7 +905,7 @@ public class DiffMatchPatchTests
                 { 'b', 18 },
                 { 'c', 8 }
             };
-            
+
             AssertEquals("match_alphabet: Duplicates.", bitmask, "abcaba".ToRope().MatchAlphabet());
         }
     }
@@ -1289,7 +1289,7 @@ public class DiffMatchPatchTests
             throw new ArgumentNullException(nameof(actual));
         }
 
-        if (expected.Length != actual.Length )
+        if (expected.Length != actual.Length)
         {
             throw new ArgumentException(string.Format("AssertEquals (string[], string[]) length fail:\n Expected: {0}\n Actual: {1}\n{2}", expected, actual, error_msg));
         }
@@ -1340,8 +1340,8 @@ public class DiffMatchPatchTests
         }
     }
 
-    private static void AssertEquals<TKey, TValue>(string error_msg, Dictionary<TKey, TValue> expected, Dictionary<TKey, TValue> actual) 
-        where TKey : notnull 
+    private static void AssertEquals<TKey, TValue>(string error_msg, Dictionary<TKey, TValue> expected, Dictionary<TKey, TValue> actual)
+        where TKey : notnull
         where TValue : IEquatable<TValue>
     {
         foreach (var k in actual.Keys)

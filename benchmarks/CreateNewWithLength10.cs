@@ -9,8 +9,8 @@ namespace Benchmarks;
 public class CreateNewWithLength10
 {
     private char[] array = new[] { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
-    
-    [Benchmark(Description ="string.ToRope()")]
+
+    [Benchmark(Description = "string.ToRope()")]
     public void RopeOfCharFromString() => _ = "0123456789".ToRope();
 
     [Benchmark(Description = "new Rope<char>(array)")]

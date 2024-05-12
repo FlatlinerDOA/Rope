@@ -35,7 +35,7 @@ public class Equals
         this.sbX = new StringBuilder(BenchmarkData.LoremIpsum[..Length]);
         this.strX = BenchmarkData.LoremIpsum[..Length];
         this.strY = BenchmarkData.LoremIpsum[..Length];
-        this.arrayX =  ImmutableArray<char>.Empty.AddRange(BenchmarkData.LoremIpsum[..Length].AsSpan());
+        this.arrayX = ImmutableArray<char>.Empty.AddRange(BenchmarkData.LoremIpsum[..Length].AsSpan());
         this.arrayY = ImmutableArray<char>.Empty.AddRange(BenchmarkData.LoremIpsum[..Length].AsSpan());
     }
 
@@ -47,7 +47,7 @@ public class Equals
 
     [Benchmark(Description = "StringBuilder")]
     public void StringBuilder()
-    {        
+    {
         _ = this.sbX.Equals(this.sbY.Span);
     }
 

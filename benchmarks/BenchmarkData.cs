@@ -533,7 +533,7 @@ Seven dailies and associated weeklies and magazines in [[Pennsylvania]] and [[Ne
 """;
 
 
-    public static readonly Rope<char> LongDiffText2 =LongDiffText2String.ToRope();
+    public static readonly Rope<char> LongDiffText2 = LongDiffText2String.ToRope();
     public static readonly string ShortDiffText1 = string.Concat(Enumerable.Range(0, 10).Select(t => "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n"));
 
     public static readonly string ShortDiffText2 = string.Concat(Enumerable.Range(0, 10).Select(t => "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n"));

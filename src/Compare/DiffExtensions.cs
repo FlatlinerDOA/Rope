@@ -80,7 +80,7 @@ public static class DiffExtensions
     public static Rope<T> ToSource<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
             (from aDiff in diffs
              where aDiff.Operation != Operation.INSERT
-             select aDiff.Text).Combine();      
+             select aDiff.Text).Combine();
 
     /// <summary>
     /// Compute and return the target text from a list of diff operations.

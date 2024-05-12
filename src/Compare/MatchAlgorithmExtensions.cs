@@ -212,7 +212,7 @@ public static class MatchAlgorithmExtensions
     /// <param name="options">Options for matching.</param>
     /// <returns>Overall score for match (0.0 = good, 1.0 = bad).</returns>
     [Pure]
-    internal static double MatchBitapScore<T>(this Rope<T> pattern, long e, long x, long loc, MatchOptions options) where T : IEquatable<T> 
+    internal static double MatchBitapScore<T>(this Rope<T> pattern, long e, long x, long loc, MatchOptions options) where T : IEquatable<T>
     {
         float accuracy = (float)e / pattern.Length;
         var proximity = Math.Abs(loc - x);

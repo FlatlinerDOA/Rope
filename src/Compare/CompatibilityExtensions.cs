@@ -178,9 +178,9 @@ public static class CompatibilityExtensions
             {
                 // does not require escaping
                 return false;
-            } 
+            }
             else
-            { 
+            {
                 return UrlEncoder.Default.WillEncode(unicodeScalar);
             }
         }

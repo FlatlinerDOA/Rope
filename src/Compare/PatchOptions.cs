@@ -39,7 +39,7 @@ namespace Rope.Compare;
 /// A match this many characters away from the expected location will add
 /// 1.0 to the score (0.0 is a perfect match).
 /// </param>
-public record class PatchOptions(float DeleteThreshold, short Margin, short MaxLength, float MatchThreshold, int MatchDistance) : MatchOptions(MatchThreshold, MatchDistance)  
+public record class PatchOptions(float DeleteThreshold, short Margin, short MaxLength, float MatchThreshold, int MatchDistance) : MatchOptions(MatchThreshold, MatchDistance)
 {
     public static new readonly PatchOptions Default = new(0.5f, 4, 32, 0.5f, 1000);
 }
