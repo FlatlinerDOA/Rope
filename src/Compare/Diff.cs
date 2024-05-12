@@ -22,7 +22,6 @@
 namespace Rope.Compare;
 
 using System;
-using System.Drawing;
 
 /// <summary>
 /// Record struct representing one diff operation.
