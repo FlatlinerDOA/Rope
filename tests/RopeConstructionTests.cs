@@ -136,4 +136,11 @@ public class RopeConstructionTests
         var actual = ropeOfRopes.Combine();
         Assert.AreEqual("test".ToRope(), actual);
     }
+
+    [TestMethod]
+    public void CollectionInitializer()
+    {
+        Rope<char> chars = ['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '!'];
+        Assert.IsTrue(chars.SequenceEqual(['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '!']));
+    }
 }
