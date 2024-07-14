@@ -42,10 +42,27 @@ string text2 = text + " My second favourite text";
 // Better: This makes a new rope out of the other two ropes, no string allocations or copies.
 Rope<char> text3 = text + " My second favourite text".ToRope();
 
-// Value-like equivalence.
+// Value-like equivalence, no need for SequenceEqual!.
 "test".ToRope() == ("te".ToRope() + "st".ToRope());
 "test".ToRope().GetHashCode() == ("te".ToRope() + "st".ToRope()).GetHashCode();
 
+// Store a rope of anything, just like List<T>!
+Rope<Person> ropeOfPeople = [new Person("Frank"), new Person("Jane")]; // Makes an immutable and thread safe list of people.
+
+
+```
+
+## In built support for Diffing and Patching 
+### Example Usage
+```csharp
+// Compare two ropes using the DiffMatchPatch algorithm (Google).
+Rope<Diff<char>> diffs = "abcdef".ToRope().Diff("abefg");
+Rope<char> originalText = diffs.ToSource();
+Rope<char> updatedText = diffs.ToTarget();
+
+// Create a Patch string (like Git's patch text)
+var patches = diffs.ToPatches(); // A rope of patches
+var patchText = patches.ToPatchText(); // A single string of patch text.
 ```
 
 ## Comparison with .NET Built in Types

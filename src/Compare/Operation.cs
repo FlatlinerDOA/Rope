@@ -19,7 +19,6 @@
 * limitations under the License.
 * 
 */
-
 namespace Rope.Compare;
 
 /**-
@@ -30,7 +29,18 @@ namespace Rope.Compare;
  */
 public enum Operation
 {
-    DELETE = -1,
-    EQUAL = 0,
-    INSERT = 1
+    /// <summary>
+    /// Diff operation representing a removed item.
+    /// </summary>
+    Delete = -1,
+    
+    /// <summary>
+    /// Diff operation representing an unchanged item.
+    /// </summary>
+    Equal = 0,
+
+    /// <summary>
+    /// Diff operation representing an inserted item.
+    /// </summary>
+    Insert = 1
 }

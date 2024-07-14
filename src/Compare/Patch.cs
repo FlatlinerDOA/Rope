@@ -77,20 +77,74 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
         {
             switch (aDiff.Operation)
             {
-                case Operation.INSERT:
+                case Operation.Insert:
                     text = text.Add('+');
                     break;
-                case Operation.DELETE:
+                case Operation.Delete:
                     text = text.Add('-');
                     break;
-                case Operation.EQUAL:
+                case Operation.Equal:
                     text = text.Add(' ');
                     break;
             }
 
-            text = text.AddRange(aDiff.Text.DiffEncode()).Append("\n");
+            text = text.AddRange(aDiff.Items.ToString().ToRope().DiffEncode()).Append("\n");
         }
 
         return text.ToString();
+    }
+
+
+    public Rope<char> ToCharRope(Func<T, Rope<char>> itemToString)
+    {
+        string coords1, coords2;
+        if (this.Length1 == 0)
+        {
+            coords1 = this.Start1 + ",0";
+        }
+        else if (this.Length1 == 1)
+        {
+            coords1 = Convert.ToString(this.Start1 + 1);
+        }
+        else
+        {
+            coords1 = (this.Start1 + 1) + "," + this.Length1;
+        }
+        if (this.Length2 == 0)
+        {
+            coords2 = this.Start2 + ",0";
+        }
+        else if (this.Length2 == 1)
+        {
+            coords2 = Convert.ToString(this.Start2 + 1);
+        }
+        else
+        {
+            coords2 = (this.Start2 + 1) + "," + this.Length2;
+        }
+
+        var text = Rope<char>.Empty;
+        text = text.Append("@@ -").Append(coords1).Append(" +").Append(coords2)
+            .Append(" @@\n");
+        // Escape the body of the patch with %xx notation.
+        foreach (var aDiff in this.Diffs)
+        {
+            switch (aDiff.Operation)
+            {
+                case Operation.Insert:
+                    text = text.Add('+');
+                    break;
+                case Operation.Delete:
+                    text = text.Add('-');
+                    break;
+                case Operation.Equal:
+                    text = text.Add(' ');
+                    break;
+            }
+            
+            text = text.AddRange(aDiff.Items.DiffEncode(itemToString)).Append("\n");
+        }
+
+        return text;
     }
 }

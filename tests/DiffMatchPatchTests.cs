@@ -161,8 +161,8 @@ public class DiffMatchPatchTests
         AssertEquals("Test initialization fail #2.", n, chars.Length);
         tmpVector = tmpVector.Insert(0, "".ToRope());
         result = lines.DiffChunksToChars("".ToRope(), this.DiffOptions);
-        AssertEquals("diff_linesToChars: More than 256 #1.", chars, result.Text1Encoded);
-        AssertEquals("diff_linesToChars: More than 256 #2.", "".ToRope(), result.Text2Encoded);
+        AssertEquals("diff_linesToChars: More than 256 #1.", chars, result.FirstEncoded);
+        AssertEquals("diff_linesToChars: More than 256 #2.", "".ToRope(), result.SecondEncoded);
         AssertEquals("diff_linesToChars: More than 256 #3.", tmpVector, result.Lines);
     }
 
@@ -202,15 +202,15 @@ public class DiffMatchPatchTests
     public void DiffCharsToLinesTest()
     {
         // First check that Diff equality works.
-        AssertTrue("diff_charsToLines: Equality #1.", new Diff<char>(Operation.EQUAL, "a").Equals(new Diff<char>(Operation.EQUAL, "a")));
+        AssertTrue("diff_charsToLines: Equality #1.", new Diff<char>(Operation.Equal, "a").Equals(new Diff<char>(Operation.Equal, "a")));
 
-        AssertEquals("diff_charsToLines: Equality #2.", new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.EQUAL, "a"));
+        AssertEquals("diff_charsToLines: Equality #2.", new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Equal, "a"));
 
         // Convert chars up to lines.
         var diffs = new Rope<Diff<char>>(new[]
         {
-            new Diff<char>(Operation.EQUAL, "\u0001\u0002\u0001"),
-            new Diff<char>(Operation.INSERT, "\u0002\u0001\u0002")
+            new Diff<char>(Operation.Equal, "\u0001\u0002\u0001"),
+            new Diff<char>(Operation.Insert, "\u0002\u0001\u0002")
         });
 
         Rope<Rope<char>> tmpVector = Rope<Rope<char>>.Empty;
@@ -225,8 +225,8 @@ public class DiffMatchPatchTests
             new Rope<Diff<char>>(
                 new[]
                 {
-                    new Diff<char>(Operation.EQUAL, "alpha\nbeta\nalpha\n"),
-                    new Diff<char>(Operation.INSERT, "beta\nalpha\nbeta\n")
+                    new Diff<char>(Operation.Equal, "alpha\nbeta\nalpha\n"),
+                    new Diff<char>(Operation.Insert, "beta\nalpha\nbeta\n")
                 }),
             diffs);
 
@@ -248,9 +248,9 @@ public class DiffMatchPatchTests
         string chars = charList.ToString();
         AssertEquals("Test initialization fail #4.", n, chars.Length);
         tmpVector = tmpVector.Insert(0, "".AsMemory());
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, chars) });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, chars) });
         diffs = diffs.ConvertCharsToChunks(tmpVector);
-        AssertEquals("diff_charsToLines: More than 256.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, lines) }), diffs);
+        AssertEquals("diff_charsToLines: More than 256.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, lines) }), diffs);
 
         // More than 65536 to verify any 16-bit limitation.
         lineList = Rope<char>.Empty;
@@ -261,9 +261,9 @@ public class DiffMatchPatchTests
 
         lineList = lineList.ToMemory();
         var result = lineList.DiffChunksToChars(Rope<char>.Empty, this.DiffOptions);
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, result.Text1Encoded) });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, result.FirstEncoded) });
         diffs = diffs.ConvertCharsToChunks(result.Lines);
-        AssertEquals("diff_charsToLines: More than 65536.", lineList, diffs[0].Text);
+        AssertEquals("diff_charsToLines: More than 65536.", lineList, diffs[0].Items);
     }
 
     [TestMethod]
@@ -274,57 +274,57 @@ public class DiffMatchPatchTests
         var diffs = Rope<Diff<char>>.Empty;
         AssertEquals("diff_cleanupMerge: Null case.", Rope<Diff<char>>.Empty, diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.INSERT, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Insert, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: No change case.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.INSERT, "c") }), diffs);
+        AssertEquals("diff_cleanupMerge: No change case.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Insert, "c") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Equal, "b"), new Diff<char>(Operation.Equal, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Merge equalities.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "abc") }), diffs);
+        AssertEquals("diff_cleanupMerge: Merge equalities.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "abc") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.DELETE, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Delete, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Merge deletions.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "abc") }), diffs);
+        AssertEquals("diff_cleanupMerge: Merge deletions.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "abc") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "a"), new Diff<char>(Operation.INSERT, "b"), new Diff<char>(Operation.INSERT, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "a"), new Diff<char>(Operation.Insert, "b"), new Diff<char>(Operation.Insert, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Merge insertions.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "abc") }), diffs);
+        AssertEquals("diff_cleanupMerge: Merge insertions.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "abc") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "b"), new Diff<char>(Operation.DELETE, "c"), new Diff<char>(Operation.INSERT, "d"), new Diff<char>(Operation.EQUAL, "e"), new Diff<char>(Operation.EQUAL, "f") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Insert, "b"), new Diff<char>(Operation.Delete, "c"), new Diff<char>(Operation.Insert, "d"), new Diff<char>(Operation.Equal, "e"), new Diff<char>(Operation.Equal, "f") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Merge interweave.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "ac"), new Diff<char>(Operation.INSERT, "bd"), new Diff<char>(Operation.EQUAL, "ef") }), diffs);
+        AssertEquals("diff_cleanupMerge: Merge interweave.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "ac"), new Diff<char>(Operation.Insert, "bd"), new Diff<char>(Operation.Equal, "ef") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "abc"), new Diff<char>(Operation.DELETE, "dc") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Insert, "abc"), new Diff<char>(Operation.Delete, "dc") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Prefix and suffix detection.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "d"), new Diff<char>(Operation.INSERT, "b"), new Diff<char>(Operation.EQUAL, "c") }), diffs);
+        AssertEquals("diff_cleanupMerge: Prefix and suffix detection.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "d"), new Diff<char>(Operation.Insert, "b"), new Diff<char>(Operation.Equal, "c") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "x"), new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "abc"), new Diff<char>(Operation.DELETE, "dc"), new Diff<char>(Operation.EQUAL, "y") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "x"), new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Insert, "abc"), new Diff<char>(Operation.Delete, "dc"), new Diff<char>(Operation.Equal, "y") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Prefix and suffix detection with equalities.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "xa"), new Diff<char>(Operation.DELETE, "d"), new Diff<char>(Operation.INSERT, "b"), new Diff<char>(Operation.EQUAL, "cy") }), diffs);
+        AssertEquals("diff_cleanupMerge: Prefix and suffix detection with equalities.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "xa"), new Diff<char>(Operation.Delete, "d"), new Diff<char>(Operation.Insert, "b"), new Diff<char>(Operation.Equal, "cy") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.INSERT, "ba"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Insert, "ba"), new Diff<char>(Operation.Equal, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Slide edit left.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "ab"), new Diff<char>(Operation.EQUAL, "ac") }), diffs);
+        AssertEquals("diff_cleanupMerge: Slide edit left.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "ab"), new Diff<char>(Operation.Equal, "ac") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "c"), new Diff<char>(Operation.INSERT, "ab"), new Diff<char>(Operation.EQUAL, "a") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "c"), new Diff<char>(Operation.Insert, "ab"), new Diff<char>(Operation.Equal, "a") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Slide edit right.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "ca"), new Diff<char>(Operation.INSERT, "ba") }), diffs);
+        AssertEquals("diff_cleanupMerge: Slide edit right.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "ca"), new Diff<char>(Operation.Insert, "ba") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.EQUAL, "c"), new Diff<char>(Operation.DELETE, "ac"), new Diff<char>(Operation.EQUAL, "x") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Equal, "c"), new Diff<char>(Operation.Delete, "ac"), new Diff<char>(Operation.Equal, "x") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Slide edit left recursive.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "abc"), new Diff<char>(Operation.EQUAL, "acx") }), diffs);
+        AssertEquals("diff_cleanupMerge: Slide edit left recursive.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "abc"), new Diff<char>(Operation.Equal, "acx") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "x"), new Diff<char>(Operation.DELETE, "ca"), new Diff<char>(Operation.EQUAL, "c"), new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.EQUAL, "a") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "x"), new Diff<char>(Operation.Delete, "ca"), new Diff<char>(Operation.Equal, "c"), new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Equal, "a") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Slide edit right recursive.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "xca"), new Diff<char>(Operation.DELETE, "cba") }), diffs);
+        AssertEquals("diff_cleanupMerge: Slide edit right recursive.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "xca"), new Diff<char>(Operation.Delete, "cba") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "b"), new Diff<char>(Operation.INSERT, "ab"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "b"), new Diff<char>(Operation.Insert, "ab"), new Diff<char>(Operation.Equal, "c") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Empty merge.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "a"), new Diff<char>(Operation.EQUAL, "bc") }), diffs);
+        AssertEquals("diff_cleanupMerge: Empty merge.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "a"), new Diff<char>(Operation.Equal, "bc") }), diffs);
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, ""), new Diff<char>(Operation.INSERT, "a"), new Diff<char>(Operation.EQUAL, "b") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, ""), new Diff<char>(Operation.Insert, "a"), new Diff<char>(Operation.Equal, "b") });
         diffs = diffs.DiffCleanupMerge();
-        AssertEquals("diff_cleanupMerge: Empty equality.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "a"), new Diff<char>(Operation.EQUAL, "b") }), diffs);
+        AssertEquals("diff_cleanupMerge: Empty equality.", new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "a"), new Diff<char>(Operation.Equal, "b") }), diffs);
     }
 
     [TestMethod]
@@ -337,74 +337,74 @@ public class DiffMatchPatchTests
 
         diffs = new Rope<Diff<char>>(new[]
         {
-            new Diff<char>(Operation.EQUAL, "AAA\r\n\r\nBBB"),
-            new Diff<char>(Operation.INSERT, "\r\nDDD\r\n\r\nBBB"),
-            new Diff<char>(Operation.EQUAL, "\r\nEEE")
+            new Diff<char>(Operation.Equal, "AAA\r\n\r\nBBB"),
+            new Diff<char>(Operation.Insert, "\r\nDDD\r\n\r\nBBB"),
+            new Diff<char>(Operation.Equal, "\r\nEEE")
         });
 
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Blank lines.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "AAA\r\n\r\n"),
-        new Diff<char>(Operation.INSERT, "BBB\r\nDDD\r\n\r\n"),
-        new Diff<char>(Operation.EQUAL, "BBB\r\nEEE")}), diffs);
+        new Diff<char>(Operation.Equal, "AAA\r\n\r\n"),
+        new Diff<char>(Operation.Insert, "BBB\r\nDDD\r\n\r\n"),
+        new Diff<char>(Operation.Equal, "BBB\r\nEEE")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "AAA\r\nBBB"),
-        new Diff<char>(Operation.INSERT, " DDD\r\nBBB"),
-        new Diff<char>(Operation.EQUAL, " EEE")});
+        new Diff<char>(Operation.Equal, "AAA\r\nBBB"),
+        new Diff<char>(Operation.Insert, " DDD\r\nBBB"),
+        new Diff<char>(Operation.Equal, " EEE")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Line boundaries.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "AAA\r\n"),
-        new Diff<char>(Operation.INSERT, "BBB DDD\r\n"),
-        new Diff<char>(Operation.EQUAL, "BBB EEE")}), diffs);
+        new Diff<char>(Operation.Equal, "AAA\r\n"),
+        new Diff<char>(Operation.Insert, "BBB DDD\r\n"),
+        new Diff<char>(Operation.Equal, "BBB EEE")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The c"),
-        new Diff<char>(Operation.INSERT, "ow and the c"),
-        new Diff<char>(Operation.EQUAL, "at.")});
+        new Diff<char>(Operation.Equal, "The c"),
+        new Diff<char>(Operation.Insert, "ow and the c"),
+        new Diff<char>(Operation.Equal, "at.")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Word boundaries.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The "),
-        new Diff<char>(Operation.INSERT, "cow and the "),
-        new Diff<char>(Operation.EQUAL, "cat.")}), diffs);
+        new Diff<char>(Operation.Equal, "The "),
+        new Diff<char>(Operation.Insert, "cow and the "),
+        new Diff<char>(Operation.Equal, "cat.")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The-c"),
-        new Diff<char>(Operation.INSERT, "ow-and-the-c"),
-        new Diff<char>(Operation.EQUAL, "at.")});
+        new Diff<char>(Operation.Equal, "The-c"),
+        new Diff<char>(Operation.Insert, "ow-and-the-c"),
+        new Diff<char>(Operation.Equal, "at.")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Alphanumeric boundaries.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The-"),
-        new Diff<char>(Operation.INSERT, "cow-and-the-"),
-        new Diff<char>(Operation.EQUAL, "cat.")}), diffs);
+        new Diff<char>(Operation.Equal, "The-"),
+        new Diff<char>(Operation.Insert, "cow-and-the-"),
+        new Diff<char>(Operation.Equal, "cat.")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "a"),
-        new Diff<char>(Operation.DELETE, "a"),
-        new Diff<char>(Operation.EQUAL, "ax")});
+        new Diff<char>(Operation.Equal, "a"),
+        new Diff<char>(Operation.Delete, "a"),
+        new Diff<char>(Operation.Equal, "ax")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Hitting the start.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "a"),
-        new Diff<char>(Operation.EQUAL, "aax")}), diffs);
+        new Diff<char>(Operation.Delete, "a"),
+        new Diff<char>(Operation.Equal, "aax")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "xa"),
-        new Diff<char>(Operation.DELETE, "a"),
-        new Diff<char>(Operation.EQUAL, "a")});
+        new Diff<char>(Operation.Equal, "xa"),
+        new Diff<char>(Operation.Delete, "a"),
+        new Diff<char>(Operation.Equal, "a")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Hitting the end.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "xaa"),
-        new Diff<char>(Operation.DELETE, "a")}), diffs);
+        new Diff<char>(Operation.Equal, "xaa"),
+        new Diff<char>(Operation.Delete, "a")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The xxx. The "),
-        new Diff<char>(Operation.INSERT, "zzz. The "),
-        new Diff<char>(Operation.EQUAL, "yyy.")});
+        new Diff<char>(Operation.Equal, "The xxx. The "),
+        new Diff<char>(Operation.Insert, "zzz. The "),
+        new Diff<char>(Operation.Equal, "yyy.")});
         diffs = diffs.DiffCleanupSemanticLossless();
         AssertEquals("diff_cleanupSemanticLossless: Sentence boundaries.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The xxx."),
-        new Diff<char>(Operation.INSERT, " The zzz."),
-        new Diff<char>(Operation.EQUAL, " The yyy.")}), diffs);
+        new Diff<char>(Operation.Equal, "The xxx."),
+        new Diff<char>(Operation.Insert, " The zzz."),
+        new Diff<char>(Operation.Equal, " The yyy.")}), diffs);
     }
 
     [TestMethod]
@@ -417,115 +417,115 @@ public class DiffMatchPatchTests
         AssertEquals("diff_cleanupSemantic: Null case.", Rope<Diff<char>>.Empty, diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "cd"),
-        new Diff<char>(Operation.EQUAL, "12"),
-        new Diff<char>(Operation.DELETE, "e")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "cd"),
+        new Diff<char>(Operation.Equal, "12"),
+        new Diff<char>(Operation.Delete, "e")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: No elimination #1.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "cd"),
-        new Diff<char>(Operation.EQUAL, "12"),
-        new Diff<char>(Operation.DELETE, "e")}), diffs);
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "cd"),
+        new Diff<char>(Operation.Equal, "12"),
+        new Diff<char>(Operation.Delete, "e")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.INSERT, "ABC"),
-        new Diff<char>(Operation.EQUAL, "1234"),
-        new Diff<char>(Operation.DELETE, "wxyz")});
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Insert, "ABC"),
+        new Diff<char>(Operation.Equal, "1234"),
+        new Diff<char>(Operation.Delete, "wxyz")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: No elimination #2.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.INSERT, "ABC"),
-        new Diff<char>(Operation.EQUAL, "1234"),
-        new Diff<char>(Operation.DELETE, "wxyz")}), diffs);
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Insert, "ABC"),
+        new Diff<char>(Operation.Equal, "1234"),
+        new Diff<char>(Operation.Delete, "wxyz")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "a"),
-        new Diff<char>(Operation.EQUAL, "b"),
-        new Diff<char>(Operation.DELETE, "c")});
+        new Diff<char>(Operation.Delete, "a"),
+        new Diff<char>(Operation.Equal, "b"),
+        new Diff<char>(Operation.Delete, "c")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Simple elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.INSERT, "b")}), diffs);
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Insert, "b")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.EQUAL, "cd"),
-        new Diff<char>(Operation.DELETE, "e"),
-        new Diff<char>(Operation.EQUAL, "f"),
-        new Diff<char>(Operation.INSERT, "g")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Equal, "cd"),
+        new Diff<char>(Operation.Delete, "e"),
+        new Diff<char>(Operation.Equal, "f"),
+        new Diff<char>(Operation.Insert, "g")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Backpass elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcdef"),
-        new Diff<char>(Operation.INSERT, "cdfg")}), diffs);
+        new Diff<char>(Operation.Delete, "abcdef"),
+        new Diff<char>(Operation.Insert, "cdfg")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.INSERT, "1"),
-        new Diff<char>(Operation.EQUAL, "A"),
-        new Diff<char>(Operation.DELETE, "B"),
-        new Diff<char>(Operation.INSERT, "2"),
-        new Diff<char>(Operation.EQUAL, "_"),
-        new Diff<char>(Operation.INSERT, "1"),
-        new Diff<char>(Operation.EQUAL, "A"),
-        new Diff<char>(Operation.DELETE, "B"),
-        new Diff<char>(Operation.INSERT, "2")});
+        new Diff<char>(Operation.Insert, "1"),
+        new Diff<char>(Operation.Equal, "A"),
+        new Diff<char>(Operation.Delete, "B"),
+        new Diff<char>(Operation.Insert, "2"),
+        new Diff<char>(Operation.Equal, "_"),
+        new Diff<char>(Operation.Insert, "1"),
+        new Diff<char>(Operation.Equal, "A"),
+        new Diff<char>(Operation.Delete, "B"),
+        new Diff<char>(Operation.Insert, "2")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Multiple elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "AB_AB"),
-        new Diff<char>(Operation.INSERT, "1A2_1A2")}), diffs);
+        new Diff<char>(Operation.Delete, "AB_AB"),
+        new Diff<char>(Operation.Insert, "1A2_1A2")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The c"),
-        new Diff<char>(Operation.DELETE, "ow and the c"),
-        new Diff<char>(Operation.EQUAL, "at.")});
+        new Diff<char>(Operation.Equal, "The c"),
+        new Diff<char>(Operation.Delete, "ow and the c"),
+        new Diff<char>(Operation.Equal, "at.")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Word boundaries.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "The "),
-        new Diff<char>(Operation.DELETE, "cow and the "),
-        new Diff<char>(Operation.EQUAL, "cat.")}), diffs);
+        new Diff<char>(Operation.Equal, "The "),
+        new Diff<char>(Operation.Delete, "cow and the "),
+        new Diff<char>(Operation.Equal, "cat.")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcxx"),
-        new Diff<char>(Operation.INSERT, "xxdef")});
+        new Diff<char>(Operation.Delete, "abcxx"),
+        new Diff<char>(Operation.Insert, "xxdef")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: No overlap elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcxx"),
-        new Diff<char>(Operation.INSERT, "xxdef")}), diffs);
+        new Diff<char>(Operation.Delete, "abcxx"),
+        new Diff<char>(Operation.Insert, "xxdef")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcxxx"),
-        new Diff<char>(Operation.INSERT, "xxxdef")});
+        new Diff<char>(Operation.Delete, "abcxxx"),
+        new Diff<char>(Operation.Insert, "xxxdef")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Overlap elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.EQUAL, "xxx"),
-        new Diff<char>(Operation.INSERT, "def")}), diffs);
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Equal, "xxx"),
+        new Diff<char>(Operation.Insert, "def")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "xxxabc"),
-        new Diff<char>(Operation.INSERT, "defxxx")});
+        new Diff<char>(Operation.Delete, "xxxabc"),
+        new Diff<char>(Operation.Insert, "defxxx")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Reverse overlap elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.INSERT, "def"),
-        new Diff<char>(Operation.EQUAL, "xxx"),
-        new Diff<char>(Operation.DELETE, "abc")}), diffs);
+        new Diff<char>(Operation.Insert, "def"),
+        new Diff<char>(Operation.Equal, "xxx"),
+        new Diff<char>(Operation.Delete, "abc")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcd1212"),
-        new Diff<char>(Operation.INSERT, "1212efghi"),
-        new Diff<char>(Operation.EQUAL, "----"),
-        new Diff<char>(Operation.DELETE, "A3"),
-        new Diff<char>(Operation.INSERT, "3BC")});
+        new Diff<char>(Operation.Delete, "abcd1212"),
+        new Diff<char>(Operation.Insert, "1212efghi"),
+        new Diff<char>(Operation.Equal, "----"),
+        new Diff<char>(Operation.Delete, "A3"),
+        new Diff<char>(Operation.Insert, "3BC")});
         diffs = diffs.DiffCleanupSemantic();
         AssertEquals("diff_cleanupSemantic: Two overlap eliminations.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abcd"),
-        new Diff<char>(Operation.EQUAL, "1212"),
-        new Diff<char>(Operation.INSERT, "efghi"),
-        new Diff<char>(Operation.EQUAL, "----"),
-        new Diff<char>(Operation.DELETE, "A"),
-        new Diff<char>(Operation.EQUAL, "3"),
-        new Diff<char>(Operation.INSERT, "BC")}), diffs);
+        new Diff<char>(Operation.Delete, "abcd"),
+        new Diff<char>(Operation.Equal, "1212"),
+        new Diff<char>(Operation.Insert, "efghi"),
+        new Diff<char>(Operation.Equal, "----"),
+        new Diff<char>(Operation.Delete, "A"),
+        new Diff<char>(Operation.Equal, "3"),
+        new Diff<char>(Operation.Insert, "BC")}), diffs);
     }
 
     [TestMethod]
@@ -538,64 +538,64 @@ public class DiffMatchPatchTests
         AssertEquals("diff_cleanupEfficiency: Null case.", Rope<Diff<char>>.Empty, diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "wxyz"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "34")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "wxyz"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "34")});
         diffs = diffs.DiffCleanupEfficiency(this.DiffOptions);
         AssertEquals("diff_cleanupEfficiency: No elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "wxyz"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "34")}), diffs);
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "wxyz"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "34")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "xyz"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "34")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "xyz"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "34")});
         diffs = diffs.DiffCleanupEfficiency(this.DiffOptions);
         AssertEquals("diff_cleanupEfficiency: Four-edit elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abxyzcd"),
-        new Diff<char>(Operation.INSERT, "12xyz34")}), diffs);
+        new Diff<char>(Operation.Delete, "abxyzcd"),
+        new Diff<char>(Operation.Insert, "12xyz34")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "x"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "34")});
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "x"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "34")});
         diffs = diffs.DiffCleanupEfficiency(this.DiffOptions);
         AssertEquals("diff_cleanupEfficiency: Three-edit elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "xcd"),
-        new Diff<char>(Operation.INSERT, "12x34")}), diffs);
+        new Diff<char>(Operation.Delete, "xcd"),
+        new Diff<char>(Operation.Insert, "12x34")}), diffs);
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "xy"),
-        new Diff<char>(Operation.INSERT, "34"),
-        new Diff<char>(Operation.EQUAL, "z"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "56")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "xy"),
+        new Diff<char>(Operation.Insert, "34"),
+        new Diff<char>(Operation.Equal, "z"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "56")});
         diffs = diffs.DiffCleanupEfficiency(this.DiffOptions);
         AssertEquals("diff_cleanupEfficiency: Backpass elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abxyzcd"),
-        new Diff<char>(Operation.INSERT, "12xy34z56")}), diffs);
+        new Diff<char>(Operation.Delete, "abxyzcd"),
+        new Diff<char>(Operation.Insert, "12xy34z56")}), diffs);
 
         this.DiffOptions = this.DiffOptions with { EditCost = 5 };
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "ab"),
-        new Diff<char>(Operation.INSERT, "12"),
-        new Diff<char>(Operation.EQUAL, "wxyz"),
-        new Diff<char>(Operation.DELETE, "cd"),
-        new Diff<char>(Operation.INSERT, "34")});
+        new Diff<char>(Operation.Delete, "ab"),
+        new Diff<char>(Operation.Insert, "12"),
+        new Diff<char>(Operation.Equal, "wxyz"),
+        new Diff<char>(Operation.Delete, "cd"),
+        new Diff<char>(Operation.Insert, "34")});
         diffs = diffs.DiffCleanupEfficiency(this.DiffOptions);
         AssertEquals("diff_cleanupEfficiency: High cost elimination.", new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abwxyzcd"),
-        new Diff<char>(Operation.INSERT, "12wxyz34")}), diffs);
+        new Diff<char>(Operation.Delete, "abwxyzcd"),
+        new Diff<char>(Operation.Insert, "12wxyz34")}), diffs);
 
         this.DiffOptions = this.DiffOptions with { EditCost = 4 };
     }
@@ -605,9 +605,9 @@ public class DiffMatchPatchTests
     {
         // Pretty print.
         var diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "a\n"),
-        new Diff<char>(Operation.DELETE, "<B>b</B>"),
-        new Diff<char>(Operation.INSERT, "c&d")});
+        new Diff<char>(Operation.Equal, "a\n"),
+        new Diff<char>(Operation.Delete, "<B>b</B>"),
+        new Diff<char>(Operation.Insert, "c&d")});
         AssertEquals(
             "diff_prettyHtml:",
             "<span>a&para;<br></span><del style=\"background:#ffe6e6;\">&lt;B&gt;b&lt;/B&gt;</del><ins style=\"background:#e6ffe6;\">c&amp;d</ins>".ToRope(),
@@ -619,13 +619,13 @@ public class DiffMatchPatchTests
     {
         // Compute the source and destination texts.
         var diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "jump"),
-        new Diff<char>(Operation.DELETE, "s"),
-        new Diff<char>(Operation.INSERT, "ed"),
-        new Diff<char>(Operation.EQUAL, " over "),
-        new Diff<char>(Operation.DELETE, "the"),
-        new Diff<char>(Operation.INSERT, "a"),
-        new Diff<char>(Operation.EQUAL, " lazy")});
+        new Diff<char>(Operation.Equal, "jump"),
+        new Diff<char>(Operation.Delete, "s"),
+        new Diff<char>(Operation.Insert, "ed"),
+        new Diff<char>(Operation.Equal, " over "),
+        new Diff<char>(Operation.Delete, "the"),
+        new Diff<char>(Operation.Insert, "a"),
+        new Diff<char>(Operation.Equal, " lazy")});
         AssertEquals("diff_text1:", "jumps over the lazy".ToRope(), diffs.ToSource());
         AssertEquals("diff_text2:", "jumped over a lazy".ToRope(), diffs.ToTarget());
     }
@@ -644,14 +644,14 @@ public class DiffMatchPatchTests
     {
         // Convert a diff into delta string.
         var diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "jump"),
-        new Diff<char>(Operation.DELETE, "s"),
-        new Diff<char>(Operation.INSERT, "ed"),
-        new Diff<char>(Operation.EQUAL, " over "),
-        new Diff<char>(Operation.DELETE, "the"),
-        new Diff<char>(Operation.INSERT, "a"),
-        new Diff<char>(Operation.EQUAL, " lazy"),
-        new Diff<char>(Operation.INSERT, "old dog")});
+        new Diff<char>(Operation.Equal, "jump"),
+        new Diff<char>(Operation.Delete, "s"),
+        new Diff<char>(Operation.Insert, "ed"),
+        new Diff<char>(Operation.Equal, " over "),
+        new Diff<char>(Operation.Delete, "the"),
+        new Diff<char>(Operation.Insert, "a"),
+        new Diff<char>(Operation.Equal, " lazy"),
+        new Diff<char>(Operation.Insert, "old dog")});
         var text1 = diffs.ToSource();
         AssertEquals("diff_text1: Base text.", "jumps over the lazy".ToRope(), text1);
 
@@ -659,12 +659,12 @@ public class DiffMatchPatchTests
         AssertEquals("diff_toDelta:", "=4\t-1\t+ed\t=6\t-3\t+a\t=5\t+old dog", delta.ToString());
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: Normal.", diffs, text1.ConvertDeltaToDiff(delta));
+        AssertEquals("diff_fromDelta: Normal.", diffs, delta.ParseDelta(text1));
 
         // Generates error (19 < 20).
         try
         {
-            _ = (text1 + "x".ToRope()).ConvertDeltaToDiff(delta);
+            _ = delta.ParseDelta((text1 + "x".ToRope()));
             AssertFail("diff_fromDelta: Too long.");
         }
         catch (ArgumentException)
@@ -675,7 +675,7 @@ public class DiffMatchPatchTests
         // Generates error (19 > 18).
         try
         {
-            _ = text1.Slice(1).ConvertDeltaToDiff(delta);
+            _ = delta.ParseDelta(text1.Slice(1));
             AssertFail("diff_fromDelta: Too short.");
         }
         catch (ArgumentException)
@@ -686,7 +686,7 @@ public class DiffMatchPatchTests
         // Generates error (%c3%xy invalid Unicode).
         try
         {
-            _ = "".ToRope().ConvertDeltaToDiff("+%c3%xy".ToRope());
+            _ = "+%c3%xy".ToRope().ParseDelta(Rope<char>.Empty);
             AssertFail("diff_fromDelta: Invalid character.");
         }
         catch (ArgumentException)
@@ -699,9 +699,9 @@ public class DiffMatchPatchTests
         char one = (char)1;
         char two = (char)2;
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "\u0680 " + zero + " \t %"),
-        new Diff<char>(Operation.DELETE, "\u0681 " + one + " \n ^"),
-        new Diff<char>(Operation.INSERT, "\u0682 " + two + " \\ |")});
+        new Diff<char>(Operation.Equal, "\u0680 " + zero + " \t %"),
+        new Diff<char>(Operation.Delete, "\u0681 " + one + " \n ^"),
+        new Diff<char>(Operation.Insert, "\u0682 " + two + " \\ |")});
         text1 = diffs.ToSource();
         AssertEquals("diff_text1: Unicode text.", ("\u0680 " + zero + " \t %\u0681 " + one + " \n ^").ToRope(), text1);
 
@@ -709,11 +709,11 @@ public class DiffMatchPatchTests
         // Uppercase, due to UrlEncoder now uses upper.
         AssertEquals("diff_toDelta: Unicode.", "=7\t-7\t+%DA%82 %02 %5C %7C".ToRope(), delta);
 
-        AssertEquals("diff_fromDelta: Unicode.", diffs, text1.ConvertDeltaToDiff(delta));
+        AssertEquals("diff_fromDelta: Unicode.", diffs, delta.ParseDelta(text1));
 
         // Verify pool of unchanged characters.
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.INSERT, "A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ & = + $ , # ")});
+        new Diff<char>(Operation.Insert, "A-Z a-z 0-9 - _ . ! ~ * ' ( ) ; / ? : @ & = + $ , # ")});
         var text2 = diffs.ToTarget();
         AssertEquals("diff_text2: Unchanged characters.", "A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ".ToRope(), text2);
 
@@ -721,7 +721,7 @@ public class DiffMatchPatchTests
         AssertEquals("diff_toDelta: Unchanged characters.", "+A-Z a-z 0-9 - _ . ! ~ * \' ( ) ; / ? : @ & = + $ , # ".ToRope(), delta);
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: Unchanged characters.", diffs, "".ToRope().ConvertDeltaToDiff(delta));
+        AssertEquals("diff_fromDelta: Unchanged characters.", diffs, delta.ParseDelta("".ToRope()));
 
         // 160 kb string.
         var a = "abcdefghij".ToRope();
@@ -729,12 +729,12 @@ public class DiffMatchPatchTests
         {
             a += a;
         }
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, a) });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, a) });
         delta = diffs.ToDelta();
         AssertEquals("diff_toDelta: 160kb string.", ("+" + a).ToRope(), delta);
 
         // Convert delta string into a diff.
-        AssertEquals("diff_fromDelta: 160kb string.", diffs, "".ToRope().ConvertDeltaToDiff(delta));
+        AssertEquals("diff_fromDelta: 160kb string.", diffs, delta.ParseDelta("".ToRope()));
     }
 
     [TestMethod]
@@ -742,15 +742,15 @@ public class DiffMatchPatchTests
     {
         // Translate a location in text1 to text2.
         var diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "a"),
-        new Diff<char>(Operation.INSERT, "1234"),
-        new Diff<char>(Operation.EQUAL, "xyz")});
+        new Diff<char>(Operation.Delete, "a"),
+        new Diff<char>(Operation.Insert, "1234"),
+        new Diff<char>(Operation.Equal, "xyz")});
         AssertEquals("diff_xIndex: Translation on equality.", 5, (int)diffs.TranslateToTargetIndex(2));
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "a"),
-        new Diff<char>(Operation.DELETE, "1234"),
-        new Diff<char>(Operation.EQUAL, "xyz")});
+        new Diff<char>(Operation.Equal, "a"),
+        new Diff<char>(Operation.Delete, "1234"),
+        new Diff<char>(Operation.Equal, "xyz")});
         AssertEquals("diff_xIndex: Translation on deletion.", 1, (int)diffs.TranslateToTargetIndex(3));
     }
 
@@ -758,21 +758,21 @@ public class DiffMatchPatchTests
     public void CalculateEditDistanceTest()
     {
         var diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.INSERT, "1234"),
-        new Diff<char>(Operation.EQUAL, "xyz")});
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Insert, "1234"),
+        new Diff<char>(Operation.Equal, "xyz")});
         AssertEquals("diff_levenshtein: Levenshtein with trailing equality.", 4, (int)diffs.CalculateEditDistance());
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.EQUAL, "xyz"),
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.INSERT, "1234")});
+        new Diff<char>(Operation.Equal, "xyz"),
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Insert, "1234")});
         AssertEquals("diff_levenshtein: Levenshtein with leading equality.", 4, (int)diffs.CalculateEditDistance());
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "abc"),
-        new Diff<char>(Operation.EQUAL, "xyz"),
-        new Diff<char>(Operation.INSERT, "1234")});
+        new Diff<char>(Operation.Delete, "abc"),
+        new Diff<char>(Operation.Equal, "xyz"),
+        new Diff<char>(Operation.Insert, "1234")});
         AssertEquals("diff_levenshtein: Levenshtein with middle equality.", 7, (int)diffs.CalculateEditDistance());
     }
 
@@ -785,14 +785,14 @@ public class DiffMatchPatchTests
         // Since the resulting diff hasn't been normalized, it would be ok if
         // the insertion and deletion pairs are swapped.
         // If the order changes, tweak this test as required.
-        var diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "c"), new Diff<char>(Operation.INSERT, "m"), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "t"), new Diff<char>(Operation.INSERT, "p") });
+        var diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "c"), new Diff<char>(Operation.Insert, "m"), new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "t"), new Diff<char>(Operation.Insert, "p") });
         AssertEquals("diff_bisect: Normal.", diffs, a.DiffBisect(b, this.DiffOptions, CancellationToken.None));
 
         // Timeout.
         var timedOut = new CancellationTokenSource();
         timedOut.Cancel();
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "cat"), new Diff<char>(Operation.INSERT, "map") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "cat"), new Diff<char>(Operation.Insert, "map") });
         AssertEquals("diff_bisect: Timeout.", diffs, a.DiffBisect(b, this.DiffOptions, timedOut.Token));
     }
 
@@ -803,44 +803,44 @@ public class DiffMatchPatchTests
         var diffs = new Rope<Diff<char>>(Array.Empty<Diff<char>>());
         AssertEquals("diff_main: Null case.", diffs, "".Diff("", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "abc") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "abc") });
         AssertEquals("diff_main: Equality.", diffs, "abc".Diff("abc", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "ab"), new Diff<char>(Operation.INSERT, "123"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "ab"), new Diff<char>(Operation.Insert, "123"), new Diff<char>(Operation.Equal, "c") });
         AssertEquals("diff_main: Simple insertion.", diffs, "abc".Diff("ab123c", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "123"), new Diff<char>(Operation.EQUAL, "bc") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "123"), new Diff<char>(Operation.Equal, "bc") });
         AssertEquals("diff_main: Simple deletion.", diffs, "a123bc".Diff("abc", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.INSERT, "123"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.INSERT, "456"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Insert, "123"), new Diff<char>(Operation.Equal, "b"), new Diff<char>(Operation.Insert, "456"), new Diff<char>(Operation.Equal, "c") });
         AssertEquals("diff_main: Two insertions.", diffs, "abc".Diff("a123b456c", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "123"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.DELETE, "456"), new Diff<char>(Operation.EQUAL, "c") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "123"), new Diff<char>(Operation.Equal, "b"), new Diff<char>(Operation.Delete, "456"), new Diff<char>(Operation.Equal, "c") });
         AssertEquals("diff_main: Two deletions.", diffs, "a123b456c".Diff("abc", this.DiffOptions.WithChunking(false)));
 
         // Perform a real diff.
         // Switch off the timeout.
         this.DiffOptions = this.DiffOptions with { TimeoutSeconds = 0 };
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "b") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Insert, "b") });
         AssertEquals("diff_main: Simple case #1.", diffs, "a".Diff("b", false));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "Apple"), new Diff<char>(Operation.INSERT, "Banana"), new Diff<char>(Operation.EQUAL, "s are a"), new Diff<char>(Operation.INSERT, "lso"), new Diff<char>(Operation.EQUAL, " fruit.") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "Apple"), new Diff<char>(Operation.Insert, "Banana"), new Diff<char>(Operation.Equal, "s are a"), new Diff<char>(Operation.Insert, "lso"), new Diff<char>(Operation.Equal, " fruit.") });
         AssertEquals("diff_main: Simple case #2.", diffs, "Apples are a fruit.".Diff("Bananas are also fruit.", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "a"), new Diff<char>(Operation.INSERT, "\u0680"), new Diff<char>(Operation.EQUAL, "x"), new Diff<char>(Operation.DELETE, "\t"), new Diff<char>(Operation.INSERT, new string(new char[] { (char)0 })) });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "a"), new Diff<char>(Operation.Insert, "\u0680"), new Diff<char>(Operation.Equal, "x"), new Diff<char>(Operation.Delete, "\t"), new Diff<char>(Operation.Insert, new string(new char[] { (char)0 })) });
         AssertEquals("diff_main: Simple case #3.", diffs, "ax\t".Diff("\u0680x" + (char)0, this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "1"), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "y"), new Diff<char>(Operation.EQUAL, "b"), new Diff<char>(Operation.DELETE, "2"), new Diff<char>(Operation.INSERT, "xab") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "1"), new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "y"), new Diff<char>(Operation.Equal, "b"), new Diff<char>(Operation.Delete, "2"), new Diff<char>(Operation.Insert, "xab") });
         AssertEquals("diff_main: Overlap #1.", diffs, "1ayb2".Diff("abxab", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, "xaxcx"), new Diff<char>(Operation.EQUAL, "abc"), new Diff<char>(Operation.DELETE, "y") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, "xaxcx"), new Diff<char>(Operation.Equal, "abc"), new Diff<char>(Operation.Delete, "y") });
         AssertEquals("diff_main: Overlap #2.", diffs, "abcy".Diff("xaxcxabc", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.DELETE, "ABCD"), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.DELETE, "="), new Diff<char>(Operation.INSERT, "-"), new Diff<char>(Operation.EQUAL, "bcd"), new Diff<char>(Operation.DELETE, "="), new Diff<char>(Operation.INSERT, "-"), new Diff<char>(Operation.EQUAL, "efghijklmnopqrs"), new Diff<char>(Operation.DELETE, "EFGHIJKLMNOefg") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Delete, "ABCD"), new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Delete, "="), new Diff<char>(Operation.Insert, "-"), new Diff<char>(Operation.Equal, "bcd"), new Diff<char>(Operation.Delete, "="), new Diff<char>(Operation.Insert, "-"), new Diff<char>(Operation.Equal, "efghijklmnopqrs"), new Diff<char>(Operation.Delete, "EFGHIJKLMNOefg") });
         AssertEquals("diff_main: Overlap #3.", diffs, "ABCDa=bcd=efghijklmnopqrsEFGHIJKLMNOefg".Diff("a-bcd-efghijklmnopqrs", this.DiffOptions.WithChunking(false)));
 
-        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.INSERT, " "), new Diff<char>(Operation.EQUAL, "a"), new Diff<char>(Operation.INSERT, "nd"), new Diff<char>(Operation.EQUAL, " [[Pennsylvania]]"), new Diff<char>(Operation.DELETE, " and [[New") });
+        diffs = new Rope<Diff<char>>(new[] { new Diff<char>(Operation.Insert, " "), new Diff<char>(Operation.Equal, "a"), new Diff<char>(Operation.Insert, "nd"), new Diff<char>(Operation.Equal, " [[Pennsylvania]]"), new Diff<char>(Operation.Delete, " and [[New") });
         AssertEquals("diff_main: Large equality.", diffs, "a [[Pennsylvania]] and [[New".Diff(" and [[Pennsylvania]]", this.DiffOptions.WithChunking(false)));
 
         this.DiffOptions = this.DiffOptions with { TimeoutSeconds = 0.1f }; // 100ms
@@ -990,13 +990,13 @@ public class DiffMatchPatchTests
             Length1 = 18,
             Length2 = 17,
             Diffs = Rope<Diff<char>>.Empty.AddRange(new[] {
-            new Diff<char>(Operation.EQUAL, "jump"),
-            new Diff<char>(Operation.DELETE, "s"),
-            new Diff<char>(Operation.INSERT, "ed"),
-            new Diff<char>(Operation.EQUAL, " over "),
-            new Diff<char>(Operation.DELETE, "the"),
-            new Diff<char>(Operation.INSERT, "a"),
-            new Diff<char>(Operation.EQUAL, "\nlaz")})
+            new Diff<char>(Operation.Equal, "jump"),
+            new Diff<char>(Operation.Delete, "s"),
+            new Diff<char>(Operation.Insert, "ed"),
+            new Diff<char>(Operation.Equal, " over "),
+            new Diff<char>(Operation.Delete, "the"),
+            new Diff<char>(Operation.Insert, "a"),
+            new Diff<char>(Operation.Equal, "\nlaz")})
         };
         string strp = "@@ -21,18 +22,17 @@\n jump\n-s\n+ed\n  over \n-the\n+a\n %0Alaz\n";
         AssertEquals("Patch: toString.", strp, p.ToString());
@@ -1097,8 +1097,8 @@ public class DiffMatchPatchTests
             patches.ToPatchText());
 
         diffs = new Rope<Diff<char>>(new[] {
-        new Diff<char>(Operation.DELETE, "`1234567890-=[]\\;',./"),
-        new Diff<char>(Operation.INSERT, "~!@#$%^&*()_+{}|:\"<>?")});
+        new Diff<char>(Operation.Delete, "`1234567890-=[]\\;',./"),
+        new Diff<char>(Operation.Insert, "~!@#$%^&*()_+{}|:\"<>?")});
         AssertEquals("patch_fromText: Character decoding.",
             diffs,
             "@@ -1,21 +1,21 @@\n-%601234567890-=%5B%5D%5C;',./\n+~!@#$%25%5E&*()_+%7B%7D%7C:%22%3C%3E?\n".ToRope().ParsePatchText()[0].Diffs);
@@ -1279,8 +1279,8 @@ public class DiffMatchPatchTests
 
     private static void AssertEquals(string error_msg, HalfMatch<char> expected, HalfMatch<char>? actual) => AssertEquals(
         error_msg,
-        new Rope<char>[] { expected.Text1Prefix, expected.Text1Suffix, expected.Text2Prefix, expected.Text2Suffix, expected.Common },
-        actual is HalfMatch<char> a ? new Rope<char>[] { a.Text1Prefix, a.Text1Suffix, a.Text2Prefix, a.Text2Suffix, a.Common } : null);
+        new Rope<char>[] { expected.FirstPrefix, expected.FirstSuffix, expected.SecondPrefix, expected.SecondSuffix, expected.Common },
+        actual is HalfMatch<char> a ? new Rope<char>[] { a.FirstPrefix, a.FirstSuffix, a.SecondPrefix, a.SecondSuffix, a.Common } : null);
 
     private static void AssertEquals(string error_msg, Rope<char>[] expected, Rope<char>[]? actual)
     {

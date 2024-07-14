@@ -42,6 +42,124 @@ public static partial class PatchAlgorithmExtensions
     /// <param name="patchText">Text representation of patches.</param>
     /// <returns>List of Patch objects.</returns>
     /// <exception cref="ArgumentException">Thrown if invalid input.</exception>
+    //public static Rope<Patch<T>> ParsePatchText<T>(this Rope<char> patchText, Func<Rope<char>, T> parseItem, char separator = '~') where T : IEquatable<T>
+    //{
+    //    var patches = Rope<Patch<T>>.Empty;
+    //    if (patchText.Length == 0)
+    //    {
+    //        return patches;
+    //    }
+
+    //    var text = patchText.Split('\n').ToRope();
+    //    long textPointer = 0;
+    //    Patch<T> patch;
+    //    Match m;
+    //    char sign;
+    //    Rope<char> line = Rope<char>.Empty;
+    //    while (textPointer < text.Length)
+    //    {
+    //        var pointerText = text[textPointer].ToString();
+    //        m = PatchHeaderPattern.Match(pointerText);
+    //        if (!m.Success)
+    //        {
+    //            throw new ArgumentException("Invalid patch string: " + pointerText);
+    //        }
+
+    //        patch = new Patch<T>()
+    //        {
+    //            Start1 = Convert.ToInt32(m.Groups[1].Value)
+    //        };
+
+    //        if (m.Groups[2].Length == 0)
+    //        {
+    //            patch = patch with { Start1 = patch.Start1 - 1, Length1 = 1 };
+    //        }
+    //        else if (m.Groups[2].Value == "0")
+    //        {
+    //            patch = patch with { Length1 = 0 };
+    //        }
+    //        else
+    //        {
+    //            patch = patch with { Start1 = patch.Start1 - 1, Length1 = Convert.ToInt32(m.Groups[2].Value) };
+    //        }
+
+    //        patch = patch with { Start2 = Convert.ToInt32(m.Groups[3].Value) };
+    //        if (m.Groups[4].Length == 0)
+    //        {
+    //            patch = patch with { Start2 = patch.Start2 - 1, Length2 = 1 };
+    //        }
+    //        else if (m.Groups[4].Value == "0")
+    //        {
+    //            patch = patch with { Length2 = 0 };
+    //        }
+    //        else
+    //        {
+    //            patch = patch with { Start2 = patch.Start2 - 1, Length2 = Convert.ToInt32(m.Groups[4].Value) };
+    //        }
+
+    //        textPointer++;
+    //        while (textPointer < text.Length)
+    //        {
+    //            try
+    //            {
+    //                sign = text[textPointer][0];
+    //            }
+    //            catch (IndexOutOfRangeException)
+    //            {
+    //                // Blank line?  Whatever.
+    //                textPointer++;
+    //                continue;
+    //            }
+
+    //            line = text[textPointer].Slice(1);
+    //            line = line.Replace("+", "%2b");
+    //            line = HttpUtility.UrlDecode(line.ToString());
+    //            if (sign == '-')
+    //            {
+    //                // Deletion.
+    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
+    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Delete, items)) };
+    //            }
+    //            else if (sign == '+')
+    //            {
+    //                // Insertion.
+    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
+    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Insert, items)) };
+    //            }
+    //            else if (sign == ' ')
+    //            {
+    //                // Minor equality.
+    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
+    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Equal, items)) };
+    //            }
+    //            else if (sign == '@')
+    //            {
+    //                // Start of next patch.
+    //                break;
+    //            }
+    //            else
+    //            {
+    //                // WTF?
+    //                throw new ArgumentException("Invalid patch mode '" + sign + "' in: " + line.ToString());
+    //            }
+
+    //            textPointer++;
+    //        }
+
+    //        patches = patches.Add(patch);
+
+    //    }
+
+    //    return patches;
+    //}
+
+    /// <summary>
+    /// Parse a textual representation of patches and return a List of Patch
+    /// objects.
+    /// </summary>
+    /// <param name="patchText">Text representation of patches.</param>
+    /// <returns>List of Patch objects.</returns>
+    /// <exception cref="ArgumentException">Thrown if invalid input.</exception>
     public static Rope<Patch<char>> ParsePatchText(this Rope<char> patchText)
     {
         var patches = Rope<Patch<char>>.Empty;
@@ -117,17 +235,17 @@ public static partial class PatchAlgorithmExtensions
                 if (sign == '-')
                 {
                     // Deletion.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.DELETE, line)) };
+                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Delete, line)) };
                 }
                 else if (sign == '+')
                 {
                     // Insertion.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.INSERT, line)) };
+                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Insert, line)) };
                 }
                 else if (sign == ' ')
                 {
                     // Minor equality.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.EQUAL, line)) };
+                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Equal, line)) };
                 }
                 else if (sign == '@')
                 {
@@ -149,6 +267,22 @@ public static partial class PatchAlgorithmExtensions
 
         return patches;
     }
+
+    /// <summary>
+    /// Take a list of patches and return a textual representation.
+    /// </summary>
+    /// <param name="patches">List of Patch objects.</param>
+    /// <returns>Text representation of patches.</returns>
+    //public static string ToPatchText<T>(this IEnumerable<Patch<T>> patches, Func<T, Rope<char>> itemToString) where T : IEquatable<T>
+    //{
+    //    StringBuilder text = new StringBuilder();
+    //    foreach (var aPatch in patches)
+    //    {
+    //        text.Append(aPatch.ToCharRope(itemToString).ToString());
+    //    }
+
+    //    return text.ToString();
+    //}
 
     /// <summary>
     /// Take a list of patches and return a textual representation.
@@ -235,7 +369,7 @@ public static partial class PatchAlgorithmExtensions
         var postpatch_text = text1;
         foreach (var aDiff in diffs)
         {
-            if (patch.Diffs.Count == 0 && aDiff.Operation != Operation.EQUAL)
+            if (patch.Diffs.Count == 0 && aDiff.Operation != Operation.Equal)
             {
                 // A new patch starts here.
                 patch = patch with
@@ -247,27 +381,27 @@ public static partial class PatchAlgorithmExtensions
 
             switch (aDiff.Operation)
             {
-                case Operation.INSERT:
-                    patch = patch with { Diffs = patch.Diffs.Add(aDiff), Length2 = patch.Length2 + aDiff.Text.Length };
-                    postpatch_text = postpatch_text.InsertRange(char_count2, aDiff.Text);
+                case Operation.Insert:
+                    patch = patch with { Diffs = patch.Diffs.Add(aDiff), Length2 = patch.Length2 + aDiff.Items.Length };
+                    postpatch_text = postpatch_text.InsertRange(char_count2, aDiff.Items);
                     break;
-                case Operation.DELETE:
-                    patch = patch with { Length1 = patch.Length1 + aDiff.Text.Length, Diffs = patch.Diffs.Add(aDiff) };
-                    postpatch_text = postpatch_text.RemoveRange(char_count2, aDiff.Text.Length);
+                case Operation.Delete:
+                    patch = patch with { Length1 = patch.Length1 + aDiff.Items.Length, Diffs = patch.Diffs.Add(aDiff) };
+                    postpatch_text = postpatch_text.RemoveRange(char_count2, aDiff.Items.Length);
                     break;
-                case Operation.EQUAL:
-                    if (aDiff.Text.Length <= 2 * options.Margin && patch.Diffs.Count != 0 && aDiff != diffs.Last())
+                case Operation.Equal:
+                    if (aDiff.Items.Length <= 2 * options.Margin && patch.Diffs.Count != 0 && aDiff != diffs.Last())
                     {
                         // Small equality inside a patch.
                         patch = patch with
                         {
                             Diffs = patch.Diffs.Add(aDiff),
-                            Length1 = patch.Length1 + aDiff.Text.Length,
-                            Length2 = patch.Length2 + aDiff.Text.Length
+                            Length1 = patch.Length1 + aDiff.Items.Length,
+                            Length2 = patch.Length2 + aDiff.Items.Length
                         };
                     }
 
-                    if (aDiff.Text.Length >= 2 * options.Margin)
+                    if (aDiff.Items.Length >= 2 * options.Margin)
                     {
                         // Time for a new patch.
                         if (patch.Diffs.Count != 0)
@@ -288,13 +422,13 @@ public static partial class PatchAlgorithmExtensions
             }
 
             // Update the current character count.
-            if (aDiff.Operation != Operation.INSERT)
+            if (aDiff.Operation != Operation.Insert)
             {
-                char_count1 += aDiff.Text.Length;
+                char_count1 += aDiff.Items.Length;
             }
-            if (aDiff.Operation != Operation.DELETE)
+            if (aDiff.Operation != Operation.Delete)
             {
-                char_count2 += aDiff.Text.Length;
+                char_count2 += aDiff.Items.Length;
             }
         }
 
@@ -422,24 +556,24 @@ public static partial class PatchAlgorithmExtensions
                         long index1 = 0;
                         foreach (var aDiff in aPatch.Diffs)
                         {
-                            if (aDiff.Operation != Operation.EQUAL)
+                            if (aDiff.Operation != Operation.Equal)
                             {
                                 var index2 = diffs.TranslateToTargetIndex(index1);
-                                if (aDiff.Operation == Operation.INSERT)
+                                if (aDiff.Operation == Operation.Insert)
                                 {
                                     // Insertion
-                                    text = text.InsertRange(start_loc + index2, aDiff.Text);
+                                    text = text.InsertRange(start_loc + index2, aDiff.Items);
                                 }
-                                else if (aDiff.Operation == Operation.DELETE)
+                                else if (aDiff.Operation == Operation.Delete)
                                 {
                                     // Deletion
-                                    text = text.RemoveRange(start_loc + index2, diffs.TranslateToTargetIndex(index1 + aDiff.Text.Length) - index2);
+                                    text = text.RemoveRange(start_loc + index2, diffs.TranslateToTargetIndex(index1 + aDiff.Items.Length) - index2);
                                 }
                             }
 
-                            if (aDiff.Operation != Operation.DELETE)
+                            if (aDiff.Operation != Operation.Delete)
                             {
-                                index1 += aDiff.Text.Length;
+                                index1 += aDiff.Items.Length;
                             }
                         }
                     }
@@ -489,15 +623,15 @@ public static partial class PatchAlgorithmExtensions
                     {
                         Length1 = precontext.Length,
                         Length2 = precontext.Length,
-                        Diffs = patch.Diffs.Add(new Diff<char>(Operation.EQUAL, precontext))
+                        Diffs = patch.Diffs.Add(new Diff<char>(Operation.Equal, precontext))
                     };
                 }
 
                 while (bigpatch.Diffs.Count != 0 && patch.Length1 < patch_size - options.Margin)
                 {
                     Operation diff_type = bigpatch.Diffs[0].Operation;
-                    var diff_text = bigpatch.Diffs[0].Text;
-                    if (diff_type == Operation.INSERT)
+                    var diff_text = bigpatch.Diffs[0].Items;
+                    if (diff_type == Operation.Insert)
                     {
                         // Insertions are harmless.
                         patch = patch with
@@ -510,8 +644,8 @@ public static partial class PatchAlgorithmExtensions
                         bigpatch = bigpatch with { Diffs = bigpatch.Diffs.RemoveAt(0) };
                         empty = false;
                     }
-                    else if (diff_type == Operation.DELETE && patch.Diffs.Count == 1
-                        && patch.Diffs.First().Operation == Operation.EQUAL
+                    else if (diff_type == Operation.Delete && patch.Diffs.Count == 1
+                        && patch.Diffs.First().Operation == Operation.Equal
                         && diff_text.Length > 2 * patch_size)
                     {
                         // This is a large deletion.  Let it pass in one chunk.
@@ -530,7 +664,7 @@ public static partial class PatchAlgorithmExtensions
                         diff_text = diff_text.Slice(0, Math.Min(diff_text.Length, patch_size - patch.Length1 - options.Margin));
                         patch = patch with { Length1 = patch.Length1 + diff_text.Length };
                         start1 += diff_text.Length;
-                        if (diff_type == Operation.EQUAL)
+                        if (diff_type == Operation.Equal)
                         {
                             patch = patch with { Length2 = patch.Length2 + diff_text.Length };
                             start2 += diff_text.Length;
@@ -541,13 +675,13 @@ public static partial class PatchAlgorithmExtensions
                         }
 
                         patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(diff_type, diff_text)) };
-                        if (diff_text == bigpatch.Diffs[0].Text)
+                        if (diff_text == bigpatch.Diffs[0].Items)
                         {
                             bigpatch = bigpatch with { Diffs = bigpatch.Diffs.RemoveAt(0) };
                         }
                         else
                         {
-                            bigpatch = bigpatch with { Diffs = bigpatch.Diffs.SetItem(0, bigpatch.Diffs[0].WithText(bigpatch.Diffs[0].Text.Slice(diff_text.Length))) };
+                            bigpatch = bigpatch with { Diffs = bigpatch.Diffs.SetItem(0, bigpatch.Diffs[0].WithItems(bigpatch.Diffs[0].Items.Slice(diff_text.Length))) };
                         }
                     }
                 }
@@ -575,7 +709,7 @@ public static partial class PatchAlgorithmExtensions
                         Length2 = patch.Length2 + postcontext.Length
                     };
 
-                    if (patch.Diffs.Count != 0 && patch.Diffs[patch.Diffs.Count - 1].Operation == Operation.EQUAL)
+                    if (patch.Diffs.Count != 0 && patch.Diffs[patch.Diffs.Count - 1].Operation == Operation.Equal)
                     {
                         patch = patch with
                         {
@@ -586,7 +720,7 @@ public static partial class PatchAlgorithmExtensions
                     {
                         patch = patch with
                         {
-                            Diffs = patch.Diffs.Add(new Diff<char>(Operation.EQUAL, postcontext))
+                            Diffs = patch.Diffs.Add(new Diff<char>(Operation.Equal, postcontext))
                         };
                     }
                 }
@@ -623,7 +757,7 @@ public static partial class PatchAlgorithmExtensions
         // Add some padding on start of first diff.
         var patch = bumpedPatches[0];
         var diffs = patch.Diffs;
-        if (diffs.Count == 0 || diffs[0].Operation != Operation.EQUAL)
+        if (diffs.Count == 0 || diffs[0].Operation != Operation.Equal)
         {
             // Add nullPadding equality.
             patch = patch with
@@ -632,14 +766,14 @@ public static partial class PatchAlgorithmExtensions
                 Start2 = patch.Start2 - paddingLength,  // Should be 0.
                 Length1 = patch.Length1 + paddingLength,
                 Length2 = patch.Length2 + paddingLength,
-                Diffs = diffs.Insert(0, new Diff<char>(Operation.EQUAL, nullPadding))
+                Diffs = diffs.Insert(0, new Diff<char>(Operation.Equal, nullPadding))
             };
         }
-        else if (paddingLength > diffs[0].Text.Length)
+        else if (paddingLength > diffs[0].Items.Length)
         {
             // Grow first equality.
             var firstDiff = diffs[0];
-            var extraLength = paddingLength - firstDiff.Text.Length;
+            var extraLength = paddingLength - firstDiff.Items.Length;
 
             patch = patch with
             {
@@ -647,7 +781,7 @@ public static partial class PatchAlgorithmExtensions
                 Start2 = patch.Start2 - extraLength,
                 Length1 = patch.Length1 + extraLength,
                 Length2 = patch.Length2 + extraLength,
-                Diffs = diffs.SetItem(0, firstDiff.Prepend(nullPadding.Slice(firstDiff.Text.Length)))
+                Diffs = diffs.SetItem(0, firstDiff.Prepend(nullPadding.Slice(firstDiff.Items.Length)))
             };
         }
 
@@ -656,21 +790,21 @@ public static partial class PatchAlgorithmExtensions
         // Add some padding on end of last diff.
         patch = bumpedPatches[^1];
         diffs = patch.Diffs;
-        if (diffs.Count == 0 || diffs.Last().Operation != Operation.EQUAL)
+        if (diffs.Count == 0 || diffs.Last().Operation != Operation.Equal)
         {
             // Add nullPadding equality.
             patch = patch with
             {
                 Length1 = patch.Length1 + paddingLength,
                 Length2 = patch.Length2 + paddingLength,
-                Diffs = diffs.Add(new Diff<char>(Operation.EQUAL, nullPadding)),
+                Diffs = diffs.Add(new Diff<char>(Operation.Equal, nullPadding)),
             };
         }
-        else if (paddingLength > diffs[^1].Text.Length)
+        else if (paddingLength > diffs[^1].Items.Length)
         {
             // Grow last equality.
             var lastDiff = diffs[^1];
-            var extraLength = paddingLength - lastDiff.Text.Length;
+            var extraLength = paddingLength - lastDiff.Items.Length;
             patch = patch with
             {
                 Length1 = patch.Length1 + extraLength,
@@ -709,14 +843,14 @@ public static partial class PatchAlgorithmExtensions
         var prefix = text.JavaSubstring(Math.Max(0, patch.Start2 - padding), patch.Start2);
         if (prefix.Length != 0)
         {
-            patch = patch with { Diffs = patch.Diffs.Insert(0, new Diff<T>(Operation.EQUAL, prefix)) };
+            patch = patch with { Diffs = patch.Diffs.Insert(0, new Diff<T>(Operation.Equal, prefix)) };
         }
 
         // Add the suffix.
         var suffix = text.JavaSubstring(patch.Start2 + patch.Length1, Math.Min(text.Length, patch.Start2 + patch.Length1 + padding));
         if (suffix.Length != 0)
         {
-            patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.EQUAL, suffix)) };
+            patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Equal, suffix)) };
         }
 
         // Roll back the start points.

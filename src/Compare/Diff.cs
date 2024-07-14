@@ -27,18 +27,18 @@ using System;
 /// Record struct representing one diff operation.
 /// </summary>
 /// <param name="Operation">The operation being performed.</param>
-/// <param name="Text">The content of the operation.</param>
-public readonly record struct Diff<T>(Operation Operation, Rope<T> Text) where T : IEquatable<T>
+/// <param name="Data">The content of the operation.</param>
+public readonly record struct Diff<T>(Operation Operation, Rope<T> Items) where T : IEquatable<T>
 {
     public Diff<T> WithOperation(Operation op) => this with { Operation = op };
 
-    public Diff<T> WithText(Rope<T> text) => this with { Text = text };
+    public Diff<T> WithItems(Rope<T> items) => this with { Items = items };
 
-    public Diff<T> Append(Rope<T> text) => this with { Text = this.Text.AddRange(text) };
+    public Diff<T> Append(Rope<T> items) => this with { Items = this.Items.AddRange(items) };
 
-    public Diff<T> Prepend(Rope<T> text) => this with { Text = text.AddRange(this.Text) };
+    public Diff<T> Prepend(Rope<T> items) => this with { Items = items.AddRange(this.Items) };
 
-    public bool Equals(Diff<T> other) => this.Operation == other.Operation && this.Text == other.Text;
+    public bool Equals(Diff<T> other) => this.Operation == other.Operation && this.Items == other.Items;
 
-    public override int GetHashCode() => HashCode.Combine(this.Operation, this.Text.GetHashCode());
+    public override int GetHashCode() => HashCode.Combine(this.Operation, this.Items.GetHashCode());
 }

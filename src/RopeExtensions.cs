@@ -110,36 +110,36 @@ public static class RopeExtensions
     /// Determine if the suffix of one string is the prefix of another.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    /// <param name="text1">First string.</param>
-    /// <param name="text2"> Second string.</param>
+    /// <param name="first">First string.</param>
+    /// <param name="second"> Second string.</param>
     /// <returns>The number of characters common to the end of the first
     /// string and the start of the second string.</returns>
     [Pure]
-    public static int CommonOverlapLength<T>(this Rope<T> text1, Rope<T> text2) where T : IEquatable<T>
+    public static int CommonOverlapLength<T>(this Rope<T> first, Rope<T> second) where T : IEquatable<T>
     {
         // Cache the text lengths to prevent multiple calls.
-        var text1_length = text1.Length;
-        var text2_length = text2.Length;
+        var firstLength = first.Length;
+        var secondLength = second.Length;
         // Eliminate the null case.
-        if (text1_length == 0 || text2_length == 0)
+        if (firstLength == 0 || secondLength == 0)
         {
             return 0;
         }
         // Truncate the longer string.
-        if (text1_length > text2_length)
+        if (firstLength > secondLength)
         {
-            text1 = text1.Slice(text1_length - text2_length);
+            first = first.Slice(firstLength - secondLength);
         }
-        else if (text1_length < text2_length)
+        else if (firstLength < secondLength)
         {
-            text2 = text2.Slice(0, text1_length);
+            second = second.Slice(0, firstLength);
         }
 
-        var text_length = Math.Min(text1_length, text2_length);
+        var minLength = Math.Min(firstLength, secondLength);
         // Quick check for the worst case.
-        if (text1 == text2)
+        if (first == second)
         {
-            return (int)text_length;
+            return (int)minLength;
         }
 
         // Start by looking for a single character match
@@ -149,19 +149,75 @@ public static class RopeExtensions
         long length = 1;
         while (true)
         {
-            var pattern = text1.Slice(text_length - length);
-            var found = text2.IndexOf(pattern);
+            var pattern = first.Slice(minLength - length);
+            var found = second.IndexOf(pattern);
             if (found == -1)
             {
                 return (int)best;
             }
 
             length += found;
-            if (found == 0 || text1.Slice(text_length - length) == text2.Slice(0, length))
+            if (found == 0 || first.Slice(minLength - length) == second.Slice(0, length))
             {
                 best = length;
                 length++;
             }
         }
+    }
+
+    /// <summary>
+    /// Joins a sequence of elements with a nominated separator.
+    /// </summary>
+    /// <typeparam name="T">The item to separate each element.</typeparam>
+    /// <param name="source">The source sequence.</param>
+    /// <param name="separator">The separating item.</param>
+    /// <returns>A sequence with a separator interleaved.</returns>
+    public static Rope<T> Join<T>(this IEnumerable<Rope<T>> source, T separator) where T : IEquatable<T>
+    {
+        var result = Rope<T>.Empty;
+        bool separate = false;
+        foreach (var item in source)
+        {
+            if (separate)
+            {
+                result += separator;
+            }
+            else
+            {
+                separate = true;
+            }
+
+            result += item;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Joins a sequence of elements with a nominated separator.
+    /// </summary>
+    /// <typeparam name="T">The item to separate each element.</typeparam>
+    /// <param name="source">The source sequence.</param>
+    /// <param name="separator">The separating item.</param>
+    /// <returns>A sequence with a separator interleaved.</returns>
+    public static Rope<T> Join<T>(this IEnumerable<Rope<T>> source, Rope<T> separator) where T : IEquatable<T>
+    {
+        var result = Rope<T>.Empty;
+        bool separate = false;
+        foreach (var item in source)
+        {
+            if (separate)
+            {
+                result += separator;
+            }
+            else
+            {
+                separate = true;
+            }
+
+            result += item;
+        }
+
+        return result;
     }
 }

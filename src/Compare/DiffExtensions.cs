@@ -42,24 +42,24 @@ public static class DiffExtensions
         var html = Rope<char>.Empty;
         foreach (Diff<T> aDiff in diffs)
         {
-            var text = aDiff.Text.SelectMany(c => c.ToString() ?? string.Empty).ToRope()
+            var text = aDiff.Items.SelectMany(c => c.ToString() ?? string.Empty).ToRope()
                 .Replace("&".ToRope(), "&amp;".ToRope())
                 .Replace("<".ToRope(), "&lt;".ToRope())
                 .Replace(">".ToRope(), "&gt;".ToRope())
                 .Replace("\n".ToRope(), "&para;<br>".ToRope());
             switch (aDiff.Operation)
             {
-                case Operation.INSERT:
+                case Operation.Insert:
                     html = html.AddRange("<ins style=\"background:#e6ffe6;\">".ToRope())
                         .AddRange(text)
                         .AddRange("</ins>".ToRope());
                     break;
-                case Operation.DELETE:
+                case Operation.Delete:
                     html = html.AddRange("<del style=\"background:#ffe6e6;\">".ToRope())
                         .AddRange(text)
                         .AddRange("</del>".ToRope());
                     break;
-                case Operation.EQUAL:
+                case Operation.Equal:
                     html = html.AddRange("<span>".ToRope())
                         .AddRange(text)
                         .AddRange("</span>".ToRope());
@@ -79,8 +79,8 @@ public static class DiffExtensions
     [Pure]
     public static Rope<T> ToSource<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
             (from aDiff in diffs
-             where aDiff.Operation != Operation.INSERT
-             select aDiff.Text).Combine();
+             where aDiff.Operation != Operation.Insert
+             select aDiff.Items).Combine();
 
     /// <summary>
     /// Compute and return the target text from a list of diff operations.
@@ -91,8 +91,8 @@ public static class DiffExtensions
     [Pure]
     public static Rope<T> ToTarget<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T> =>
         (from aDiff in diffs
-         where aDiff.Operation != Operation.DELETE
-         select aDiff.Text).Combine();
+         where aDiff.Operation != Operation.Delete
+         select aDiff.Items).Combine();
 
     /// <summary>
     /// Compute and return the source and target texts from a list of diff operations.
@@ -121,15 +121,15 @@ public static class DiffExtensions
         Diff<T> lastDiff = default;
         foreach (var aDiff in diffs)
         {
-            if (aDiff.Operation != Operation.INSERT)
+            if (aDiff.Operation != Operation.Insert)
             {
                 // Equality or deletion.
-                chars1 += aDiff.Text.Length;
+                chars1 += aDiff.Items.Length;
             }
-            if (aDiff.Operation != Operation.DELETE)
+            if (aDiff.Operation != Operation.Delete)
             {
                 // Equality or insertion.
-                chars2 += aDiff.Text.Length;
+                chars2 += aDiff.Items.Length;
             }
             if (chars1 > sourceIndex)
             {
@@ -141,7 +141,7 @@ public static class DiffExtensions
             last_chars2 = chars2;
         }
 
-        if (lastDiff != default && lastDiff.Operation == Operation.DELETE)
+        if (lastDiff != default && lastDiff.Operation == Operation.Delete)
         {
             // The location was deleted.
             return last_chars2;
@@ -160,21 +160,58 @@ public static class DiffExtensions
     /// <param name="diffs">Array of Diff objects.</param>
     /// <returns>Delta text.</returns>
     [Pure]
-    public static Rope<char> ToDelta<T>(this IEnumerable<Diff<T>> diffs) where T : IEquatable<T>
+    public static Rope<char> ToDelta(this IEnumerable<Diff<char>> diffs)
     {
         var text = Rope<char>.Empty;
         foreach (var aDiff in diffs)
         {
             switch (aDiff.Operation)
             {
-                case Operation.INSERT:
-                    text = text.Append("+").AddRange(aDiff.Text.DiffEncode()).Append("\t");
+                case Operation.Insert:
+                    text = text.Append("+").AddRange(aDiff.Items.DiffEncode()).Append("\t");
                     break;
-                case Operation.DELETE:
-                    text = text.Append("-").Append(aDiff.Text.Length.ToString()).Append("\t");
+                case Operation.Delete:
+                    text = text.Append("-").Append(aDiff.Items.Length.ToString()).Append("\t");
                     break;
-                case Operation.EQUAL:
-                    text = text.Append("=").Append(aDiff.Text.Length.ToString()).Append("\t");
+                case Operation.Equal:
+                    text = text.Append("=").Append(aDiff.Items.Length.ToString()).Append("\t");
+                    break;
+            }
+        }
+
+        if (text.Length != 0)
+        {
+            // Strip off trailing tab character.
+            text = text.Slice(0, text.Length - 1);
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// Crush the diff into an encoded string which describes the operations
+    /// required to transform source into target.
+    /// E.g. =3\t-2\t+ing  -> Keep 3 chars, delete 2 chars, insert 'ing'.
+    /// Operations are tab-separated. Inserted text is escaped using %xx Url-like encoding notation.
+    /// </summary>
+    /// <param name="diffs">Array of Diff objects.</param>
+    /// <returns>Delta text.</returns>
+    [Pure]
+    public static Rope<char> ToDelta<T>(this IEnumerable<Diff<T>> diffs, Func<T?, Rope<char>> itemToString) where T : IEquatable<T>
+    {
+        var text = Rope<char>.Empty;
+        foreach (var aDiff in diffs)
+        {
+            switch (aDiff.Operation)
+            {
+                case Operation.Insert:
+                    text = text.Append("+").AddRange(aDiff.Items.DiffEncode(itemToString)).Append("\t");
+                    break;
+                case Operation.Delete:
+                    text = text.Append("-").Append(aDiff.Items.Length.ToString()).Append("\t");
+                    break;
+                case Operation.Equal:
+                    text = text.Append("=").Append(aDiff.Items.Length.ToString()).Append("\t");
                     break;
             }
         }
@@ -204,13 +241,13 @@ public static class DiffExtensions
         {
             switch (aDiff.Operation)
             {
-                case Operation.INSERT:
-                    insertions += aDiff.Text.Length;
+                case Operation.Insert:
+                    insertions += aDiff.Items.Length;
                     break;
-                case Operation.DELETE:
-                    deletions += aDiff.Text.Length;
+                case Operation.Delete:
+                    deletions += aDiff.Items.Length;
                     break;
-                case Operation.EQUAL:
+                case Operation.Equal:
                     // A deletion and an insertion is one substitution.
                     levenshtein += Math.Max(insertions, deletions);
                     insertions = 0;

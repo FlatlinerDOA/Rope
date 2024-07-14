@@ -28,7 +28,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Web;
 
-public static class CompatibilityExtensions
+internal static class CompatibilityExtensions
 {
     private static readonly Rope<char> BlankLineStart1 = "\r\n\r\n".ToRope();
     private static readonly Rope<char> BlankLineStart2 = "\n\n".ToRope();
@@ -89,7 +89,8 @@ public static class CompatibilityExtensions
         str.StartsWith(BlankLineStart4);
 
     [Pure]
-    public static bool IsBlankLineEnd(this Rope<char> str) => str.EndsWith(BlankLineEnd1) || str.EndsWith(BlankLineEnd2);
+    public static bool IsBlankLineEnd(this Rope<char> str) =>
+        str.EndsWith(BlankLineEnd1) || str.EndsWith(BlankLineEnd2);
 
     /// <summary>
     /// Decodes a string with a very cut down URI-style % escaping.
@@ -97,16 +98,41 @@ public static class CompatibilityExtensions
     /// <param name="str">The string to decode.</param>
     /// <returns>The decoded string.</returns>
     [Pure]
-    public static Rope<char> DiffDecode(this Rope<char> str) => HttpUtility.UrlDecode(str.Replace("+", "%2B").ToString()).ToRope(); // decode would change all "+" to " "
+    public static Rope<char> DiffDecode(this Rope<char> str) =>
+        HttpUtility.UrlDecode(str.Replace("+", "%2B").ToString()).ToRope(); // decode would change all "+" to " "
+
+    /// <summary>
+    /// Decodes a string with a very cut down URI-style % escaping.
+    /// </summary>
+    /// <param name="str">The string to decode.</param>
+    /// <returns>The decoded string.</returns>
+    [Pure]
+    public static Rope<T> DiffDecode<T>(this Rope<char> str, Func<Rope<char>, T> parseItem, char separator = '~') where T : IEquatable<T> =>
+        HttpUtility.UrlDecode(str.Replace("+", "%2B").ToString())
+        .Split(separator)
+        .Select(r => parseItem(r))
+        .ToRope(); // decode would change all "+" to " "
+
+    /// <summary>
+    /// Encodes a sequence with a very cut down URI-style % escaping.
+    /// Compatible with JavaScript's EncodeURI function.
+    /// </summary>
+    /// <param name="text">The sequence of chars to encode.</param>
+    /// <returns>The encoded string.</returns>
+    [Pure]
+    public static Rope<char> DiffEncode(this Rope<char> text) =>
+        DiffEncoder.Encode(text.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
 
     /// <summary>
     /// Encodes a sequence with a very cut down URI-style % escaping.
     /// Compatible with JavaScript's EncodeURI function.
     /// </summary>
     /// <param name="items">The sequence to convert to strings and encode.</param>
+    /// <param name="itemToString">The function to convert an item to a string.</param>
     /// <returns>The encoded string.</returns>
     [Pure]
-    public static Rope<char> DiffEncode<T>(this Rope<T> items) where T : IEquatable<T> => DiffEncoder.Encode(items.ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
+    public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T?, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T> =>
+        DiffEncoder.Encode(items.Select(i => itemToString(i)).Join(separator).ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
 
     /// <summary>
     /// C# is overzealous in the replacements. Walk back on a few.

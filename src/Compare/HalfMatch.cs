@@ -23,7 +23,7 @@ namespace Rope.Compare;
 
 using System;
 
-internal readonly record struct HalfMatch<T>(Rope<T> Text1Prefix, Rope<T> Text1Suffix, Rope<T> Text2Prefix, Rope<T> Text2Suffix, Rope<T> Common) where T : IEquatable<T>
+internal readonly record struct HalfMatch<T>(Rope<T> FirstPrefix, Rope<T> FirstSuffix, Rope<T> SecondPrefix, Rope<T> SecondSuffix, Rope<T> Common) where T : IEquatable<T>
 {
-    public HalfMatch<T> Swap() => new HalfMatch<T>(this.Text2Prefix, this.Text2Suffix, this.Text1Prefix, this.Text1Suffix, this.Common);
+    public HalfMatch<T> Swap() => new HalfMatch<T>(this.SecondPrefix, this.SecondSuffix, this.FirstPrefix, this.FirstSuffix, this.Common);
 }

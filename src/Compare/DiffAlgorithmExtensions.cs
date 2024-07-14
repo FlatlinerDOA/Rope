@@ -65,8 +65,8 @@ public static class DiffAlgorithmExtensions
     /// <summary>
     /// Find the differences between two texts.
     /// </summary>
-    /// <param name="text1">Old string to be diffed.</param>
-    /// <param name="text2">New string to be diffed.</param>
+    /// <param name="first">Old string to be diffed.</param>
+    /// <param name="second">New string to be diffed.</param>
     /// <param name="options">
     /// Controls amount of time allowed to be taken via  <see cref="DiffOptions{T}.TimeoutSeconds"/>, the timeout just produces a less optimal diff, 
     /// Whether to use a faster algorithm using <see cref="DiffOptions{T}.IsChunkingEnabled"/>,
@@ -75,13 +75,13 @@ public static class DiffAlgorithmExtensions
     /// otherwise uses <see cref="DiffOptions{char}.Generic"/>.</param>
     /// <returns>List of Diff objects.</returns>
     [Pure]
-    public static Rope<Diff<T>> Diff<T>(this Rope<T> text1, Rope<T> text2, DiffOptions<T>? options = null) where T : IEquatable<T>
+    public static Rope<Diff<T>> Diff<T>(this Rope<T> first, Rope<T> second, DiffOptions<T>? options = null) where T : IEquatable<T>
     {
         options ??= DiffOptions<T>.Default;
 
         // Start a deadline by which time the diff must be complete, cancelling just produces a less optimal diff.
         using var deadline = options.StartTimer();
-        return text1.Diff(text2, options, deadline.Cancellation);
+        return first.Diff(second, options, deadline.Cancellation);
     }
 
     /// <summary>
@@ -89,67 +89,154 @@ public static class DiffAlgorithmExtensions
     /// stripping any common prefix or suffix off the texts before diffing.
     /// This overload is thread-safe.
     /// </summary>
-    /// <param name="text1">Old string to be diffed.</param>
-    /// <param name="text2">New string to be diffed.</param>
+    /// <param name="first">Old string to be diffed.</param>
+    /// <param name="second">New string to be diffed.</param>
     /// <param name="options">
     /// Defines the diffing options.
     /// </param>
     /// <param name="cancel">Cancels the calculation.</param>
     /// <returns></returns>
     [Pure]
-    public static Rope<Diff<T>> Diff<T>(this Rope<T> text1, Rope<T> text2, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
+    public static Rope<Diff<T>> Diff<T>(this Rope<T> first, Rope<T> second, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
         // Check for null inputs not needed since null can't be passed in C#.
         // Check for equality (speedup).
-        if (text1.Equals(text2))
+        if (first.Equals(second))
         {
-            if (text1.Length != 0)
+            if (first.Length != 0)
             {
-                return new[] { new Diff<T>(Operation.EQUAL, text1) };
+                return new[] { new Diff<T>(Operation.Equal, first) };
             }
 
             return Rope<Diff<T>>.Empty;
         }
 
         // Trim off common prefix (speedup).
-        int commonlength = (int)text1.CommonPrefixLength(text2);
-        var commonprefix = text1.Slice(0, commonlength);
-        text1 = text1.Slice(commonlength);
-        text2 = text2.Slice(commonlength);
+        int commonlength = (int)first.CommonPrefixLength(second);
+        var commonprefix = first.Slice(0, commonlength);
+        first = first.Slice(commonlength);
+        second = second.Slice(commonlength);
 
         // Trim off common suffix (speedup).
-        commonlength = (int)text1.CommonSuffixLength(text2);
-        var commonsuffix = text1.Slice(text1.Length - commonlength);
-        text1 = text1.Slice(0, text1.Length - commonlength);
-        text2 = text2.Slice(0, text2.Length - commonlength);
+        commonlength = (int)first.CommonSuffixLength(second);
+        var commonsuffix = first.Slice(first.Length - commonlength);
+        first = first.Slice(0, first.Length - commonlength);
+        second = second.Slice(0, second.Length - commonlength);
 
         // Compute the diff on the middle block.
-        var diffs = CalculateMiddleDifferences(text1, text2, options, cancel);
+        var diffs = CalculateMiddleDifferences(first, second, options, cancel);
 
         // Restore the prefix and suffix.
         if (commonprefix.Length != 0)
         {
-            diffs = diffs.Insert(0, new Diff<T>(Operation.EQUAL, commonprefix));
+            diffs = diffs.Insert(0, new Diff<T>(Operation.Equal, commonprefix));
         }
 
         if (commonsuffix.Length != 0)
         {
-            diffs = diffs.Add(new Diff<T>(Operation.EQUAL, commonsuffix));
+            diffs = diffs.Add(new Diff<T>(Operation.Equal, commonsuffix));
         }
 
         return DiffCleanupMerge(diffs);
     }
 
     /// <summary>
-    /// Given the original text1, and an encoded string which describes the
-    /// operations required to transform text1 into text2, compute the full diff.
+    /// Computes the full diff, given an encoded string which describes the operations required 
+    /// to transform source list into destination list (the delta), 
+    /// and the original list the delta was created from.
     /// </summary>
-    /// <param name="sourceText">Source string for the diff.</param>
-    /// <param name="delta">Delta text.</param>
-    /// <returns>Array of Diff objects or null if invalid.</returns>
+    /// <param name="delta">The delta text to be parsed.</param>
+    /// <param name="original">Original list the delta was created from and the diffs will be applied to.</param>
+    /// <returns>Rope of Diff objects or null if invalid.</returns>
     /// <exception cref="ArgumentException">If invalid input.</exception>
     [Pure]
-    public static Rope<Diff<char>> ConvertDeltaToDiff(this Rope<char> sourceText, Rope<char> delta)
+    public static Rope<Diff<T>> ParseDelta<T>(this Rope<char> delta, Rope<T> original, Func<Rope<char>, T> parseItem) where T : IEquatable<T>
+    {
+        var diffs = Rope<Diff<T>>.Empty;
+
+        // Cursor in text1
+        int pointer = 0;
+        var tokens = delta.Split('\t');
+        foreach (var token in tokens)
+        {
+            if (token.Length == 0)
+            {
+                // Blank tokens are ok (from a trailing \t).
+                continue;
+            }
+
+            // Each token begins with a one character parameter which specifies the
+            // operation of this token (delete, insert, equality).
+            var param = token.Slice(1);
+            switch (token[0])
+            {
+                case '+':
+                    var x = param.DiffDecode(parseItem);
+                    diffs = diffs.Add(new Diff<T>(Operation.Insert, x));
+                    break;
+                case '-':
+                // Fall through.
+                case '=':
+                    int n;
+                    try
+                    {
+                        n = Convert.ToInt32(param.ToString());
+                    }
+                    catch (FormatException e)
+                    {
+                        throw new ArgumentException(("Invalid number in diff_fromDelta: " + param).ToString(), e);
+                    }
+                    if (n < 0)
+                    {
+                        throw new ArgumentException(("Negative number in diff_fromDelta: " + param).ToString());
+                    }
+
+                    Rope<T> text;
+                    try
+                    {
+                        text = original.Slice(pointer, n);
+                        pointer += n;
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        throw new ArgumentException($"Delta length ({pointer}) larger than source text length ({original.Length}).", e);
+                    }
+
+                    if (token[0] == '=')
+                    {
+                        diffs = diffs.Add(new Diff<T>(Operation.Equal, text));
+                    }
+                    else
+                    {
+                        diffs = diffs.Add(new Diff<T>(Operation.Delete, text));
+                    }
+
+                    break;
+                default:
+                    // Anything else is an error.
+                    throw new ArgumentException($"Invalid diff operation in diff_fromDelta: {token[0]}");
+            }
+        }
+
+        if (pointer != original.Length)
+        {
+            throw new ArgumentException("Delta length (" + pointer + ") smaller than source text length (" + original.Length + ").");
+        }
+
+        return diffs;
+    }
+
+    /// <summary>
+    /// Computes the full diff, given an encoded string which describes the operations required 
+    /// to transform source list into destination list (the delta), 
+    /// and the original list the delta was created from.
+    /// </summary>
+    /// <param name="delta">The delta text to be parsed.</param>
+    /// <param name="original">Original list the delta was created from and the diffs will be applied to.</param>
+    /// <returns>Rope of Diff objects or null if invalid.</returns>
+    /// <exception cref="ArgumentException">If invalid input.</exception>
+    [Pure]
+    public static Rope<Diff<char>> ParseDelta(this Rope<char> delta, Rope<char> original)
     {
         var diffs = Rope<Diff<char>>.Empty;
 
@@ -171,7 +258,7 @@ public static class DiffAlgorithmExtensions
             {
                 case '+':
                     param = param.DiffDecode();
-                    diffs = diffs.Add(new Diff<char>(Operation.INSERT, param));
+                    diffs = diffs.Add(new Diff<char>(Operation.Insert, param));
                     break;
                 case '-':
                 // Fall through.
@@ -193,21 +280,21 @@ public static class DiffAlgorithmExtensions
                     Rope<char> text;
                     try
                     {
-                        text = sourceText.Slice(pointer, n);
+                        text = original.Slice(pointer, n);
                         pointer += n;
                     }
                     catch (ArgumentOutOfRangeException e)
                     {
-                        throw new ArgumentException($"Delta length ({pointer}) larger than source text length ({sourceText.Length}).", e);
+                        throw new ArgumentException($"Delta length ({pointer}) larger than source text length ({original.Length}).", e);
                     }
 
                     if (token[0] == '=')
                     {
-                        diffs = diffs.Add(new Diff<char>(Operation.EQUAL, text));
+                        diffs = diffs.Add(new Diff<char>(Operation.Equal, text));
                     }
                     else
                     {
-                        diffs = diffs.Add(new Diff<char>(Operation.DELETE, text));
+                        diffs = diffs.Add(new Diff<char>(Operation.Delete, text));
                     }
 
                     break;
@@ -217,9 +304,9 @@ public static class DiffAlgorithmExtensions
             }
         }
 
-        if (pointer != sourceText.Length)
+        if (pointer != original.Length)
         {
-            throw new ArgumentException("Delta length (" + pointer + ") smaller than source text length (" + sourceText.Length + ").");
+            throw new ArgumentException("Delta length (" + pointer + ") smaller than source text length (" + original.Length + ").");
         }
 
         return diffs;
@@ -229,37 +316,37 @@ public static class DiffAlgorithmExtensions
     /// Find the differences between two texts. Assumes that the texts do not
     /// have any common prefix or suffix.
     /// </summary>
-    /// <param name="text1">Old string to be diffed.</param>
-    /// <param name="text2">New string to be diffed.</param>
+    /// <param name="first">Old string to be diffed.</param>
+    /// <param name="second">New string to be diffed.</param>
     /// <param name="options">Configuration options for the diff.</param>
     /// <param name="cancel">Cuts the calculation of the diff short.</param>
     /// <returns>A rope of differences.</returns>
     [Pure]
-    internal static Rope<Diff<T>> CalculateMiddleDifferences<T>(Rope<T> text1, Rope<T> text2, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
+    internal static Rope<Diff<T>> CalculateMiddleDifferences<T>(Rope<T> first, Rope<T> second, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
-        if (text1.Length == 0)
+        if (first.Length == 0)
         {
             // Just add some text (speedup).
-            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.INSERT, text2) });
+            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.Insert, second) });
         }
 
-        if (text2.Length == 0)
+        if (second.Length == 0)
         {
             // Just delete some text (speedup).
-            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1) });
+            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.Delete, first) });
         }
 
-        var longtext = text1.Length > text2.Length ? text1 : text2;
-        var shorttext = text1.Length > text2.Length ? text2 : text1;
+        var longtext = first.Length > second.Length ? first : second;
+        var shorttext = first.Length > second.Length ? second : first;
         var i = longtext.IndexOf(shorttext);
         if (i != -1)
         {
             // Shorter text is inside the longer text (speedup).
-            Operation op = (text1.Length > text2.Length) ? Operation.DELETE : Operation.INSERT;
+            Operation op = (first.Length > second.Length) ? Operation.Delete : Operation.Insert;
             return new Rope<Diff<T>>(new[]
             {
                 new Diff<T>(op, longtext.Slice(0, i)),
-                new Diff<T>(Operation.EQUAL, shorttext),
+                new Diff<T>(Operation.Equal, shorttext),
                 new Diff<T>(op, longtext.Slice(i + shorttext.Length))
             });
         }
@@ -270,28 +357,28 @@ public static class DiffAlgorithmExtensions
             // After the previous speedup, the character can't be an equality.
             return new Rope<Diff<T>>(new[]
             {
-                new Diff<T>(Operation.DELETE, text1),
-                new Diff<T>(Operation.INSERT, text2)
+                new Diff<T>(Operation.Delete, first),
+                new Diff<T>(Operation.Insert, second)
             });
         }
 
         // Check to see if the problem can be split in two.
-        var hmOrNull = DiffHalfMatch(text1, text2, options);
+        var hmOrNull = DiffHalfMatch(first, second, options);
         if (hmOrNull is HalfMatch<T> hm)
         {
             // A half-match was found, send both pairs off for separate processing.
-            var diffs_a = Diff(hm.Text1Prefix, hm.Text2Prefix, options, cancel);
-            diffs_a = diffs_a + new Diff<T>(Operation.EQUAL, hm.Common);
-            var diffs_b = Diff(hm.Text1Suffix, hm.Text2Suffix, options, cancel);
+            var diffs_a = Diff(hm.FirstPrefix, hm.SecondPrefix, options, cancel);
+            diffs_a = diffs_a + new Diff<T>(Operation.Equal, hm.Common);
+            var diffs_b = Diff(hm.FirstSuffix, hm.SecondSuffix, options, cancel);
             return diffs_a + diffs_b;
         }
 
-        if (options.IsChunkingEnabled && text1.Length > 100 && text2.Length > 100)
+        if (options.IsChunkingEnabled && first.Length > 100 && second.Length > 100)
         {
-            return ComputeChunkLevelDifferences(text1, text2, options, cancel);
+            return ComputeChunkLevelDifferences(first, second, options, cancel);
         }
 
-        return DiffBisect(text1, text2, options, cancel);
+        return DiffBisect(first, second, options, cancel);
     }
 
     /// <summary>
@@ -319,7 +406,7 @@ public static class DiffAlgorithmExtensions
 
         // Rediff any replacement blocks, this time character-by-character.
         // Add a dummy entry at the end.
-        diffs = diffs.Add(new Diff<T>(Operation.EQUAL, string.Empty));
+        diffs = diffs.Add(new Diff<T>(Operation.Equal, string.Empty));
         int pointer = 0;
         int count_delete = 0;
         int count_insert = 0;
@@ -331,15 +418,15 @@ public static class DiffAlgorithmExtensions
 
             switch (diffs[pointer].Operation)
             {
-                case Operation.INSERT:
+                case Operation.Insert:
                     count_insert++;
-                    text_insert = text_insert.AddRange(diffs[pointer].Text);
+                    text_insert = text_insert.AddRange(diffs[pointer].Items);
                     break;
-                case Operation.DELETE:
+                case Operation.Delete:
                     count_delete++;
-                    text_delete = text_delete.AddRange(diffs[pointer].Text);
+                    text_delete = text_delete.AddRange(diffs[pointer].Items);
                     break;
-                case Operation.EQUAL:
+                case Operation.Equal:
                     // Upon reaching an equality, check for prior redundancies.
                     if (count_delete >= 1 && count_insert >= 1)
                     {
@@ -363,12 +450,12 @@ public static class DiffAlgorithmExtensions
         return diffs;
     }
 
-    internal static Rope<Diff<T>> DiffBisect<T>(this Rope<T> text1Rope, Rope<T> text2Rope, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
+    internal static Rope<Diff<T>> DiffBisect<T>(this Rope<T> first, Rope<T> second, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
         // Cache the text lengths to prevent multiple calls.
-        //File.AppendAllText(@"D:\ChizDev\Rope\benchmarks\statslog.csv", $"Bisect,{text1Rope.Length},{text1Rope.Depth},{text2Rope.Length},{text2Rope.Depth}\n");
-        var text1Memory = text1Rope.ToMemory();
-        var text2Memory = text2Rope.ToMemory();
+        //File.AppendAllText(@"statslog.csv", $"Bisect,{text1Rope.Length},{text1Rope.Depth},{text2Rope.Length},{text2Rope.Depth}\n");
+        var text1Memory = first.ToMemory();
+        var text2Memory = second.ToMemory();
         var text1 = text1Memory.Span;
         var text2 = text2Memory.Span;
         //var text1 = new Rope<T>(text1Rope.ToMemory());
@@ -457,7 +544,7 @@ public static class DiffAlgorithmExtensions
                             if (x1 >= x2)
                             {
                                 // Overlap detected.
-                                return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
+                                return DiffBisectSplit(first, second, x1, y1, options, cancel);
                             }
                         }
                     }
@@ -508,7 +595,7 @@ public static class DiffAlgorithmExtensions
                             if (x1 >= x2)
                             {
                                 // Overlap detected.
-                                return DiffBisectSplit(text1Rope, text2Rope, x1, y1, options, cancel);
+                                return DiffBisectSplit(first, second, x1, y1, options, cancel);
                             }
                         }
                     }
@@ -517,7 +604,7 @@ public static class DiffAlgorithmExtensions
 
             // Diff took too long and hit the deadline or
             // number of diffs equals number of characters, no commonality at all.
-            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.DELETE, text1Rope), new Diff<T>(Operation.INSERT, text2Rope) });
+            return new Rope<Diff<T>>(new[] { new Diff<T>(Operation.Delete, first), new Diff<T>(Operation.Insert, second) });
         }
         finally
         {
@@ -531,42 +618,41 @@ public static class DiffAlgorithmExtensions
     /// and recurse.
     /// </summary>
     /// <typeparam name="T">Type of items in the sequence being compared.</typeparam>
-    /// <param name="text1">Old string to be diffed.</param>
-    /// <param name="text2"> New string to be diffed.</param>
+    /// <param name="first">Old string to be diffed.</param>
+    /// <param name="second"> New string to be diffed.</param>
     /// <param name="x">Index of split point in text1.</param>
     /// <param name="y">Index of split point in text2.</param>
     /// <param name="options">Settings for how the diff should be performed.</param>
     /// <param name="cancel">Cancelling cuts the diff operation short.</param>
     /// <returns>Sequence of  Diff objects.</returns>
     [Pure]
-    internal static Rope<Diff<T>> DiffBisectSplit<T>(this Rope<T> text1, Rope<T> text2, long x, long y, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
+    internal static Rope<Diff<T>> DiffBisectSplit<T>(this Rope<T> first, Rope<T> second, long x, long y, DiffOptions<T> options, CancellationToken cancel) where T : IEquatable<T>
     {
-        var text1a = text1.Slice(0, x);
-        var text2a = text2.Slice(0, y);
-        var text1b = text1.Slice(x);
-        var text2b = text2.Slice(y);
+        var firstA = first.Slice(0, x);
+        var secondA = second.Slice(0, y);
+        var firstB = first.Slice(x);
+        var secondB = second.Slice(y);
 
         // Compute both diffs serially.
         var optionsWithoutCheckLines = options.WithChunking(false);
-        var diffs = Diff(text1a, text2a, optionsWithoutCheckLines, cancel);
-        var diffsb = Diff(text1b, text2b, optionsWithoutCheckLines, cancel);
+        var diffs = Diff(firstA, secondA, optionsWithoutCheckLines, cancel);
+        var diffsb = Diff(firstB, secondB, optionsWithoutCheckLines, cancel);
         return diffs.Concat(diffsb);
     }
 
-
     /// <summary>
-    /// Split two texts into a list of strings.Reduce the texts to a string of
-    /// hashes where each Unicode character represents one line.
+    /// Split two texts into a list of strings. Reduce the texts to a string of
+    /// hashes where each Unicode character represents one chunk (or line for characters).
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    /// <param name="text1">First string.</param>
-    /// <param name="text2">Second string.</param>
+    /// <param name="first">First string.</param>
+    /// <param name="second">Second string.</param>
     /// <param name="options"></param>
     /// <returns>Three element tuple, containing the encoded text1, the
     /// encoded text2 and the List of unique strings. The zeroth element
     /// of the List of unique strings is intentionally blank.</returns>
     [Pure]
-    internal static (Rope<char> Text1Encoded, Rope<char> Text2Encoded, Rope<Rope<T>> Lines) DiffChunksToChars<T>(this Rope<T> text1, Rope<T> text2, DiffOptions<T> options) where T : IEquatable<T>
+    internal static (Rope<char> FirstEncoded, Rope<char> SecondEncoded, Rope<Rope<T>> Lines) DiffChunksToChars<T>(this Rope<T> first, Rope<T> second, DiffOptions<T> options) where T : IEquatable<T>
     {
         var lineArray = Rope<Rope<T>>.Empty;
         var lineHash = new Dictionary<Rope<T>, int>();
@@ -580,17 +666,17 @@ public static class DiffAlgorithmExtensions
         // var chars2 = Munge2(text1, ref lineArray, lineHash, 65535);
 
         // Allocate 2/3rds of the space for text1, the rest for text2.
-        (var chars1, lineArray) = AccumulateChunksIntoCharsSplit(text1, lineArray, lineHash, 40000, options);
-        (var chars2, lineArray) = AccumulateChunksIntoCharsSplit(text2, lineArray, lineHash, 65535, options);
+        (var chars1, lineArray) = AccumulateChunksIntoCharsSplit(first, lineArray, lineHash, 40000, options);
+        (var chars2, lineArray) = AccumulateChunksIntoCharsSplit(second, lineArray, lineHash, 65535, options);
         return (chars1, chars2, lineArray.Balanced());
     }
 
-    ////// Experimental: Attempt at faster performance than diff_linesToCharsMunge_pure
-    internal static (Rope<char> Chars, Rope<Rope<T>> LineArray) AccumulateChunksIntoCharsSplit<T>(this Rope<T> text, Rope<Rope<T>> lineArray, Dictionary<Rope<T>, int> lineHash, int maxLines, DiffOptions<T> options) where T : IEquatable<T>
+    // Experimental: Attempt at faster performance than diff_linesToCharsMunge_pure
+    internal static (Rope<char> Chars, Rope<Rope<T>> LineArray) AccumulateChunksIntoCharsSplit<T>(this Rope<T> source, Rope<Rope<T>> lineArray, Dictionary<Rope<T>, int> lineHash, int maxLines, DiffOptions<T> options) where T : IEquatable<T>
     {
         var chars = Rope<char>.Empty;
         var remainder = Rope<T>.Empty;
-        foreach (var line in text.Split(options.ChunkSeparator, RopeSplitOptions.SplitAfterSeparator))
+        foreach (var line in source.Split(options.ChunkSeparator, RopeSplitOptions.SplitAfterSeparator))
         {
             if (lineArray.Count >= maxLines)
             {
@@ -684,9 +770,9 @@ public static class DiffAlgorithmExtensions
         foreach (var diff in diffs)
         {
             var text = Rope<T>.Empty;
-            for (int j = 0; j < diff.Text.Length; j++)
+            for (int j = 0; j < diff.Items.Length; j++)
             {
-                text = text.AddRange(lineArray[(int)diff.Text[j]]);
+                text = text.AddRange(lineArray[(int)diff.Items[j]]);
             }
 
             result = result.Add(new(diff.Operation, text));
@@ -699,7 +785,7 @@ public static class DiffAlgorithmExtensions
     internal static Rope<Diff<T>> ConvertCharsToChunksFast<T>(this Rope<Diff<char>> diffs, Rope<Rope<T>> lineArray) where T : IEquatable<T>
     {
         var q = from diff in diffs
-                let text = (from c in diff.Text
+                let text = (from c in diff.Items
                             select lineArray[c]).Combine()
                 select new Diff<T>(diff.Operation, text);
         return q.ToRope();
@@ -732,24 +818,24 @@ public static class DiffAlgorithmExtensions
         {
             //Debug.Assert(!cancellation.IsCancellationRequested, "Cancelled diff_cleanupSemantic_pure #1");
 
-            if (diffs[pointer].Operation == Operation.EQUAL)
+            if (diffs[pointer].Operation == Operation.Equal)
             {  // Equality found.
                 equalities.Push(pointer);
                 length_insertions1 = length_insertions2;
                 length_deletions1 = length_deletions2;
                 length_insertions2 = 0;
                 length_deletions2 = 0;
-                lastEquality = diffs[pointer].Text;
+                lastEquality = diffs[pointer].Items;
             }
             else
             {  // an insertion or deletion
-                if (diffs[pointer].Operation == Operation.INSERT)
+                if (diffs[pointer].Operation == Operation.Insert)
                 {
-                    length_insertions2 += diffs[pointer].Text.Length;
+                    length_insertions2 += diffs[pointer].Items.Length;
                 }
                 else
                 {
-                    length_deletions2 += diffs[pointer].Text.Length;
+                    length_deletions2 += diffs[pointer].Items.Length;
                 }
 
                 // Eliminate an equality that is smaller or equal to the edits on both
@@ -759,10 +845,10 @@ public static class DiffAlgorithmExtensions
                     && (lastEquality.Length <= Math.Max(length_insertions2, length_deletions2)))
                 {
                     // Duplicate record.
-                    diffs = diffs.Insert(equalities.Peek(), new Diff<T>(Operation.DELETE, lastEquality));
+                    diffs = diffs.Insert(equalities.Peek(), new Diff<T>(Operation.Delete, lastEquality));
 
                     // Change second copy to insert.
-                    diffs = diffs.SetItem(equalities.Peek() + 1, new Diff<T>(Operation.INSERT, diffs[equalities.Peek() + 1].Text));
+                    diffs = diffs.SetItem(equalities.Peek() + 1, new Diff<T>(Operation.Insert, diffs[equalities.Peek() + 1].Items));
 
                     // Throw away the equality we just deleted.
                     equalities.Pop();
@@ -803,10 +889,10 @@ public static class DiffAlgorithmExtensions
         {
             //Debug.Assert(!cancellation.IsCancellationRequested, "Cancelled diff_cleanupSemantic_pure #2");
 
-            if (diffs[pointer - 1].Operation == Operation.DELETE && diffs[pointer].Operation == Operation.INSERT)
+            if (diffs[pointer - 1].Operation == Operation.Delete && diffs[pointer].Operation == Operation.Insert)
             {
-                var deletion = diffs[pointer - 1].Text;
-                var insertion = diffs[pointer].Text;
+                var deletion = diffs[pointer - 1].Items;
+                var insertion = diffs[pointer].Items;
                 int overlap_length1 = deletion.CommonOverlapLength(insertion);
                 int overlap_length2 = insertion.CommonOverlapLength(deletion);
                 if (overlap_length1 != 0 && overlap_length1 >= overlap_length2)
@@ -816,9 +902,9 @@ public static class DiffAlgorithmExtensions
                     {
                         // Overlap found.
                         // Insert an equality and trim the surrounding edits.
-                        diffs = diffs.Insert(pointer, new Diff<T>(Operation.EQUAL, insertion.Slice(0, overlap_length1)));
-                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].WithText(deletion.Slice(0, deletion.Length - overlap_length1)));
-                        diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithText(insertion.Slice(overlap_length1)));
+                        diffs = diffs.Insert(pointer, new Diff<T>(Operation.Equal, insertion.Slice(0, overlap_length1)));
+                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].WithItems(deletion.Slice(0, deletion.Length - overlap_length1)));
+                        diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithItems(insertion.Slice(overlap_length1)));
                         pointer++;
                     }
                 }
@@ -828,9 +914,9 @@ public static class DiffAlgorithmExtensions
                     {
                         // Reverse overlap found.
                         // Insert an equality and swap and trim the surrounding edits.
-                        diffs = diffs.Insert(pointer, new Diff<T>(Operation.EQUAL, deletion.Slice(0, overlap_length2)));
-                        diffs = diffs.SetItem(pointer - 1, new Diff<T>(Operation.INSERT, insertion.Slice(0, insertion.Length - overlap_length2)));
-                        diffs = diffs.SetItem(pointer + 1, new Diff<T>(Operation.DELETE, deletion.Slice(overlap_length2)));
+                        diffs = diffs.Insert(pointer, new Diff<T>(Operation.Equal, deletion.Slice(0, overlap_length2)));
+                        diffs = diffs.SetItem(pointer - 1, new Diff<T>(Operation.Insert, insertion.Slice(0, insertion.Length - overlap_length2)));
+                        diffs = diffs.SetItem(pointer + 1, new Diff<T>(Operation.Delete, deletion.Slice(overlap_length2)));
                         pointer++;
                     }
                 }
@@ -931,12 +1017,12 @@ public static class DiffAlgorithmExtensions
         while (pointer < diffs.Count - 1)
         {
             //Debug.Assert(!cancellation.IsCancellationRequested, "Cancelled diff_cleanupSemanticLossless_pure");
-            if (diffs[pointer - 1].Operation == Operation.EQUAL && diffs[pointer + 1].Operation == Operation.EQUAL)
+            if (diffs[pointer - 1].Operation == Operation.Equal && diffs[pointer + 1].Operation == Operation.Equal)
             {
                 // This is a single edit surrounded by equalities.
-                var equality1 = diffs[pointer - 1].Text;
-                var edit = diffs[pointer].Text;
-                var equality2 = diffs[pointer + 1].Text;
+                var equality1 = diffs[pointer - 1].Items;
+                var edit = diffs[pointer].Items;
+                var equality2 = diffs[pointer + 1].Items;
 
                 // First, shift the edit as far left as possible.
                 var commonOffset = equality1.CommonSuffixLength(edit);
@@ -971,12 +1057,12 @@ public static class DiffAlgorithmExtensions
                     }
                 }
 
-                if (!diffs[pointer - 1].Text.Equals(bestEquality1))
+                if (!diffs[pointer - 1].Items.Equals(bestEquality1))
                 {
                     // We have an improvement, save it back to the diff.
                     if (bestEquality1.Length != 0)
                     {
-                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].WithText(bestEquality1));
+                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].WithItems(bestEquality1));
                     }
                     else
                     {
@@ -987,7 +1073,7 @@ public static class DiffAlgorithmExtensions
                     diffs = diffs.SetItem(pointer, new Diff<T>(diffs[pointer].Operation, bestEdit));
                     if (bestEquality2.Length != 0)
                     {
-                        diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithText(bestEquality2));
+                        diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithItems(bestEquality2));
                     }
                     else
                     {
@@ -1030,16 +1116,16 @@ public static class DiffAlgorithmExtensions
         bool post_del = false;
         while (pointer < diffs.Count)
         {
-            if (diffs[pointer].Operation == Operation.EQUAL)
+            if (diffs[pointer].Operation == Operation.Equal)
             {
                 // Equality found.
-                if (diffs[pointer].Text.Length < options.EditCost && (post_ins || post_del))
+                if (diffs[pointer].Items.Length < options.EditCost && (post_ins || post_del))
                 {
                     // Candidate found.
                     equalities.Push(pointer);
                     pre_ins = post_ins;
                     pre_del = post_del;
-                    lastEquality = diffs[pointer].Text;
+                    lastEquality = diffs[pointer].Items;
                 }
                 else
                 {
@@ -1051,7 +1137,7 @@ public static class DiffAlgorithmExtensions
             }
             else
             {  // An insertion or deletion.
-                if (diffs[pointer].Operation == Operation.DELETE)
+                if (diffs[pointer].Operation == Operation.Delete)
                 {
                     post_del = true;
                 }
@@ -1073,9 +1159,9 @@ public static class DiffAlgorithmExtensions
                     + (post_del ? 1 : 0)) == 3)))
                 {
                     // Duplicate record.
-                    diffs = diffs.Insert(equalities.Peek(), new Diff<T>(Operation.DELETE, lastEquality));
+                    diffs = diffs.Insert(equalities.Peek(), new Diff<T>(Operation.Delete, lastEquality));
                     // Change second copy to insert.
-                    diffs = diffs.SetItem(equalities.Peek() + 1, diffs[equalities.Peek() + 1].WithOperation(Operation.INSERT));
+                    diffs = diffs.SetItem(equalities.Peek() + 1, diffs[equalities.Peek() + 1].WithOperation(Operation.Insert));
                     equalities.Pop();  // Throw away the equality we just deleted.
                     lastEquality = ReadOnlyMemory<T>.Empty;
                     if (pre_ins && pre_del)
@@ -1119,7 +1205,7 @@ public static class DiffAlgorithmExtensions
     internal static Rope<Diff<T>> DiffCleanupMerge<T>(this Rope<Diff<T>> diffs) where T : IEquatable<T>
     {
         // Add a dummy entry at the end.
-        diffs = diffs.Add(new Diff<T>(Operation.EQUAL, Rope<T>.Empty));
+        diffs = diffs.Add(new Diff<T>(Operation.Equal, Rope<T>.Empty));
         int pointer = 0;
         int count_delete = 0;
         int count_insert = 0;
@@ -1130,17 +1216,17 @@ public static class DiffAlgorithmExtensions
         {
             switch (diffs[pointer].Operation)
             {
-                case Operation.INSERT:
+                case Operation.Insert:
                     count_insert++;
-                    text_insert = text_insert.AddRange(diffs[pointer].Text);
+                    text_insert = text_insert.AddRange(diffs[pointer].Items);
                     pointer++;
                     break;
-                case Operation.DELETE:
+                case Operation.Delete:
                     count_delete++;
-                    text_delete = text_delete.AddRange(diffs[pointer].Text);
+                    text_delete = text_delete.AddRange(diffs[pointer].Items);
                     pointer++;
                     break;
-                case Operation.EQUAL:
+                case Operation.Equal:
                     // Upon reaching an equality, check for prior redundancies.
                     if (count_delete + count_insert > 1)
                     {
@@ -1151,13 +1237,13 @@ public static class DiffAlgorithmExtensions
                             if (commonlength != 0)
                             {
                                 var t = pointer - count_delete - count_insert - 1;
-                                if (t >= 0 && diffs[t].Operation == Operation.EQUAL)
+                                if (t >= 0 && diffs[t].Operation == Operation.Equal)
                                 {
                                     diffs = diffs.SetItem(t, diffs[t].Append(text_insert.Slice(0, commonlength)));
                                 }
                                 else
                                 {
-                                    diffs = diffs.Insert(0, new Diff<T>(Operation.EQUAL, text_insert.Slice(0, commonlength)));
+                                    diffs = diffs.Insert(0, new Diff<T>(Operation.Equal, text_insert.Slice(0, commonlength)));
                                     pointer++;
                                 }
 
@@ -1180,21 +1266,21 @@ public static class DiffAlgorithmExtensions
                         (_, diffs) = diffs.Splice(pointer, count_delete + count_insert);
                         if (text_delete.Length != 0)
                         {
-                            (_, diffs) = diffs.Splice(pointer, 0, new Diff<T>(Operation.DELETE, text_delete));
+                            (_, diffs) = diffs.Splice(pointer, 0, new Diff<T>(Operation.Delete, text_delete));
                             pointer++;
                         }
 
                         if (text_insert.Length != 0)
                         {
-                            (_, diffs) = diffs.Splice(pointer, 0, new Diff<T>(Operation.INSERT, text_insert));
+                            (_, diffs) = diffs.Splice(pointer, 0, new Diff<T>(Operation.Insert, text_insert));
                             pointer++;
                         }
                         pointer++;
                     }
-                    else if (pointer != 0 && diffs[pointer - 1].Operation == Operation.EQUAL)
+                    else if (pointer != 0 && diffs[pointer - 1].Operation == Operation.Equal)
                     {
                         // Merge this equality with the previous one.
-                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].Append(diffs[pointer].Text));
+                        diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].Append(diffs[pointer].Items));
                         diffs = diffs.RemoveAt(pointer);
                     }
                     else
@@ -1210,7 +1296,7 @@ public static class DiffAlgorithmExtensions
             }
         }
 
-        if (diffs[diffs.Count - 1].Text.Length == 0)
+        if (diffs[diffs.Count - 1].Items.Length == 0)
         {
             diffs = diffs.RemoveAt(diffs.Count - 1);  // Remove the dummy entry at the end.
         }
@@ -1223,22 +1309,22 @@ public static class DiffAlgorithmExtensions
         // Intentionally ignore the first and last element (don't need checking).
         while (pointer < (diffs.Count - 1))
         {
-            if (diffs[pointer - 1].Operation == Operation.EQUAL && diffs[pointer + 1].Operation == Operation.EQUAL)
+            if (diffs[pointer - 1].Operation == Operation.Equal && diffs[pointer + 1].Operation == Operation.Equal)
             {
                 // This is a single edit surrounded by equalities.
-                if (diffs[pointer].Text.EndsWith(diffs[pointer - 1].Text))
+                if (diffs[pointer].Items.EndsWith(diffs[pointer - 1].Items))
                 {
                     // Shift the edit over the previous equality.
-                    diffs = diffs.SetItem(pointer, diffs[pointer].WithText(diffs[pointer - 1].Text.Concat(diffs[pointer].Text.Slice(0, diffs[pointer].Text.Length - diffs[pointer - 1].Text.Length))));
-                    diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithText(diffs[pointer - 1].Text.Concat(diffs[pointer + 1].Text)));
+                    diffs = diffs.SetItem(pointer, diffs[pointer].WithItems(diffs[pointer - 1].Items.Concat(diffs[pointer].Items.Slice(0, diffs[pointer].Items.Length - diffs[pointer - 1].Items.Length))));
+                    diffs = diffs.SetItem(pointer + 1, diffs[pointer + 1].WithItems(diffs[pointer - 1].Items.Concat(diffs[pointer + 1].Items)));
                     (_, diffs) = diffs.Splice(pointer - 1, 1);
                     changes = true;
                 }
-                else if (diffs[pointer].Text.StartsWith(diffs[pointer + 1].Text))
+                else if (diffs[pointer].Items.StartsWith(diffs[pointer + 1].Items))
                 {
                     // Shift the edit over the next equality.
-                    diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].Append(diffs[pointer + 1].Text));
-                    diffs = diffs.SetItem(pointer, diffs[pointer].WithText(diffs[pointer].Text.Slice(diffs[pointer + 1].Text.Length).Concat(diffs[pointer + 1].Text)));
+                    diffs = diffs.SetItem(pointer - 1, diffs[pointer - 1].Append(diffs[pointer + 1].Items));
+                    diffs = diffs.SetItem(pointer, diffs[pointer].WithItems(diffs[pointer].Items.Slice(diffs[pointer + 1].Items.Length).Concat(diffs[pointer + 1].Items)));
                     (_, diffs) = diffs.Splice(pointer + 1, 1);
                     changes = true;
                 }
@@ -1260,8 +1346,8 @@ public static class DiffAlgorithmExtensions
     /// Do the two texts share a Substring which is at least half the length of
     /// the longer text? This speedup can produce non-minimal diffs.
     /// </summary>
-    /// <param name="text1">First string</param>
-    /// <param name="text2">Second string</param>
+    /// <param name="first">First string</param>
+    /// <param name="second">Second string</param>
     /// <returns>Five element String array containing:
     /// 0 - the prefix of text1,
     /// 1 - the suffix of text1,
@@ -1270,7 +1356,7 @@ public static class DiffAlgorithmExtensions
     /// 4 - and the common middle.
     /// Or null if there was no match.</returns>
     [Pure]
-    internal static HalfMatch<T>? DiffHalfMatch<T>(this Rope<T> text1, Rope<T> text2, DiffOptions<T> options) where T : IEquatable<T>
+    internal static HalfMatch<T>? DiffHalfMatch<T>(this Rope<T> first, Rope<T> second, DiffOptions<T> options) where T : IEquatable<T>
     {
         if (options.TimeoutSeconds <= 0)
         {
@@ -1278,8 +1364,8 @@ public static class DiffAlgorithmExtensions
             return null;
         }
 
-        var longtext = text1.Length > text2.Length ? text1 : text2;
-        var shorttext = text1.Length > text2.Length ? text2 : text1;
+        var longtext = first.Length > second.Length ? first : second;
+        var shorttext = first.Length > second.Length ? second : first;
         if (longtext.Length < 4 || shorttext.Length * 2 < longtext.Length)
         {
             return null;  // Pointless.
@@ -1315,7 +1401,7 @@ public static class DiffAlgorithmExtensions
         }
 
         // A half-match was found, sort out the return data.
-        if (text1.Length > text2.Length)
+        if (first.Length > second.Length)
         {
             return hm;
         }
