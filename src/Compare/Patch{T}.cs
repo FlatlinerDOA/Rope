@@ -23,16 +23,23 @@
 namespace Rope.Compare;
 
 using System;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
 
-/**
- * Class representing one patch operation.
- */
+/// <summary>
+/// Struct representing a single patch operation.
+/// </summary>
+/// <typeparam name="T">The items being patched, typically <see cref="char"/> when patching strings.</typeparam>
 public readonly record struct Patch<T>() where T : IEquatable<T>
 {
     public Rope<Diff<T>> Diffs { get; init; } = Rope<Diff<T>>.Empty;
+    
     public long Start1 { get; init; }
-    public long Start2 { get; init; }
+    
     public long Length1 { get; init; }
+
+    public long Start2 { get; init; }
+
     public long Length2 { get; init; }
 
     /**
@@ -41,9 +48,16 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
      * Indices are printed as 1-based, not 0-based.
      * @return The GNU diff string.
      */
-    public override string ToString()
+    public override string ToString() => this.ToCharRope().ToString();
+
+    /// <summary>
+    /// Internal version that constructs a rope, internal as it is only compatible when <typeparamref name="T"/> is of type <see cref="char"/>.
+    /// </summary>
+    /// <returns>The constructed string as a <see cref="Rope{char}"/>.</returns>
+    internal Rope<char> ToCharRope()
     {
-        string coords1, coords2;
+        Debug.Assert(typeof(T) == typeof(char), "This overload is only compatible with `char` type,\nuse ToCharRope(Func<T, Rope<char>> itemToString) passing a\nfunction to convert each item to a string.");
+        Rope<char> coords1, coords2;
         if (this.Length1 == 0)
         {
             coords1 = this.Start1 + ",0";
@@ -70,8 +84,8 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
         }
 
         var text = Rope<char>.Empty;
-        text = text.Append("@@ -").Append(coords1).Append(" +").Append(coords2)
-            .Append(" @@\n");
+        text = text.Append("@@ -").AddRange(coords1).Append(" +").AddRange(coords2).Append(" @@\n");
+
         // Escape the body of the patch with %xx notation.
         foreach (var aDiff in this.Diffs)
         {
@@ -91,12 +105,19 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
             text = text.AddRange(aDiff.Items.ToString().ToRope().DiffEncode()).Append("\n");
         }
 
-        return text.ToString();
+        return text;
     }
 
-
-    public Rope<char> ToCharRope(Func<T, Rope<char>> itemToString)
+    /// <summary>
+    /// Joins items by a separator and then includes them in a text patch.
+    /// </summary>
+    /// <param name="itemToString">A function to convert a single item into text.</param>
+    /// <param name="separator">The separator between items, defaults to ~</param>
+    /// <returns>The constructed string as a <see cref="Rope{char}"/>.</returns>
+    public Rope<char> ToCharRope(Func<T, Rope<char>> itemToString, char separator = '~')
     {
+        Contract.Assert(typeof(T) != typeof(char), "This overload is only compatible with non `char` types, use ToString() instead.");
+
         string coords1, coords2;
         if (this.Length1 == 0)
         {
@@ -142,7 +163,7 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
                     break;
             }
             
-            text = text.AddRange(aDiff.Items.DiffEncode(itemToString)).Append("\n");
+            text = text.AddRange(aDiff.Items.DiffEncode(itemToString, separator)).Append("\n");
         }
 
         return text;

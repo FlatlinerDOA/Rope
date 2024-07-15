@@ -131,7 +131,7 @@ internal static class CompatibilityExtensions
     /// <param name="itemToString">The function to convert an item to a string.</param>
     /// <returns>The encoded string.</returns>
     [Pure]
-    public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T?, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T> =>
+    public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T> =>
         DiffEncoder.Encode(items.Select(i => itemToString(i)).Join(separator).ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
 
     /// <summary>

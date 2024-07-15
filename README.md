@@ -53,16 +53,79 @@ Rope<Person> ropeOfPeople = [new Person("Frank"), new Person("Jane")]; // Makes 
 ```
 
 ## In built support for Diffing and Patching 
-### Example Usage
+###  Compare two strings .
 ```csharp
-// Compare two ropes using the DiffMatchPatch algorithm (Google).
-Rope<Diff<char>> diffs = "abcdef".ToRope().Diff("abefg");
-Rope<char> originalText = diffs.ToSource();
-Rope<char> updatedText = diffs.ToTarget();
+Rope<char> sourceText = "abcdef";
+Rope<char> targetText = "abefg";
+
+// Create a list of differences.
+Rope<Diff<char>> diffs = sourceText.Diff(targetText);
+
+// Recover either side from the list of differences.
+Rope<char> recoveredSourceText = diffs.ToSource();
+Rope<char> recoveredTargetText = diffs.ToTarget();
 
 // Create a Patch string (like Git's patch text)
-var patches = diffs.ToPatches(); // A rope of patches
-var patchText = patches.ToPatchText(); // A single string of patch text.
+Rope<Patch<char>> patches = diffs.ToPatches(); // A list of patches
+Rope<char> patchText = patches.ToPatchString(); // A single string of patch text.
+Console.WriteLine(patchText);
+/** Outputs:
+@@ -1,6 +1,5 @@
+    ab
+-cd
+    ef
++g
+*/
+
+// Parse out the list of patches from the patch text.
+Rope<Patch<char>> parsedPatches = Patches.Parse(patchText);
+```
+
+```csharp
+// Create diffs of lists of any type
+Rope<Person> original =
+[
+    new Person("Stephen", "King"),
+    new Person("Jane", "Austen"),
+    new Person("Mary", "Shelley"),
+    new Person("JRR", "Tokien"),
+    new Person("James", "Joyce"),
+];
+
+Rope<Person> updated =
+[
+    new Person("Stephen", "King"),
+    new Person("Jane", "Austen"),
+    new Person("JRR", "Tokien"),
+    new Person("Frank", "Miller"),
+    new Person("George", "Orwell"),
+    new Person("James", "Joyce"),
+];
+
+Rope<Diff<Person>> changes = original.Diff(updated, DiffOptions<Person>.Default);
+Assert.AreEqual(2, changes.Count(d => d.Operation != Operation.Equal));
+
+// Convert to a Delta string
+Rope<char> delta = changes.ToDelta(p => p.ToString());
+
+// Rebuild the diff from the original list and a delta.
+Rope<Diff<Person>> fromDelta = Delta.Parse(delta, original, Person.Parse);
+
+// Get back the original list
+Assert.AreEqual(fromDelta.ToSource(), original);
+
+// Get back the updated list.
+Assert.AreEqual(fromDelta.ToTarget(), updated);
+
+// Make a patch text
+Rope<Patch<Person>> patches = fromDelta.ToPatches();
+
+// Convert patches to text
+Rope<char> patchText = patches.ToPatchString(p => p.ToString());
+
+// Parse the patches back again
+Rope<Patch<Person>> parsedPatches = Patches.Parse(patchText.ToRope(), Person.Parse);
+Assert.AreEqual(parsedPatches, patches);
 ```
 
 ## Comparison with .NET Built in Types

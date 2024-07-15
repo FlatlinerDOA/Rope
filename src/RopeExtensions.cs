@@ -87,7 +87,7 @@ public static class RopeExtensions
     }
 
     /// <summary>
-    /// Constructs a new Rope from a series of leaves into a tree.
+    /// Constructs a new Rope from a series of leaves into a tree (flattens a sequence of sequences).
     /// </summary>
     /// <param name="leaves">The leaf nodes to construct into a tree.</param>
     /// <returns>A new rope with the leaves specified.</returns>
@@ -97,7 +97,7 @@ public static class RopeExtensions
     }
 
     /// <summary>
-    /// Constructs a new Rope from a series of leaves into a tree.
+    /// Constructs a new Rope from a series of leaves into a tree (flattens a sequence of sequences).
     /// </summary>
     /// <param name="leaves">The leaf nodes to construct into a tree.</param>
     /// <returns>A new rope with the leaves specified.</returns>
