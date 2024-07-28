@@ -14,31 +14,7 @@ using System.Diagnostics.Contracts;
 using System.Diagnostics;
 using System.Text;
 using System.Buffers;
-using Rope.Compare;
 using System.Runtime.InteropServices;
-
-public enum RopeSplitOptions
-{
-    /// <summary>
-    /// Excludes the separator from the results, includes empty results.
-    /// </summary>
-    None = 0,
-
-    /// <summary>
-    /// Excludes the separator and excludes empty results.
-    /// </summary>
-    RemoveEmpty = 1,
-
-    /// <summary>
-    /// Includes the separator at the end of each result (except the last), empty results are not possible.
-    /// </summary>
-    SplitAfterSeparator = 2,
-
-    /// <summary>
-    /// Includes the separator at the start of each result (except the first), empty results are not possible.
-    /// </summary>
-    SplitBeforeSeparator = 3,
-}
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
@@ -46,6 +22,9 @@ public enum RopeSplitOptions
 [CollectionBuilder(typeof(RopeBuilder), "Create")]
 public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
+    /// <summary>
+    /// Temporary buffers for performing searches.
+    /// </summary>
     private static readonly ArrayPool<ReadOnlyMemory<T>> BufferPool = ArrayPool<ReadOnlyMemory<T>>.Create(128, 16);
 
     private readonly record struct RopeNode(Rope<T> left, Rope<T> right);
@@ -247,6 +226,12 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         Debug.Assert(this.data is ReadOnlyMemory<T> or RopeNode or ValueTuple<T>, "Bad data type");
     }
 
+    /// <summary>
+    /// Gets the element at the specified index.
+    /// </summary>
+    /// <param name="index">The index to get the element from</param>
+    /// <returns>The element at the specified index</returns>
+    /// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
     public readonly T this[long index] => this.ElementAt(index);
 
     /// <summary>
@@ -680,12 +665,6 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         return this.Slice(start).RemoveRange(length);
     }
 
-    //[Pure]
-    //public static bool operator ==(Rope<T> a, Rope<T> b) => Rope<T>.Equals(a, b);
-
-    //[Pure]
-    //public static bool operator !=(Rope<T> a, Rope<T> b) => !Rope<T>.Equals(a, b);
-
     /// <summary>
     /// Concatenates two rope instances together into a single sequence.
     /// </summary>
@@ -787,6 +766,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     //// </remarks>
     public bool IsBalanced { get; }
 
+    /// <summary>
+    /// Gets the integer capped Length of the rope (for interfaces such as <see cref="IReadOnlyList{T}"/>.
+    /// </summary>
     public int Count => (int)this.Length;
 
     public T this[int index] => this[(long)index];
@@ -914,6 +896,66 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         }
 
         return n;
+    }
+
+    /// <summary>
+    /// Determine if the suffix of one string is the prefix of another.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="first">First string.</param>
+    /// <param name="second"> Second string.</param>
+    /// <returns>The number of characters common to the end of the first
+    /// string and the start of the second string.</returns>
+    [Pure]
+    public long CommonOverlapLength(Rope<T> second)
+    {
+        // Cache the text lengths to prevent multiple calls.
+        var first = this; 
+        var firstLength = first.Length;
+        var secondLength = second.Length;
+        // Eliminate the null case.
+        if (firstLength == 0 || secondLength == 0)
+        {
+            return 0;
+        }
+        // Truncate the longer string.
+        if (firstLength > secondLength)
+        {
+            first = first.Slice(firstLength - secondLength);
+        }
+        else if (firstLength < secondLength)
+        {
+            second = second.Slice(0, firstLength);
+        }
+
+        var minLength = Math.Min(firstLength, secondLength);
+        // Quick check for the worst case.
+        if (first == second)
+        {
+            return minLength;
+        }
+
+        // Start by looking for a single character match
+        // and increase length until no match is found.
+        // Performance analysis: https://neil.fraser.name/news/2010/11/04/
+        long best = 0;
+        long length = 1;
+        while (true)
+        {
+            var pattern = first.Slice(minLength - length);
+            var found = second.IndexOf(pattern);
+            if (found == -1)
+            {
+                return (int)best;
+            }
+
+            length += found;
+            if (found == 0 || first.Slice(minLength - length) == second.Slice(0, length))
+            {
+                best = length;
+                length++;
+            }
+        }
     }
 
     /// <summary>
@@ -1581,12 +1623,12 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     }
 
     [Pure]
-    public readonly bool StartsWith(Rope<T> find) => this.Slice(0, Math.Min(this.Length, find.Length)).IndexOf(find) == 0;
+    public readonly bool StartsWith(Rope<T> find) => this.Length >= find.Length && this.Slice(0, find.Length) == find;
 
     [Pure]
-    public readonly bool StartsWith(ReadOnlyMemory<T> find) => this.StartsWith(new Rope<T>(find));
+    public readonly bool StartsWith(ReadOnlyMemory<T> find) => this.Length >= find.Length && this.StartsWith(new Rope<T>(find));
 
-
+    [Pure]
     public readonly long LastIndexOf(Rope<T> find)
     {
         if (find.Length == 0)
@@ -1609,15 +1651,48 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 
         var rentedBuffers = BufferPool.Rent(this.BufferCount);
         var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
-        var buffers = rentedBuffers[..this.BufferCount];
-        var findBuffers = rentedFindBuffers[..find.BufferCount];
-        this.FillBuffers(buffers);
-        find.FillBuffers(findBuffers);
+        try
+        {
+            var buffers = rentedBuffers[..this.BufferCount];
+            var findBuffers = rentedFindBuffers[..find.BufferCount];
+            this.FillBuffers(buffers);
+            find.FillBuffers(findBuffers);
 
-        var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
+            var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
+            return i;
+        }
+        finally
+        {
+            BufferPool.Return(rentedFindBuffers);
+            BufferPool.Return(rentedBuffers);
+        }
+    }
 
-        BufferPool.Return(rentedFindBuffers);
-        BufferPool.Return(rentedBuffers);
+    [Pure]
+    public readonly long LastIndexOf<TEqualityComparer>(Rope<T> find, TEqualityComparer equalityComparer) where TEqualityComparer : IEqualityComparer<T>
+    {
+        if (find.Length == 0)
+        {
+            // Adjust the return value to conform with .NET's behavior.
+            // return the length of 'this' as the next plausible index.
+            return this.Length;
+        }
+
+        if (this.data is ValueTuple<T> value && find is ValueTuple<T> findValue)
+        {
+            return equalityComparer.Equals(value.Item1, findValue.Item1) ? 0 : -1;
+        }
+
+        var lastElement = find[^1];
+        var maxIndex = this.LastIndexOf(lastElement, equalityComparer);
+        if (maxIndex == -1)
+        {
+            // Early exit if we can find the last element the sequence at all.
+            return -1;
+        }
+
+        // We should be able to start from a good place here as we know the last element matches.
+        var i = this.Slice(0, maxIndex + 1).LastIndexOfSlow(find, equalityComparer);
         return i;
     }
 
@@ -1628,35 +1703,41 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// <param name="startIndex">The starting index to start searching backwards from (Optional).</param>
     /// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
     [Pure]
-    public readonly long LastIndexOf(Rope<T> find, long startIndex) => this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find);
+    public readonly long LastIndexOf(Rope<T> find, long startIndex) =>
+        this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find);
 
-    private readonly long LastIndexOfSlow(Rope<T> find, long startIndex)
+    /// <summary>
+    /// Returns the last element index that matches the specified sub-sequence, working backwards from the startIndex (inclusive).
+    /// </summary>
+    /// <param name="find">The sequence to find, if empty will return the startIndex + 1.</param>
+    /// <param name="startIndex">The starting index to start searching backwards from (Optional).</param>
+    /// <param name="equalityComparer">The comparer used to compare each element.</param>
+    /// <returns>The last element index that matches the sub-sequence, skipping the offset elements.</returns>
+    [Pure]
+    public readonly long LastIndexOf<TEqualityComparer>(Rope<T> find, long startIndex, TEqualityComparer equalityComparer) where TEqualityComparer : IEqualityComparer<T> =>
+        this.Slice(0, Math.Min(startIndex + 1, this.Length)).LastIndexOf(find, equalityComparer);
+
+    private readonly long LastIndexOfSlow<TEqualityComparer>(Rope<T> find, TEqualityComparer equalityComparer) where TEqualityComparer : IEqualityComparer<T>
     {
-        var comparer = EqualityComparer<T>.Default;
-        for (var i = startIndex; i >= 0; i--)
+        for (int i = this.Count - 1; i >= 0; i--)
         {
-            if (i + find.Length > this.Length) continue; // Skip if find exceeds bounds from i
-
-            var match = true;
-            for (var j = find.Length - 1; j >= 0 && match; j--)
+            if (this.Slice(i).Equals(find, equalityComparer))
             {
-                // This check ensures we don't overshoot the bounds of 'this'
-                if (i + j < this.Length)
-                {
-                    match = comparer.Equals(this[i + j], find[j]);
-                }
-                else
-                {
-                    match = false;
-                    break; // No need to continue if we're out of bounds
-                }
+                return i;
             }
-
-            if (match)
-            {
-                return i; // Found the last occurrence
-            }
+            //if (equalityComparer.Equals(slice[i], item))
+            //{
+            //    return i;
+            //}
         }
+
+        //for (var i = this.Length + 1 - find.Length; i >= 0; i--)
+        //{
+        //    if (this.Slice(i).Equals(find, equalityComparer))
+        //    {
+        //        return i;
+        //    }
+        //}
 
         return -1;
     }
@@ -1750,11 +1831,137 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         return -1;
     }
 
-    [Pure]
-    public readonly long LastIndexOf(T find, int startIndex) => this.Slice(0, startIndex + 1).LastIndexOf(new Rope<T>(find));
+    private readonly long LastIndexOfCustomEquality<TEqualityComparer>(ReadOnlySpan<ReadOnlyMemory<T>> targetBuffers, ReadOnlySpan<ReadOnlyMemory<T>> findBuffers, long findLength, TEqualityComparer equalityComparer) where TEqualityComparer : IEqualityComparer<T>
+    {
+        // 1. Fast forward to last element in findBuffers
+        // 2. Reduce find buffer using sequence equal,
+        // 2.1    If no match, slice target buffers
+        // 2.2    Else iterate until all sliced sub-sequences matches
+        var remainingTargetBuffers = targetBuffers;
+        var currentTargetSpan = remainingTargetBuffers[^1].Span;
+        var lastElement = findBuffers[^1].Span[^1];
+        var endIndex = this.Length;
+        while (remainingTargetBuffers.Length > 0)
+        {
+            // Reset find to the beginning
+            var remainingFindBuffers = findBuffers;
+            var currentFindSpan = remainingFindBuffers[^1].Span;
+
+            var index = MoveToLastElement(endIndex, lastElement, ref currentTargetSpan, ref remainingTargetBuffers);
+            if (index == -1)
+            {
+                return -1;
+            }
+
+            var aligned = new ReverseAlignedBufferEnumerator<T>(currentTargetSpan, currentFindSpan, remainingTargetBuffers, remainingFindBuffers);
+            var matches = true;
+            while (aligned.MoveNext())
+            {
+                if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB, equalityComparer))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                // We matched and had nothing left in B. We're done!
+                if (!aligned.HasRemainderB)
+                {
+                    return index + 1 - findLength;
+                }
+
+                // We matched everything so far in A but B had more to search for, so there was no match.
+                return -1;
+            }
+            else
+            {
+                // We found an index but it wasn't a match, shift by 1 and do an indexof again.
+                if (currentTargetSpan.Length > 0)
+                {
+                    endIndex = index;
+                    currentTargetSpan = currentTargetSpan[..^1];
+                }
+                else
+                {
+                    remainingTargetBuffers = remainingTargetBuffers[..^1];
+                }
+            }
+        }
+
+        return -1;
+    }
 
     [Pure]
-    public readonly long LastIndexOf(T find) => this.LastIndexOf(new Rope<T>(find));
+    public readonly long LastIndexOf(T find, int startIndex) => this.Slice(0, startIndex + 1).LastIndexOf(find);
+
+    [Pure]
+    public readonly long LastIndexOf(T find)
+    {
+        switch (this.data)
+        {
+            case ValueTuple<T> value:
+                return value.Item1.Equals(find) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                return memory.Span.LastIndexOf(find);
+            case RopeNode node:
+                // Node
+                var i = node.right.LastIndexOf(find);
+                if (i != -1)
+                {
+                    return node.left.Length + i;
+                }
+
+                i = node.left.LastIndexOf(find);
+                if (i != -1)
+                {
+                    return i;
+                }
+
+                return -1;
+            default:
+                return -1;
+        }
+    }
+
+    [Pure]
+    public readonly long LastIndexOf<TEqualityComparer>(T find, TEqualityComparer equalityComparer) where TEqualityComparer : IEqualityComparer<T>
+    {
+        switch (this.data)
+        {
+            case ValueTuple<T> value:
+                return equalityComparer.Equals(value.Item1, find) ? 0 : -1;
+            case ReadOnlyMemory<T> memory:
+                var slice = memory.Span;
+                for (var x = slice.Length - 1; x >= 0; x--)
+                {
+                    if (equalityComparer.Equals(slice[x], find))
+                    {
+                        return x;
+                    }
+                }
+
+                return -1;
+            case RopeNode node:
+                // Node
+                var i = node.right.LastIndexOf(find, equalityComparer);
+                if (i != -1)
+                {
+                    return node.left.Length + i;
+                }
+
+                i = node.left.LastIndexOf(find, equalityComparer);
+                if (i != -1)
+                {
+                    return i;
+                }
+
+                return -1;
+            default:
+                return -1;
+        }
+    }
 
     [Pure]
     public readonly bool EndsWith(Rope<T> find)
@@ -1773,10 +1980,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// <param name="with">The element to replace with.</param>
     /// <returns>A new rope with the replacements made.</returns>
     [Pure]
-    public readonly Rope<T> Replace(T replace, T with)
-    {
-        return this.Replace(new Rope<T>(replace), new Rope<T>(with));
-    }
+    public readonly Rope<T> Replace(T replace, T with) => this.Replace(new Rope<T>(replace), new Rope<T>(with));
 
     [Pure]
     public readonly Rope<T> Replace(Rope<T> replace, Rope<T> with)
@@ -1976,6 +2180,28 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         };
     }
 
+    /// <summary>
+    /// Gets a value indicating whether these two ropes are equivalent in terms of their content.
+    /// </summary>
+    /// <param name="other">The other sequence to compare to</param>
+    /// <param name="equalityComparer">Element comparer to use.</param>
+    /// <returns>true if both instances hold the same sequence, otherwise false.</returns>
+    [Pure]
+    public readonly bool Equals(Rope<T> other, IEqualityComparer<T> equalityComparer)
+    {
+        return this.data switch
+        {
+            ReadOnlyMemory<T> mem =>
+                other.data switch
+                {
+                    ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span, equalityComparer),
+                    _ => AlignedEquals(other, equalityComparer)
+                },
+            ValueTuple<T> value => other.data is ValueTuple<T> otherValue && equalityComparer.Equals(value.Item1, otherValue.Item1),
+            _ => AlignedEquals(other, equalityComparer)
+        };
+    }
+
     private bool AlignedEquals(Rope<T> other)
     {
         if (this.Length != other.Length)
@@ -1991,24 +2217,71 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 
         var rentedBuffers = BufferPool.Rent(this.BufferCount);
         var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
-        var buffers = rentedBuffers[..this.BufferCount];
-        var findBuffers = rentedFindBuffers[..other.BufferCount];
-        this.FillBuffers(buffers);
-        other.FillBuffers(findBuffers);
-        var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
-        var matches = true;
-        while (aligned.MoveNext())
+        try
         {
-            if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+            var buffers = rentedBuffers[..this.BufferCount];
+            var findBuffers = rentedFindBuffers[..other.BufferCount];
+            this.FillBuffers(buffers);
+            other.FillBuffers(findBuffers);
+            var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+            var matches = true;
+            while (aligned.MoveNext())
             {
-                matches = false;
-                break;
+                if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB))
+                {
+                    matches = false;
+                    break;
+                }
             }
+
+            return matches;
+        }
+        finally
+        {
+            BufferPool.Return(rentedFindBuffers);
+            BufferPool.Return(rentedBuffers);
+        }
+    }
+
+    private bool AlignedEquals(Rope<T> other, IEqualityComparer<T> comparer)
+    {
+        if (this.Length != other.Length)
+        {
+            return false;
         }
 
-        BufferPool.Return(rentedFindBuffers);
-        BufferPool.Return(rentedBuffers);
-        return matches;
+        if (this.Length == 0)
+        {
+            // Both must be empty if lengths are equal.
+            return true;
+        }
+
+        var rentedBuffers = BufferPool.Rent(this.BufferCount);
+        var rentedFindBuffers = BufferPool.Rent(other.BufferCount);
+        try
+        {
+            var buffers = rentedBuffers[..this.BufferCount];
+            var findBuffers = rentedFindBuffers[..other.BufferCount];
+            this.FillBuffers(buffers);
+            other.FillBuffers(findBuffers);
+            var aligned = new AlignedBufferEnumerator<T>(buffers, findBuffers);
+            var matches = true;
+            while (aligned.MoveNext())
+            {
+                if (!aligned.CurrentA.SequenceEqual(aligned.CurrentB, comparer))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            return matches;
+        }
+        finally
+        {
+            BufferPool.Return(rentedFindBuffers);
+            BufferPool.Return(rentedBuffers);
+        }
     }
 
     /// <summary>
@@ -2029,16 +2302,24 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         _ => 0
     };
 
-    public IEnumerator<T> GetEnumerator()
-    {
-        return new Enumerator(this);
-    }
+    public IEnumerator<T> GetEnumerator() => new Enumerator(this);
 
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return new Enumerator(this);
-    }
+    IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
 
+    /// <summary>
+    /// Calculates based on a given length and depth whether this Rope's Tree is balanced enough, 
+    /// or needs rebalancing. Calculation comes from the Rope paper.
+    /// https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf
+    /// 
+    /// | p. 1319 - We define the depth of a leaf to be 0, and the depth of a concatenation to be
+    /// | one plus the maximum depth of its children. Let Fn be the nth Fibonacci number.
+    /// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
+    /// | of depth 1 must have length at least 2.
+    /// 
+    /// </summary>
+    /// <param name="length">The number of elements in the Rope.</param>
+    /// <param name="depth">The maximum depth of the Rope's tree.</param>
+    /// <returns>true if the Rope is long enough to justify the depth it has.</returns>
     [Pure]
     private static bool CalculateIsBalanced(long length, int depth) => depth < DepthToFibonnaciPlusTwo.Length && length >= DepthToFibonnaciPlusTwo[depth];
 
@@ -2210,16 +2491,37 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     [Pure]
     IImmutableList<T> IImmutableList<T>.Add(T value) => this.Add(value);
 
+    /// <summary>
+    /// Creates a new rope that is the concatentation of all this instance and all elements.
+    /// </summary>
+    /// <param name="items">Sequence of elements to append.</param>
+    /// <returns>A new rope with the concatanetation of elements.</returns>
     [Pure]
     IImmutableList<T> IImmutableList<T>.AddRange(IEnumerable<T> items) => this.AddRange(items.ToRope());
 
+    /// <summary>
+    /// Alias for <see cref="Rope{T}.Empty"/>.
+    /// </summary>
+    /// <returns>The static empty instance <see cref="Rope{T}.Empty"/>.</returns>
     [Pure]
     IImmutableList<T> IImmutableList<T>.Clear() => Rope<T>.Empty;
 
     [Pure]
     int IImmutableList<T>.IndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
     {
-        throw new NotImplementedException();
+        if (index < 0 || index > this.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        if ((ulong)count > (ulong)(this.Length - index))
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        equalityComparer ??= EqualityComparer<T>.Default;
+        var i = this[index..(index + count)].IndexOf(new[] { item }, equalityComparer);
+        return (int)(i != -1 ? index + i : -1);
     }
 
     [Pure]
@@ -2231,19 +2533,50 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     [Pure]
     int IImmutableList<T>.LastIndexOf(T item, int index, int count, IEqualityComparer<T>? equalityComparer)
     {
-        throw new NotImplementedException();
+        if (this.Count == 0)
+        {
+            return (index == -1 && count == 0) ? -1 : throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        if (index < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        if (index > this.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        if (count == 0)
+        {
+            return -1;
+        }
+
+        equalityComparer ??= EqualityComparer<T>.Default;
+        int endIndex = Math.Min(index, this.Count - 1);
+        int startIndex = Math.Max(0, endIndex - count + 1);
+        var i = this.Slice(startIndex, endIndex - startIndex + 1).LastIndexOf(item, equalityComparer);
+        return i != -1 ? (int)(startIndex + i) : -1;
     }
 
     [Pure]
     IImmutableList<T> IImmutableList<T>.Remove(T value, IEqualityComparer<T>? equalityComparer)
     {
-        throw new NotImplementedException();
+        var i = this.IndexOf(value);
+        return i == -1 ? this : this[..(int)i] + this[(int)(i + 1)..];
     }
 
     [Pure]
     IImmutableList<T> IImmutableList<T>.RemoveAll(Predicate<T> match)
     {
-        throw new NotImplementedException();
+        // TODO: Improve perf and efficiency.
+        return this.Where(p => !match(p)).ToRope();
     }
 
     [Pure]
@@ -2252,7 +2585,8 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     [Pure]
     IImmutableList<T> IImmutableList<T>.RemoveRange(IEnumerable<T> items, IEqualityComparer<T>? equalityComparer)
     {
-        throw new NotImplementedException();
+        // TODO: Improve perf and efficiency.
+        return this.Where(i => !items.Contains(i)).ToRope();
     }
 
     [Pure]

@@ -24,307 +24,25 @@ namespace Rope.Compare;
 
 using System;
 using System.Diagnostics.Contracts;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Web;
 
-public static partial class PatchAlgorithmExtensions
+public static class PatchExtensions
 {
-    private static readonly Regex PatchHeaderPattern = CreatePatchHeaderPattern();
-
-    [GeneratedRegex("^@@ -(\\d+),?(\\d*) \\+(\\d+),?(\\d*) @@$")]
-    private static partial Regex CreatePatchHeaderPattern();
-
     /// <summary>
-    /// Parse a textual representation of patches and return a List of Patch
-    /// objects.
+    /// Take a list of patches and return a textual representation.
     /// </summary>
-    /// <param name="patchText">Text representation of patches.</param>
-    /// <returns>List of Patch objects.</returns>
-    /// <exception cref="ArgumentException">Thrown if invalid input.</exception>
-    //public static Rope<Patch<T>> ParsePatchText<T>(this Rope<char> patchText, Func<Rope<char>, T> parseItem, char separator = '~') where T : IEquatable<T>
-    //{
-    //    var patches = Rope<Patch<T>>.Empty;
-    //    if (patchText.Length == 0)
-    //    {
-    //        return patches;
-    //    }
-
-    //    var text = patchText.Split('\n').ToRope();
-    //    long textPointer = 0;
-    //    Patch<T> patch;
-    //    Match m;
-    //    char sign;
-    //    Rope<char> line = Rope<char>.Empty;
-    //    while (textPointer < text.Length)
-    //    {
-    //        var pointerText = text[textPointer].ToString();
-    //        m = PatchHeaderPattern.Match(pointerText);
-    //        if (!m.Success)
-    //        {
-    //            throw new ArgumentException("Invalid patch string: " + pointerText);
-    //        }
-
-    //        patch = new Patch<T>()
-    //        {
-    //            Start1 = Convert.ToInt32(m.Groups[1].Value)
-    //        };
-
-    //        if (m.Groups[2].Length == 0)
-    //        {
-    //            patch = patch with { Start1 = patch.Start1 - 1, Length1 = 1 };
-    //        }
-    //        else if (m.Groups[2].Value == "0")
-    //        {
-    //            patch = patch with { Length1 = 0 };
-    //        }
-    //        else
-    //        {
-    //            patch = patch with { Start1 = patch.Start1 - 1, Length1 = Convert.ToInt32(m.Groups[2].Value) };
-    //        }
-
-    //        patch = patch with { Start2 = Convert.ToInt32(m.Groups[3].Value) };
-    //        if (m.Groups[4].Length == 0)
-    //        {
-    //            patch = patch with { Start2 = patch.Start2 - 1, Length2 = 1 };
-    //        }
-    //        else if (m.Groups[4].Value == "0")
-    //        {
-    //            patch = patch with { Length2 = 0 };
-    //        }
-    //        else
-    //        {
-    //            patch = patch with { Start2 = patch.Start2 - 1, Length2 = Convert.ToInt32(m.Groups[4].Value) };
-    //        }
-
-    //        textPointer++;
-    //        while (textPointer < text.Length)
-    //        {
-    //            try
-    //            {
-    //                sign = text[textPointer][0];
-    //            }
-    //            catch (IndexOutOfRangeException)
-    //            {
-    //                // Blank line?  Whatever.
-    //                textPointer++;
-    //                continue;
-    //            }
-
-    //            line = text[textPointer].Slice(1);
-    //            line = line.Replace("+", "%2b");
-    //            line = HttpUtility.UrlDecode(line.ToString());
-    //            if (sign == '-')
-    //            {
-    //                // Deletion.
-    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
-    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Delete, items)) };
-    //            }
-    //            else if (sign == '+')
-    //            {
-    //                // Insertion.
-    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
-    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Insert, items)) };
-    //            }
-    //            else if (sign == ' ')
-    //            {
-    //                // Minor equality.
-    //                var items = line.Split(separator).Select(i => parseItem(i)).ToRope();
-    //                patch = patch with { Diffs = patch.Diffs.Add(new Diff<T>(Operation.Equal, items)) };
-    //            }
-    //            else if (sign == '@')
-    //            {
-    //                // Start of next patch.
-    //                break;
-    //            }
-    //            else
-    //            {
-    //                // WTF?
-    //                throw new ArgumentException("Invalid patch mode '" + sign + "' in: " + line.ToString());
-    //            }
-
-    //            textPointer++;
-    //        }
-
-    //        patches = patches.Add(patch);
-
-    //    }
-
-    //    return patches;
-    //}
-
-    /// <summary>
-    /// Parse a textual representation of patches and return a List of Patch
-    /// objects.
-    /// </summary>
-    /// <param name="patchText">Text representation of patches.</param>
-    /// <returns>List of Patch objects.</returns>
-    /// <exception cref="ArgumentException">Thrown if invalid input.</exception>
-    public static Rope<Patch<char>> ParsePatchText(this Rope<char> patchText)
-    {
-        var patches = Rope<Patch<char>>.Empty;
-        if (patchText.Length == 0)
-        {
-            return patches;
-        }
-
-        var text = patchText.Split('\n').ToRope();
-        long textPointer = 0;
-        Patch<char> patch;
-        Match m;
-        char sign;
-        Rope<char> line = Rope<char>.Empty;
-        while (textPointer < text.Length)
-        {
-            var pointerText = text[textPointer].ToString();
-            m = PatchHeaderPattern.Match(pointerText);
-            if (!m.Success)
-            {
-                throw new ArgumentException("Invalid patch string: " + pointerText);
-            }
-
-            patch = new Patch<char>()
-            {
-                Start1 = Convert.ToInt32(m.Groups[1].Value)
-            };
-
-            if (m.Groups[2].Length == 0)
-            {
-                patch = patch with { Start1 = patch.Start1 - 1, Length1 = 1 };
-            }
-            else if (m.Groups[2].Value == "0")
-            {
-                patch = patch with { Length1 = 0 };
-            }
-            else
-            {
-                patch = patch with { Start1 = patch.Start1 - 1, Length1 = Convert.ToInt32(m.Groups[2].Value) };
-            }
-
-            patch = patch with { Start2 = Convert.ToInt32(m.Groups[3].Value) };
-            if (m.Groups[4].Length == 0)
-            {
-                patch = patch with { Start2 = patch.Start2 - 1, Length2 = 1 };
-            }
-            else if (m.Groups[4].Value == "0")
-            {
-                patch = patch with { Length2 = 0 };
-            }
-            else
-            {
-                patch = patch with { Start2 = patch.Start2 - 1, Length2 = Convert.ToInt32(m.Groups[4].Value) };
-            }
-
-            textPointer++;
-            while (textPointer < text.Length)
-            {
-                try
-                {
-                    sign = text[textPointer][0];
-                }
-                catch (IndexOutOfRangeException)
-                {
-                    // Blank line?  Whatever.
-                    textPointer++;
-                    continue;
-                }
-
-                line = text[textPointer].Slice(1);
-                line = line.Replace("+", "%2b");
-                line = HttpUtility.UrlDecode(line.ToString());
-                if (sign == '-')
-                {
-                    // Deletion.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Delete, line)) };
-                }
-                else if (sign == '+')
-                {
-                    // Insertion.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Insert, line)) };
-                }
-                else if (sign == ' ')
-                {
-                    // Minor equality.
-                    patch = patch with { Diffs = patch.Diffs.Add(new Diff<char>(Operation.Equal, line)) };
-                }
-                else if (sign == '@')
-                {
-                    // Start of next patch.
-                    break;
-                }
-                else
-                {
-                    // WTF?
-                    throw new ArgumentException("Invalid patch mode '" + sign + "' in: " + line.ToString());
-                }
-
-                textPointer++;
-            }
-
-            patches = patches.Add(patch);
-
-        }
-
-        return patches;
-    }
+    /// <param name="patches">List of Patch objects.</param>
+    /// <returns>Text representation of patches.</returns>
+    public static Rope<char> ToPatchString<T>(this IEnumerable<Patch<T>> patches, Func<T, Rope<char>> itemToString, char separator = '~')
+        where T : IEquatable<T> =>
+        patches.Select(p => p.ToSeparatedCharRope(itemToString, separator)).Combine();
 
     /// <summary>
     /// Take a list of patches and return a textual representation.
     /// </summary>
     /// <param name="patches">List of Patch objects.</param>
     /// <returns>Text representation of patches.</returns>
-    //public static string ToPatchText<T>(this IEnumerable<Patch<T>> patches, Func<T, Rope<char>> itemToString) where T : IEquatable<T>
-    //{
-    //    StringBuilder text = new StringBuilder();
-    //    foreach (var aPatch in patches)
-    //    {
-    //        text.Append(aPatch.ToCharRope(itemToString).ToString());
-    //    }
-
-    //    return text.ToString();
-    //}
-
-    /// <summary>
-    /// Take a list of patches and return a textual representation.
-    /// </summary>
-    /// <param name="patches">List of Patch objects.</param>
-    /// <returns>Text representation of patches.</returns>
-    public static string ToPatchText(this IEnumerable<Patch<char>> patches)
-    {
-        StringBuilder text = new StringBuilder();
-        foreach (var aPatch in patches)
-        {
-            text.Append(aPatch);
-        }
-
-        return text.ToString();
-    }
-
-    [Pure]
-    public static Rope<Patch<char>> CreatePatches(this string text1, string text2, PatchOptions? patchOptions = null, DiffOptions<char>? diffOptions = null) => CreatePatches(text1.ToRope(), text2.ToRope(), patchOptions, diffOptions);
-
-    /// <summary>
-    /// Compute a list of patches to turn text1 into text2.
-    /// A set of diffs will be computed.
-    /// </summary>
-    /// <param name="text1">Old text.</param>
-    /// <param name="text2">New text.</param>
-    /// <returns>List of Patch objects.</returns>
-    [Pure]
-    public static Rope<Patch<T>> CreatePatches<T>(this Rope<T> text1, Rope<T> text2, PatchOptions? patchOptions, DiffOptions<T>? diffOptions = null) where T : IEquatable<T>
-    {
-        // No diffs provided, compute our own.
-        diffOptions = diffOptions ?? DiffOptions<T>.Default;
-        using var deadline = diffOptions.StartTimer();
-        var diffs = text1.Diff(text2, diffOptions, deadline.Cancellation);
-        if (diffs.Count > 2)
-        {
-            diffs = diffs.DiffCleanupSemantic(deadline.Cancellation);
-            diffs = diffs.DiffCleanupEfficiency(diffOptions);
-        }
-
-        return text1.ToPatches(diffs, patchOptions);
-    }
+    public static Rope<char> ToPatchString(this IEnumerable<Patch<char>> patches) =>
+        patches.Select(p => p.ToCharRope()).Combine();
 
     /// <summary>
     /// Compute a list of patches to turn text1 into text2.
@@ -333,26 +51,24 @@ public static partial class PatchAlgorithmExtensions
     /// <param name="diffs">List of Diff objects for text1 to text2.</param>
     /// <returns>List of Patch objects.</returns>
     [Pure]
-    public static Rope<Patch<T>> ToPatches<T>(this Rope<Diff<T>> diffs) where T : IEquatable<T>
+    public static Rope<Patch<T>> ToPatches<T>(this Rope<Diff<T>> diffs, PatchOptions? options = null) where T : IEquatable<T>
     {
         // No origin string provided, compute our own.
-        var text1 = diffs.ToSource();
-        return text1.ToPatches(diffs, PatchOptions.Default);
+        return diffs.ToPatches(diffs.ToSource(), options);
     }
 
     /// <summary>
-    /// Compute a list of patches to turn text1 into text2.
-    /// text2 is not provided, diffs are the delta between text1 and text2.
+    /// Compute a list of patches to turn <paramref name="source"/> into the target.
+    /// The target is not provided, the diffs are the delta between <paramref name="source"/> and the target.
     /// </summary>
-    /// <param name="text1">Old text.</param>
-    /// <param name="diffs">Sequence of Diff objects for text1 to text2.</param>
-    /// <param name="options">Options controlling how the patches are created.</param>
+    /// <param name="source">The original list.</param>
+    /// <param name="diffs">Sequence of differences between the provided <paramref name="source"/> and the target.</param>
+    /// <param name="options">Options controlling how the patches are created (optional).</param>
     /// <returns>List of Patch objects.</returns>
     [Pure]
-    public static Rope<Patch<T>> ToPatches<T>(this Rope<T> text1, Rope<Diff<T>> diffs, PatchOptions? options) where T : IEquatable<T>
+    public static Rope<Patch<T>> ToPatches<T>(this Rope<Diff<T>> diffs, Rope<T> source, PatchOptions? options = null) where T : IEquatable<T>
     {
         options ??= PatchOptions.Default;
-        // Check for null inputs not needed since null can't be passed in C#.
         if (diffs.Count == 0)
         {
             return Rope<Patch<T>>.Empty;
@@ -365,8 +81,8 @@ public static partial class PatchAlgorithmExtensions
                                // Start with text1 (prepatch_text) and apply the diffs until we arrive at
                                // text2 (postpatch_text). We recreate the patches one by one to determine
                                // context info.
-        var prepatch_text = text1;
-        var postpatch_text = text1;
+        var prepatch_text = source;
+        var postpatch_text = source;
         foreach (var aDiff in diffs)
         {
             if (patch.Diffs.Count == 0 && aDiff.Operation != Operation.Equal)
@@ -410,6 +126,7 @@ public static partial class PatchAlgorithmExtensions
                             result += patch;
 
                             patch = new Patch<T>();
+
                             // Unlike Unidiff, our patch lists have a rolling context.
                             // https://github.com/google/diff-match-patch/wiki/Unidiff
                             // Update prepatch text & pos to reflect the application of the

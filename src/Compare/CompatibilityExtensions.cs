@@ -24,6 +24,7 @@ namespace Rope.Compare;
 using System;
 using System.Buffers;
 using System.Diagnostics.Contracts;
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Web;
@@ -131,8 +132,12 @@ internal static class CompatibilityExtensions
     /// <param name="itemToString">The function to convert an item to a string.</param>
     /// <returns>The encoded string.</returns>
     [Pure]
-    public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T?, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T> =>
-        DiffEncoder.Encode(items.Select(i => itemToString(i)).Join(separator).ToString()).Replace("%2B", "+", StringComparison.OrdinalIgnoreCase).ToRope();
+    public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T>
+    {
+        var find = (string.Empty + separator).ToRope();
+        var encoded = "%" + Convert.ToHexString(Encoding.UTF8.GetBytes(string.Empty + separator)).ToRope();
+        return items.Select(i => itemToString(i).Replace(find, encoded)).Join(separator).DiffEncode().Replace("%2B", "+").DiffEncode();
+    }
 
     /// <summary>
     /// C# is overzealous in the replacements. Walk back on a few.

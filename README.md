@@ -10,59 +10,145 @@
 [![downloads](https://img.shields.io/nuget/dt/FlatlinerDOA.Rope)](https://www.nuget.org/packages/FlatlinerDOA.Rope)
 ![Size](https://img.shields.io/github/repo-size/FlatlinerDOA/Rope.svg) 
 
-C# implementation of a Rope&lt;T&gt; immutable data structure. See the paper [Ropes: an Alternative to Strings: h.-j. boehm, r. atkinson and m. plass](https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf)
+## What is this?
+A highly efficient and performant immutable list data structure with value-like semantics. 
+
+## Why use this?
+
+* Get the benefits of functional programming, without the overhead of making copies on edit. 
+* Replace some or all of the following types (see [Comparison with .NET Built in Types]):
+    * `string`
+    * `T[]`
+    * `List<T>`
+    * `ImmutableList<T>`
+    * `StringBuilder`
+* Fewer memory allocations and faster edit and search performance (see [Performance]).
+   
+## How does it work?
+This is a C# implementation of a Rope&lt;T&gt; data structure. See the paper [Ropes: an Alternative to Strings: h.-j. boehm, r. atkinson and m. plass](https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf)
 
 A Rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly used with strings, but any list or sequence can be efficiently edited using the Rope data structure.
 
-Where a b-tree has every node in the tree storing a single entry, a rope contains arrays of elements and only subdivides on the edits. The data structure then decides at edit time whether it is optimal to rebalance the tree using the following heuristic:
+Where a b-tree is generally used with every node in the tree storing a single element, a rope contains arrays of elements and only subdivides on the edits. This makes it more CPU-cache coherant when performing operations such as searching / memory comparisons.
+
+The data structure then decides at edit time whether it is optimal to rebalance the tree using the following heuristic:
 A rope of depth n is considered balanced if its length is at least Fn+2.
 
 **Note:** This implementation of Rope&lt;T&gt; has a hard-coded upper-bound depth of 46 added to the heuristic from the paper. As this seemed to be optimal for my workloads, your mileage may vary.
 
+## How do I use it?
+```powershell
+dotnet add package FlatlinerDOA.Rope
+```
 
-## License and Acknowledgements
-Licensed MIT.
-Portions of this code are Apache 2.0 License where nominated.
-
-## Example Usage
 ```csharp
+using Rope;
 
 // Converting to a Rope<char> doesn't allocate any strings (simply points to the original memory).
-Rope<char> text = "My favourite text".ToRope();
+Rope<char> myRope1 = "My favourite text".ToRope();
+
+// In fact strings are implicitly convertible to Rope<char>, this makes Rope<char> a drop in replacement for `string` in most cases;
+Rope<char> myRope2 = "My favourite text";
 
 // With Rope<T>, splits don't allocate any new strings either.
-IEnumerable<Rope<char>> words = text.Split(' '); 
+IEnumerable<Rope<char>> words = myRope2.Split(' ');
 
 // Calling ToString() allocates a new string at the time of conversion.
-Console.WriteLine(words.First().ToString()); 
+Console.WriteLine(words.First().ToString());
 
-// Warning: Concatenating a string to a Rope<char> converts to a string (allocating memory).
-string text2 = text + " My second favourite text";
+// Warning: Assigning a Rope<char> to a string requires calling .ToString() and hence copying memory.
+string text2 = (myRope2 + " My second favourite text").ToString();
 
-// Better: This makes a new rope out of the other two ropes, no string allocations or copies.
-Rope<char> text3 = text + " My second favourite text".ToRope();
+// Better: Assigning to another rope makes a new rope out of the other two ropes, no string allocations or copies.
+Rope<char> text3 = myRope2 + " My second favourite text";
 
 // Value-like equivalence, no need for SequenceEqual!.
-"test".ToRope() == ("te".ToRope() + "st".ToRope());
-"test".ToRope().GetHashCode() == ("te".ToRope() + "st".ToRope()).GetHashCode();
+Assert.IsTrue("test".ToRope() == ("te".ToRope() + "st".ToRope()));
+Assert.IsTrue("test".ToRope().GetHashCode() == ("te".ToRope() + "st".ToRope()).GetHashCode());
 
-// Store a rope of anything, just like List<T>!
-Rope<Person> ropeOfPeople = [new Person("Frank"), new Person("Jane")]; // Makes an immutable and thread safe list of people.
-
-
+// Store a rope of anything, just like List<T>! 
+// This makes an immutable and thread safe list of people.
+Rope<Person> ropeOfPeople = [new Person("Frank", "Stevens"), new Person("Jane", "Seymour")];
 ```
 
 ## In built support for Diffing and Patching 
-### Example Usage
+###  Compare two strings (Rope&lt;char&gt;).
 ```csharp
-// Compare two ropes using the DiffMatchPatch algorithm (Google).
-Rope<Diff<char>> diffs = "abcdef".ToRope().Diff("abefg");
-Rope<char> originalText = diffs.ToSource();
-Rope<char> updatedText = diffs.ToTarget();
+Rope<char> sourceText = "abcdef";
+Rope<char> targetText = "abefg";
+
+// Create a list of differences.
+Rope<Diff<char>> diffs = sourceText.Diff(targetText);
+
+// Recover either side from the list of differences.
+Rope<char> recoveredSourceText = diffs.ToSource();
+Rope<char> recoveredTargetText = diffs.ToTarget();
 
 // Create a Patch string (like Git's patch text)
-var patches = diffs.ToPatches(); // A rope of patches
-var patchText = patches.ToPatchText(); // A single string of patch text.
+Rope<Patch<char>> patches = diffs.ToPatches(); // A list of patches
+Rope<char> patchText = patches.ToPatchString(); // A single string of patch text.
+Console.WriteLine(patchText);
+/** Outputs:
+@@ -1,6 +1,5 @@
+    ab
+-cd
+    ef
++g
+*/
+
+// Parse out the list of patches from the patch text.
+Rope<Patch<char>> parsedPatches = Patches.Parse(patchText);
+```
+
+###  Create diffs of any type (Rope&lt;T&gt;).
+
+```csharp
+// Compare two lists of people
+public record class Person(string FirstName, string LastName);
+
+Rope<Person> original =
+[
+    new Person("Stephen", "King"),
+    new Person("Jane", "Austen"),
+    new Person("Mary", "Shelley"),
+    new Person("JRR", "Tokien"),
+    new Person("James", "Joyce"),
+];
+
+Rope<Person> updated =
+[
+    new Person("Stephen", "King"),
+    new Person("Jane", "Austen"),
+    new Person("JRR", "Tokien"),
+    new Person("Frank", "Miller"),
+    new Person("George", "Orwell"),
+    new Person("James", "Joyce"),
+];
+
+Rope<Diff<Person>> changes = original.Diff(updated, DiffOptions<Person>.Default);
+Assert.AreEqual(2, changes.Count(d => d.Operation != Operation.Equal));
+
+// Convert to a Delta string
+Rope<char> delta = changes.ToDelta(p => p.ToString());
+
+// Rebuild the diff from the original list and a delta.
+Rope<Diff<Person>> fromDelta = Delta.Parse(delta, original, Person.Parse);
+
+// Get back the original list
+Assert.AreEqual(fromDelta.ToSource(), original);
+
+// Get back the updated list.
+Assert.AreEqual(fromDelta.ToTarget(), updated);
+
+// Make a patch text
+Rope<Patch<Person>> patches = fromDelta.ToPatches();
+
+// Convert patches to text
+Rope<char> patchText = patches.ToPatchString(p => p.ToString());
+
+// Parse the patches back again
+Rope<Patch<Person>> parsedPatches = Patches.Parse(patchText, Person.Parse);
+Assert.AreEqual(parsedPatches, patches);
 ```
 
 ## Comparison with .NET Built in Types
@@ -227,3 +313,9 @@ Working with a string of length - 32644 characters. - MaxLeafLength = ~32kb, Max
 | &#39;new Rope&lt;char&gt;(array)&#39;     |  5.430 ns | 0.0174 ns | 0.0154 ns | 0.0019 |      32 B |
 | &#39;new List&lt;char&gt;(array)&#39;     | 16.955 ns | 0.1281 ns | 0.1135 ns | 0.0048 |      80 B |
 | &#39;new StringBuilder(string)&#39; |  8.575 ns | 0.0361 ns | 0.0338 ns | 0.0062 |     104 B |
+
+
+## License and Acknowledgements
+- Licensed MIT.
+- Portions of this code are Apache 2.0 License where nominated.
+- Includes heavily modified code from https://github.com/google/diff-match-patch
