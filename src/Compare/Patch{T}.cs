@@ -114,9 +114,9 @@ public readonly record struct Patch<T>() where T : IEquatable<T>
     /// <param name="itemToString">A function to convert a single item into text.</param>
     /// <param name="separator">The separator between items, defaults to ~</param>
     /// <returns>The constructed string as a <see cref="Rope{char}"/>.</returns>
-    public Rope<char> ToCharRope(Func<T, Rope<char>> itemToString, char separator = '~')
+    public Rope<char> ToSeparatedCharRope(Func<T, Rope<char>> itemToString, char separator = '~')
     {
-        Contract.Assert(typeof(T) != typeof(char), "This overload is only compatible with non `char` types, use ToString() instead.");
+        /////Contract.Assert(typeof(T) != typeof(char), "This overload is only compatible with non `char` types, use ToString() instead.");
 
         string coords1, coords2;
         if (this.Length1 == 0)

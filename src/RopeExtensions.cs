@@ -1,6 +1,7 @@
+using System;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+using Rope.Compare;
 
 namespace Rope;
 
@@ -11,6 +12,12 @@ public static class RopeExtensions
     /// </summary>
     public const int LargeObjectHeapBytes = 85_000 - 24;
 
+    /// <summary>
+    /// An attempt to determine a CPU-cache aligned buffer size for the given input type.
+    /// </summary>
+    /// <typeparam name="T">The element being sized.</typeparam>
+    /// <param name="cacheLineSize">The default CPU cache line to optimise for.</param>
+    /// <returns>An integer of the number of elements that makes for a CPU aligned buffer.</returns>
     internal static int CalculateAlignedBufferLength<T>(int cacheLineSize = 64)
     {
         var elementSize = Unsafe.SizeOf<T>();
@@ -35,6 +42,12 @@ public static class RopeExtensions
         return alignedBufferSize / elementSize;
     }
 
+    /// <summary>
+    /// Math.Pow for integers
+    /// </summary>
+    /// <param name="x">The integer to multiply to the power of</param>
+    /// <param name="pow">The power to multiply</param>
+    /// <returns>A power of the input integer.</returns>
     internal static int IntPow(this int x, uint pow)
     {
         int ret = 1;
@@ -107,63 +120,46 @@ public static class RopeExtensions
     }
 
     /// <summary>
-    /// Determine if the suffix of one string is the prefix of another.
+    /// Replaces all occurrences of a specified string within the source <see cref="Rope{char}"/> with another string.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="first">First string.</param>
-    /// <param name="second"> Second string.</param>
-    /// <returns>The number of characters common to the end of the first
-    /// string and the start of the second string.</returns>
-    [Pure]
-    public static int CommonOverlapLength<T>(this Rope<T> first, Rope<T> second) where T : IEquatable<T>
-    {
-        // Cache the text lengths to prevent multiple calls.
-        var firstLength = first.Length;
-        var secondLength = second.Length;
-        // Eliminate the null case.
-        if (firstLength == 0 || secondLength == 0)
+    /// <param name="source">The source <see cref="Rope{char}"/> in which to perform the replacement.</param>
+    /// <param name="replace">The <see cref="Rope{char}"/> to be replaced.</param>
+    /// <param name="with">The <see cref="Rope{char}"/> to replace all occurrences of <paramref name="replace"/>.</param>
+    /// <param name="comparison">The string comparison rule to use when matching.</param>
+    /// <returns>
+    /// A new <see cref="Rope{char}"/> that is equivalent to the source <see cref="Rope{char}"/> except that all instances of <paramref name="replace"/> 
+    /// are replaced with <paramref name="with"/>. If <paramref name="replace"/> is not found in the source <see cref="Rope{char}"/>, 
+    /// the method returns the original <see cref="Rope{char}"/>.
+    /// </returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when an unsupported <paramref name="comparison"/> option is provided.
+    /// </exception>
+    /// <remarks>
+    /// This method uses different character comparers based on the specified <paramref name="comparison"/> option:
+    /// - For Ordinal comparison, it uses the default Replace method.
+    /// - For OrdinalIgnoreCase, it uses a custom OrdinalIgnoreCaseCharComparer.
+    /// - For culture-specific comparisons (CurrentCulture, CurrentCultureIgnoreCase, InvariantCulture, InvariantCultureIgnoreCase),
+    ///   it uses the appropriate <see cref="CharComparer"/>.
+    /// The method is case-sensitive or case-insensitive based on the chosen comparison option.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// Rope<char> source = new Rope<char>("Hello, World!");
+    /// Rope<char> result = source.Replace(new Rope<char>("o"), new Rope<char>("0"), StringComparison.OrdinalIgnoreCase);
+    /// // result will be "Hell0, W0rld!"
+    /// </code>
+    /// </example>
+    public static Rope<char> Replace(this Rope<char> source, Rope<char> replace, Rope<char> with, StringComparison comparison) =>
+        comparison switch
         {
-            return 0;
-        }
-        // Truncate the longer string.
-        if (firstLength > secondLength)
-        {
-            first = first.Slice(firstLength - secondLength);
-        }
-        else if (firstLength < secondLength)
-        {
-            second = second.Slice(0, firstLength);
-        }
-
-        var minLength = Math.Min(firstLength, secondLength);
-        // Quick check for the worst case.
-        if (first == second)
-        {
-            return (int)minLength;
-        }
-
-        // Start by looking for a single character match
-        // and increase length until no match is found.
-        // Performance analysis: https://neil.fraser.name/news/2010/11/04/
-        long best = 0;
-        long length = 1;
-        while (true)
-        {
-            var pattern = first.Slice(minLength - length);
-            var found = second.IndexOf(pattern);
-            if (found == -1)
-            {
-                return (int)best;
-            }
-
-            length += found;
-            if (found == 0 || first.Slice(minLength - length) == second.Slice(0, length))
-            {
-                best = length;
-                length++;
-            }
-        }
-    }
+            StringComparison.Ordinal => source.Replace(replace, with),
+            StringComparison.OrdinalIgnoreCase => source.Replace(replace, with, CharComparer.OrdinalIgnoreCase),
+            StringComparison.CurrentCulture => source.Replace(replace, with, CharComparer.CurrentCulture),
+            StringComparison.CurrentCultureIgnoreCase => source.Replace(replace, with, CharComparer.CurrentCultureIgnoreCase),
+            StringComparison.InvariantCulture => source.Replace(replace, with, CharComparer.InvariantCulture),
+            StringComparison.InvariantCultureIgnoreCase => source.Replace(replace, with, CharComparer.InvariantCultureIgnoreCase),
+            _ => throw new NotSupportedException(),
+        };
 
     /// <summary>
     /// Joins a sequence of elements with a nominated separator.

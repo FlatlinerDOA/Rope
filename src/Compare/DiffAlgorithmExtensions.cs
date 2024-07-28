@@ -721,8 +721,8 @@ public static class DiffAlgorithmExtensions
             {
                 var deletion = diffs[pointer - 1].Items;
                 var insertion = diffs[pointer].Items;
-                int overlap_length1 = deletion.CommonOverlapLength(insertion);
-                int overlap_length2 = insertion.CommonOverlapLength(deletion);
+                var overlap_length1 = deletion.CommonOverlapLength(insertion);
+                var overlap_length2 = insertion.CommonOverlapLength(deletion);
                 if (overlap_length1 != 0 && overlap_length1 >= overlap_length2)
                 {
                     if (overlap_length1 >= deletion.Length / 2.0 ||

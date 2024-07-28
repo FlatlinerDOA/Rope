@@ -1,4 +1,6 @@
 ﻿namespace Rope.UnitTests;
+
+using Rope.Compare;
 using System;
 
 [TestClass]
@@ -160,6 +162,30 @@ public class RopeSearchTests
         Assert.AreEqual("ab".LastIndexOf(string.Empty, 2), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2));
         Assert.AreEqual("def abcdefgh".LastIndexOf("def"), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope()));
         Assert.AreEqual("abc abc".LastIndexOf("bc", 2), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2));
+    }
+
+    [TestMethod]
+    public void LastIndexOfRopeWithStartIndexIgnoreCase()
+    {
+        var comparer = CharComparer.OrdinalIgnoreCase;
+
+        Assert.AreEqual("abc abC".LastIndexOf("c", 2, StringComparison.OrdinalIgnoreCase), "abc abC".ToRope().LastIndexOf("c".ToRope(), 2, comparer));
+        Assert.AreEqual("abc abC".LastIndexOf("c", 6, StringComparison.OrdinalIgnoreCase), "abc abC".ToRope().LastIndexOf("c".ToRope(), 6, comparer));
+        Assert.AreEqual("abc abC".LastIndexOf("c", 7, StringComparison.OrdinalIgnoreCase), "abc abC".ToRope().LastIndexOf("c".ToRope(), 7, comparer));
+        Assert.AreEqual("ABC".LastIndexOf("B", 0, StringComparison.OrdinalIgnoreCase), "ABC".ToRope().LastIndexOf("B".ToRope(), 0, comparer));
+        Assert.AreEqual("ABC".LastIndexOf("B", 1, StringComparison.OrdinalIgnoreCase), "ABC".ToRope().LastIndexOf("B".ToRope(), 1, comparer));
+        Assert.AreEqual("ABC".LastIndexOf("C", 2, StringComparison.OrdinalIgnoreCase), "ABC".ToRope().LastIndexOf("C".ToRope(), 2, comparer));
+        Assert.AreEqual("C".LastIndexOf("c", 0, StringComparison.OrdinalIgnoreCase), "C".ToRope().LastIndexOf("c".ToRope(), 0, comparer));
+
+        Assert.AreEqual("ABC".LastIndexOf("B", 0, StringComparison.OrdinalIgnoreCase), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 0, comparer));
+        Assert.AreEqual("ABC".LastIndexOf("B", 1, StringComparison.OrdinalIgnoreCase), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("B".ToRope(), 1, comparer));
+        Assert.AreEqual("ABC".LastIndexOf("C", 2, StringComparison.OrdinalIgnoreCase), new Rope<char>("A".ToRope(), "BC".ToRope()).LastIndexOf("C".ToRope(), 2, comparer));
+        Assert.AreEqual("ab".LastIndexOf("ab", 1, StringComparison.OrdinalIgnoreCase), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf("ab".ToRope(), 1, comparer));
+        Assert.AreEqual("ab".LastIndexOf(string.Empty, 1, StringComparison.OrdinalIgnoreCase), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 1, comparer));
+        Assert.AreEqual("ab".LastIndexOf(string.Empty, 2, StringComparison.OrdinalIgnoreCase), new Rope<char>("a".ToRope(), "b".ToRope()).LastIndexOf(Rope<char>.Empty, 2, comparer));
+        Assert.AreEqual("def abcdefgh".LastIndexOf("def", StringComparison.OrdinalIgnoreCase), new Rope<char>("def abcd".ToRope(), "efgh".ToRope()).LastIndexOf("def".ToRope(), comparer));
+        Assert.AreEqual("def abcdeFgh".LastIndexOf("fgh", StringComparison.OrdinalIgnoreCase), new Rope<char>("def abcd".ToRope(), "eFgh".ToRope()).LastIndexOf("fgh".ToRope(), comparer));
+        Assert.AreEqual("abc abc".LastIndexOf("bc", 2, StringComparison.OrdinalIgnoreCase), ("ab".ToRope() + "c abc".ToRope()).LastIndexOf("bc".AsMemory(), 2, comparer));
     }
 
     [TestMethod]

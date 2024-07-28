@@ -34,7 +34,7 @@ public static class PatchExtensions
     /// <returns>Text representation of patches.</returns>
     public static Rope<char> ToPatchString<T>(this IEnumerable<Patch<T>> patches, Func<T, Rope<char>> itemToString, char separator = '~')
         where T : IEquatable<T> =>
-        patches.Select(p => p.ToCharRope(itemToString, separator)).Combine();
+        patches.Select(p => p.ToSeparatedCharRope(itemToString, separator)).Combine();
 
     /// <summary>
     /// Take a list of patches and return a textual representation.
