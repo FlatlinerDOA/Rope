@@ -191,7 +191,11 @@ public sealed class RopeTests
                         new Rope<char>(new char[] { 'c' }),
                         new Rope<char>(
                             new Rope<char>(new char[] { 'd' }),
-                            new Rope<char>(new Rope<char>(new char[] { 'e' }), new Rope<char>(new char[] { 'f' }))))));
+                            new Rope<char>(
+                                new Rope<char>(new char[] { 'e' }),
+                                new Rope<char>(
+                                    new Rope<char>(new char[] { 'f' }),
+                                    new Rope<char>(new Rope<char>(new char[] { 'f' }), new Rope<char>(new char[] { 'g' }))))))));
 
         // Fn+2;
         Assert.IsFalse(unbalancedRope.IsBalanced);

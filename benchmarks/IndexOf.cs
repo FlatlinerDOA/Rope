@@ -17,7 +17,7 @@ public class IndexOf
     [Params(10, 100, 1000, 10000)]
     public int Length;
 
-    [Benchmark(Description = "Rope")]
+    [Benchmark(Description = "Rope", Baseline = true)]
     public void RopeOfChar()
     {
         _ = BenchmarkData.LongDiffText1[..this.Length].IndexOf(Find);

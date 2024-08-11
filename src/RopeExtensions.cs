@@ -7,10 +7,54 @@ namespace Rope;
 
 public static class RopeExtensions
 {
+    private static readonly double phi = (1 + Math.Sqrt(5)) / 2;
+
+    private static readonly double phiDiv = (2 * phi - 1);
+
+    /// <summary>
+    /// Maximum tree depth allowed.
+    /// </summary>
+    public const int MaxTreeDepth = 46;
+
+    /// <summary>
+    /// Defines the maximum depth descrepancy between left and right to cause a re-split of one side when balancing.
+    /// </summary>
+    public const int MaxDepthImbalance = 4;
+
+    /// <summary>
+    /// Defines the minimum lengths the leaves should be in relation to the depth of the tree.
+    /// </summary>
+    private static readonly int[] DepthToFibonnaciPlusTwo = Enumerable.Range(0, MaxTreeDepth).Select(d => Fibonnaci(d) + 2).ToArray();
+
     /// <summary>
     /// Maximum number of bytes before the GC basically chucks our buffers on the garbage heap.
     /// </summary>
     public const int LargeObjectHeapBytes = 85_000 - 24;
+
+    internal static int Fibonnaci(int n)
+    {
+        n = Math.Min(n, MaxTreeDepth);
+
+        // Binet's Formula - https://en.wikipedia.org/wiki/Fibonacci_number#Closed-form_expression
+        return (int)((Math.Pow(phi, n) - Math.Pow(-phi, -n)) / phiDiv);
+    }
+
+    /// <summary>
+    /// Calculates based on a given length and depth whether this Rope's Tree is balanced enough, 
+    /// or needs rebalancing. Calculation comes from the Rope paper.
+    /// https://www.cs.rit.edu/usr/local/pub/jeh/courses/QUARTERS/FP/Labs/CedarRope/rope-paper.pdf
+    /// 
+    /// | p. 1319 - We define the depth of a leaf to be 0, and the depth of a concatenation to be
+    /// | one plus the maximum depth of its children. Let Fn be the nth Fibonacci number.
+    /// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
+    /// | of depth 1 must have length at least 2.
+    /// 
+    /// </summary>
+    /// <param name="length">The number of elements in the Rope.</param>
+    /// <param name="depth">The maximum depth of the Rope's tree.</param>
+    /// <returns>true if the Rope is long enough to justify the depth it has.</returns>
+    [Pure]
+    internal static bool CalculateIsBalanced(long length, int depth) => depth < DepthToFibonnaciPlusTwo.Length && length >= DepthToFibonnaciPlusTwo[depth];
 
     /// <summary>
     /// An attempt to determine a CPU-cache aligned buffer size for the given input type.
