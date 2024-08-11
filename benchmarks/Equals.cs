@@ -14,7 +14,7 @@ namespace Benchmarks;
 [MemoryDiagnoser]
 public class Equals
 {
-    [Params(1, 2, 3, 10, 100, 1000, 10000)]
+    [Params(2, 3, 10, 100, 1000, 10000)]
     public int Length;
 
     private Rope<char> ropeX;

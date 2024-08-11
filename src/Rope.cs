@@ -387,6 +387,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
 #if NET8_0_OR_GREATER
     [MemberNotNullWhen(true, nameof(this.Left))]
     [MemberNotNullWhen(true, nameof(this.Right))]
+#endif
     public bool IsNode => this.data is RopeNode;
 
     /// <summary>
@@ -2343,14 +2344,14 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         return this.data switch
         {
             EmptyValue or null => other.Length == 0,
+            OneValue value => other.data is OneValue otherValue && value.Item1.Equals(otherValue.Item1),
+            TwoValue values => other.data is TwoValue otherValues && values.Item1.Equals(otherValues.Item1) && values.Item2.Equals(otherValues.Item2),
             ReadOnlyMemory<T> mem =>
                 other.data switch
                 {
                     ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span),
                     _ => AlignedEquals(other)
                 },
-            OneValue value => other.data is OneValue otherValue && value.Equals(otherValue),
-            TwoValue values => other.data is TwoValue otherValues && values.Equals(otherValues),
             _ => AlignedEquals(other)
         };
     }
