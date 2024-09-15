@@ -1,22 +1,24 @@
-namespace Rope.UnitTests;
+namespace Rope.UnitTests.IO;
 
 using System.Diagnostics;
 using Rope.IO;
 
-public class IndexingTests
+[TestClass]
+public class MultiFileIndexingTests
 {
-    public void IndexCsvs()
+    [TestMethod]
+    [Ignore]
+    public async Task IndexCsvs()
     {
         // Data from https://www.stats.govt.nz/large-datasets/csv-files-for-download/
-        var filePaths = Directory.EnumerateFiles(@"..\Data", "*.csv", new EnumerationOptions() { RecurseSubdirectories = true }).ToList();
         const string IndexPath = @"index.json";
         
         CsvIndexer indexer;
         if (!File.Exists(IndexPath))
         {
             indexer = new CsvIndexer();
-            indexer.IndexCsvFiles(filePaths);
-            indexer.SaveIndexToJson(IndexPath);
+            await indexer.IndexAllFilesInFolder(@"..\Data");
+            await indexer.SaveIndexToJson(IndexPath);
         }
         else
         {
@@ -24,7 +26,11 @@ public class IndexingTests
         }
         
         var s = Stopwatch.StartNew();
-        var data = indexer.Search(new Search("year", "2022"), new Search("unit", "DOLLARS(millions)")).ToList();
+        var data = new List<Dictionary<string, string>>();
+        await foreach (var result in indexer.Search(new Search("year", "2022"), new Search("unit", "DOLLARS(millions)")))
+        {
+
+        }
         
         s.Stop();
         Debug.WriteLine(s.ElapsedMilliseconds);

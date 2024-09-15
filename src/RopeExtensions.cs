@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
 using Rope.Compare;
@@ -141,6 +142,24 @@ public static class RopeExtensions
             IReadOnlyList<T> readOnlyList => Rope<T>.FromReadOnlyList(readOnlyList),
             _ => Rope<T>.FromEnumerable(items)
         };
+    }
+
+    public static Rope<T> ToRope<T>(this ReadOnlySequence<T> sequence) where T : IEquatable<T>
+    {
+        if (sequence.IsSingleSegment)
+        {
+            return new Rope<T>(sequence.ToArray());
+        }
+        else
+        {
+            var rope = Rope<T>.Empty;
+            foreach (var segment in sequence)
+            {
+                rope += segment.ToArray();
+            }
+            
+            return rope;
+        }
     }
 
     /// <summary>
