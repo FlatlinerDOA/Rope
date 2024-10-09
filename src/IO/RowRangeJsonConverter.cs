@@ -6,7 +6,9 @@ using System.Text.Json.Serialization;
 public sealed class RowRangeJsonConverter : JsonConverter<RowRange>
 {
 	public int BloomFilterSize  { get; init; }
+
 	public int HashIterations { get; init; }
+
     public SupportedOperationFlags SupportedOperations { get; init; }
 
     public override RowRange Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

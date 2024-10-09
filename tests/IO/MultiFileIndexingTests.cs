@@ -10,31 +10,34 @@ public class MultiFileIndexingTests
     [Ignore]
     public async Task IndexCsvs()
     {
-        // Data from https://www.stats.govt.nz/large-datasets/csv-files-for-download/
+        // 188 MB of CSV Data from https://www.stats.govt.nz/large-datasets/csv-files-for-download/
         const string IndexPath = @"index.json";
-        
-        CsvIndexer indexer;
-        if (!File.Exists(IndexPath))
+        const string DataPath = @"../Data"; // @"D:\Datasets\nz_govt";
+        var loadTime = Stopwatch.StartNew();
+
+        var indexer = await CsvIndexer.LoadIndexFromJsonAsync(IndexPath);
+
+        Debug.WriteLine($"Load took: {loadTime.ElapsedMilliseconds}ms");
+
+        if (indexer is null)
         {
             indexer = new CsvIndexer();
-            await indexer.IndexAllFilesInFolderAsync(@"..\Data", CancellationToken.None);
-            await indexer.SaveIndexToJson(IndexPath);
-        }
-        else
-        {
-            indexer = CsvIndexer.LoadIndexFromJson(IndexPath);
+            await indexer.IndexAllFilesInFolderAsync(DataPath, CancellationToken.None);
+            await indexer.SaveIndexToJsonAsync(IndexPath);
         }
         
         var s = Stopwatch.StartNew();
         var data = new List<Dictionary<string, string>>();
-        await foreach (var result in indexer.Search(@"..\Data", new And(new ValueEquals("year", "2022"), new ValueEquals("unit", "DOLLARS(millions)")), CancellationToken.None))
+        await foreach (var result in indexer.Search(DataPath, new ValueEquals("Year", "2022"), CancellationToken.None))
         {
-
+            data.Add(result);
         }
         
         s.Stop();
-        Debug.WriteLine(s.ElapsedMilliseconds);
-        
+        Debug.WriteLine($"Rows: {data.Count} found");
+        Debug.WriteLine($"Search took: {s.ElapsedMilliseconds}ms");
+
+        Assert.AreNotEqual(0, data.Count);
         var q = from row in data
                 where row.ContainsKey("value")
                 let value = decimal.TryParse(row.GetValueOrDefault("value"), out var value) ? value : 0m

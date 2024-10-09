@@ -14,12 +14,13 @@ using System.Diagnostics;
 using System.Text;
 using System.Buffers;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
 [CollectionBuilder(typeof(RopeBuilder), "Create")]
-[DebuggerDisplay("{ToString(),raw}")]
+[DebuggerDisplay("{DebuggerDisplay,raw}")]
 public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
     /// <summary>
@@ -2217,6 +2218,25 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return string.Concat(this.Select(rune => rune.ToString()));
             default:
                 return string.Join("\n", this.Select(element => element.ToString()));
+        }
+    }
+
+    private string DebuggerDisplay
+    {
+        get
+        {
+            const int MaxElements = 1000;
+            switch (this)
+            {
+                case Rope<char> chars:
+                    return new string(chars.Take(MaxElements).ToArray());
+                case Rope<byte> utf8:
+                    return Encoding.UTF8.GetString(utf8.Take(MaxElements).ToArray());
+                case Rope<Rune> runes:
+                    return string.Concat(this.Take(MaxElements).Select(rune => rune.ToString()));
+                default:
+                    return $"({this.Length} items)";
+            }
         }
     }
 

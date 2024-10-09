@@ -1,7 +1,7 @@
 namespace Rope.IO;
 
 using System.Collections;
-using System.Diagnostics.Contracts;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Rope;
 
@@ -14,6 +14,7 @@ public record class BloomFilter
 
 	private BitArray bits;
 
+	[SetsRequiredMembers]
 	public BloomFilter(int size, int hashCount, SupportedOperationFlags supportedOperations, string runLengthEncodedBase64)
     {
 		this.Size = size;
@@ -88,7 +89,7 @@ public record class BloomFilter
         set
         {
             byte[] rleData = Convert.FromBase64String(value);
-            this.bits = new BitArray(RunLengthDecode(rleData, Size));
+            this.bits = new BitArray(RunLengthDecode(rleData, this.Size));
         }
     }
 
@@ -113,8 +114,8 @@ public record class BloomFilter
 				count = 1;
 			}
 		}
-		result += (byte)(current ? count | 0x80 : count);
 
+		result += (byte)(current ? count | 0x80 : count);
 		return result.ToArray();
 	}
 

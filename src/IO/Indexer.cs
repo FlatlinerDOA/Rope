@@ -54,8 +54,8 @@ public abstract class Indexer
         MatchCasing = MatchCasing.CaseInsensitive
     };
 
-    public static IEnumerable<string> EnumerateLocalFiles(string folderPath, string fileExtension) => Directory.EnumerateFiles(folderPath, $"*{fileExtension}", FileEnumerationOptions)
-        .OrderBy(d => d, StringComparer.OrdinalIgnoreCase);
+    public static IEnumerable<string> EnumerateLocalFiles(string folderPath, string fileExtension) => Directory.Exists(folderPath) ? Directory.EnumerateFiles(folderPath, $"*{fileExtension}", FileEnumerationOptions)
+        .OrderBy(d => d, StringComparer.OrdinalIgnoreCase) : Array.Empty<string>();
 
     public static (Stream stream, DateTime LastWriteUtc) OpenLocalFile(string filePath) => (File.OpenRead(filePath), new FileInfo(filePath).LastWriteTimeUtc);
 

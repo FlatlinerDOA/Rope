@@ -2,6 +2,7 @@ namespace Rope.IO;
 
 using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Rope;
 
@@ -11,7 +12,7 @@ public sealed class CsvIndexer : Indexer
 	{
 	}
 	
-	public CsvIndexer(int rowsPerRange = 1000, int bloomFilterSize = 1024, int hashFunctions = 3, SupportedOperationFlags supportedOperations = SupportedOperationFlags.StartsWith) : base(rowsPerRange, bloomFilterSize, hashFunctions, supportedOperations)
+	public CsvIndexer(int rowsPerRange = 1000, int bloomFilterSize = 256, int hashFunctions = 3, SupportedOperationFlags supportedOperations = SupportedOperationFlags.StartsWith) : base(rowsPerRange, bloomFilterSize, hashFunctions, supportedOperations)
 	{
     }
 
@@ -225,19 +226,22 @@ public sealed class CsvIndexer : Indexer
 				{
 					// Step 3 - Get row ranges that are relevant to this search criteria.
 					// TODO: Use SortedSet?
-					foreach (var (startOffset, endOffset) in search.SearchablePages(index)) 
+					foreach (var (startOffset, endOffset, startRow) in search.SearchablePages(index)) 
 					{
-						var bufferSize = (int)(endOffset - startOffset);
+                        int row = startRow;
+                        var bufferSize = (int)(endOffset - startOffset);
 						var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
 						var mem = buffer.AsMemory()[..bufferSize];
                         stream.Seek(startOffset, SeekOrigin.Begin);
                         await stream.ReadExactlyAsync(mem, cancellation);						
-						using var reader = new StreamReader(new ReadOnlyMemoryStream(mem));
-						var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed).ToRope();
-						if (search.Matches(values, headers))
-						{
-							yield return new Dictionary<string, string>(headers.Zip(values, (k,v) => new KeyValuePair<string, string>(k, v)));
-						}
+						using var reader = new StreamReader(new ReadOnlyMemoryStream(mem), Encoding.UTF8, false);
+                        foreach (var (cells, s, e) in reader.ReadCsvLines())
+                        {
+                            if (search.Matches(row++, cells.ToRope(), headers))
+                            {
+                                yield return new Dictionary<string, string>(headers.Zip(cells, (k, v) => new KeyValuePair<string, string>(k, v)));
+                            }
+                        }
                         
                         ArrayPool<byte>.Shared.Return(buffer);
                     }
@@ -301,7 +305,7 @@ public sealed class CsvIndexer : Indexer
 	// 	}
 	// }
 
-	public async Task SaveIndexToJson(string filePath)
+	public async Task SaveIndexToJsonAsync(string filePath)
     {
         var options = new JsonSerializerOptions
         {
@@ -334,36 +338,42 @@ public sealed class CsvIndexer : Indexer
 		await JsonSerializer.SerializeAsync(f, indexData, options);		
 	}
 
-	public static CsvIndexer LoadIndexFromJson(string filePath)
+	public static async Task<CsvIndexer?> LoadIndexFromJsonAsync(string filePath)
 	{
-		string jsonString = File.ReadAllText(filePath);
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        using var fs = File.OpenRead(filePath);
 
 		// Load just the index meta data so that we can deserialize the bloom filters 
 		// without repeating their configuration in the JSON.
-		var meta = JsonSerializer.Deserialize<IndexMetaData>(jsonString);
-
+		var meta = await JsonSerializer.DeserializeAsync<IndexMetaData>(fs);
+        fs.Seek(0, SeekOrigin.Begin);
         if (meta != null)
         {
             var options = new JsonSerializerOptions
             {
                 Converters =
-            {
-                new RowRangeJsonConverter()
                 {
-                    BloomFilterSize = meta.BloomFilterSize,
-                    HashIterations = meta.HashIterations,
-                    SupportedOperations = meta.SupportedOperations,
-                },
-                new RopeJsonConverter<RowRange>(),
-                new RopeJsonConverter<string>()
-            }
+                    new RowRangeJsonConverter()
+                    {
+                        BloomFilterSize = meta.BloomFilterSize,
+                        HashIterations = meta.HashIterations,
+                        SupportedOperations = meta.SupportedOperations,
+                    },
+                    new RopeJsonConverter<RowRange>(),
+                    new RopeJsonConverter<string>()
+                }
             };
 
-            var indexData = JsonSerializer.Deserialize<IndexData>(jsonString, options);
-
-            var indexer = new CsvIndexer(indexData);
-
-            return indexer;
+            var indexData = await JsonSerializer.DeserializeAsync<IndexData>(fs, options);
+            if (indexData != null)
+            {
+                var indexer = new CsvIndexer(indexData);
+                return indexer;
+            }
         }
 
         return null;

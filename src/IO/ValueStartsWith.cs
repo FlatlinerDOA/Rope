@@ -5,9 +5,9 @@ public record class ValueStartsWith(string Column, string Value) : Search()
 {
 	public override bool ShouldSearch(FileIndex index) => index.ColumnRanges.ContainsKey(this.Column);
 
-	public override IEnumerable<(long Start, long End)> SearchablePages(FileIndex index) => index.ColumnRanges[this.Column].Where(r => r.Filter.MightStartWith(this.Value)).Select(r => (r.StartBytePosition, r.EndBytePosition));
+	public override IEnumerable<(long Start, long End, int StartRowIndex)> SearchablePages(FileIndex index) => index.ColumnRanges[this.Column].Where(r => r.Filter.MightStartWith(this.Value)).Select(r => (r.StartBytePosition, r.EndBytePosition, r.StartRowIndex));
 
-	public override bool Matches(Rope<string> values, Rope<string> headers)
+	public override bool Matches(int rowIndex, Rope<string> values, Rope<string> headers)
 	{
 		var c = headers.IndexOf(this.Column);
 		return c >= 0 && c < values.Count && this.Matches(values[c]);

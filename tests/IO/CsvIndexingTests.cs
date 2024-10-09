@@ -64,7 +64,7 @@ public class CsvIndexingTests
 
 
     [TestMethod]
-    public async Task AndSearchShouldGiveResults()
+    public async Task AndSearchShouldGiveOneResult()
     {
         var indexer = new CsvIndexer()
         {
@@ -82,5 +82,27 @@ public class CsvIndexingTests
         }
 
         Assert.AreEqual(1, resultCount);
+    }
+
+    [TestMethod]
+    public async Task OrSearchShouldGiveTwoResults()
+    {
+        var indexer = new CsvIndexer()
+        {
+            EnumerateFiles = folder => ["File1.csv"],
+            ReadFile = f => (new MemoryStream(Encoding.UTF8.GetBytes(MultiLineCsv)), new DateTime(2024, 10, 6, 19, 0, 0)),
+            RowsPerPage = 1
+        };
+
+        await indexer.IndexFileAsync("File1.csv");
+        int resultCount = 0;
+        await foreach (var result in indexer.Search(".", new ValueStartsWith("Column2", "DEF") | new ValueEquals("Column2", "XYZ"), CancellationToken.None))
+        {
+            Assert.AreEqual("ABC", result["Column1"]);
+            Assert.IsTrue(new[] { "DEF", "XYZ" }.Contains(result["Column2"]));
+            resultCount++;
+        }
+
+        Assert.AreEqual(2, resultCount);
     }
 }
