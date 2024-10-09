@@ -16,7 +16,7 @@ public sealed class RopeJsonConverter<T> : JsonConverter<Rope<T>> where T : IEqu
 				return rowRange;
 			}
 
-			rowRange += elementConverter.Read(ref reader, typeof(T), options);			
+			rowRange += elementConverter.Read(ref reader, typeof(T), options);
 		}
 
 		throw new JsonException();

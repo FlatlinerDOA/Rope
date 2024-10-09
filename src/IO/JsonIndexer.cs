@@ -15,7 +15,7 @@ public class JsonIndexer : Indexer
 {
 	public override string FileExtension => ".json";
 
-    public override ValueTask<FileIndex> IndexFile(string filePath, DateTimeOffset lastWriteTimeUtc, TextReader reader, CancellationToken cancellation)
+    public override ValueTask<FileIndex> IndexFileAsync(string filePath, DateTimeOffset lastWriteTimeUtc, Stream stream, CancellationToken cancellation)
     {
         throw new NotImplementedException();
     }

@@ -1,13 +1,15 @@
 namespace Rope.IO;
 using Rope;
 
-public record class Search(string Column, string Value, bool StartsWith = false)
+public abstract record class Search()
 {
-	public bool Matches(Rope<string> values, Rope<string> headers)
-	{
-		var c = headers.IndexOf(this.Column);
-		return c >= 0 && c < values.Count && this.Matches(values[c]);
-	}
-	
-	public bool Matches(string value) => StartsWith ? value.StartsWith(this.Value) : value == this.Value;
+	public abstract bool ShouldSearch(FileIndex index);
+
+	public abstract IEnumerable<(long Start, long End)> SearchablePages(FileIndex index);
+
+	public abstract bool Matches(Rope<string> values, Rope<string> headers);
+
+    public static Search operator &(Search a, Search b) => new And(a, b);
+
+    public static Search operator |(Search a, Search b) => new Or(a, b);
 }

@@ -14,11 +14,11 @@ public record class BloomFilter
 
 	private BitArray bits;
 
-	public BloomFilter(int size, int hashCount, string runLengthEncodedBits, SupportedOperationFlags supportedOperations)
-	{
+	public BloomFilter(int size, int hashCount, SupportedOperationFlags supportedOperations, string runLengthEncodedBase64)
+    {
 		this.Size = size;
 		this.HashCount = hashCount;
-		this.SerializedBits = runLengthEncodedBits;
+		this.SerializedBits = runLengthEncodedBase64;
         this.SupportedOperations = supportedOperations;
     }
 	

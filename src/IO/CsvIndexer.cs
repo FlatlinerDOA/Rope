@@ -1,6 +1,7 @@
 namespace Rope.IO;
 
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Rope;
 
@@ -10,13 +11,14 @@ public sealed class CsvIndexer : Indexer
 	{
 	}
 	
-	public CsvIndexer(int rowsPerRange = 1000, int bloomFilterSize = 1024, int hashFunctions = 3): base(rowsPerRange, bloomFilterSize, hashFunctions)
+	public CsvIndexer(int rowsPerRange = 1000, int bloomFilterSize = 1024, int hashFunctions = 3, SupportedOperationFlags supportedOperations = SupportedOperationFlags.StartsWith) : base(rowsPerRange, bloomFilterSize, hashFunctions, supportedOperations)
 	{
-	}
-	
+    }
+
 	public override string FileExtension => ".csv";
 
-	public override async ValueTask<FileIndex> IndexFile(string filePath, DateTimeOffset lastWriteTimeUtc, TextReader reader, CancellationToken cancellation = default)
+
+    public override ValueTask<FileIndex> IndexFileAsync(string filePath, DateTimeOffset lastWriteTimeUtc, Stream stream, CancellationToken cancellation = default)
 	{
 		var headers = Rope<string>.Empty;
 		var meta = new FileMetaData(filePath, lastWriteTimeUtc, headers);
@@ -29,6 +31,7 @@ public sealed class CsvIndexer : Indexer
 		long startPosition = 0;
 		long endPosition = 0;
 		var cells = Rope<string>.Empty;
+		using var reader = new StreamReader(stream);
 		foreach (var line in StreamReaderExtensions.ReadCsvLines(reader))
 		{
 			cells = line.Cells.ToRope();
@@ -38,7 +41,7 @@ public sealed class CsvIndexer : Indexer
 				meta = meta with { Headers = headers };
 				currentFilters = headers.ToDictionary(
 					h => h,
-					_ => new BloomFilter(BloomFilterSize, HashFunctions, SupportedOperationFlags.StartsWith)
+					_ => new BloomFilter(BloomFilterSize, HashIterations, this.SupportedOperations)
 				);
 
 				fileRanges = headers.ToDictionary(h => h, h => new List<RowRange>());
@@ -54,7 +57,7 @@ public sealed class CsvIndexer : Indexer
 				rowCount++;
 
 				endPosition = line.EndOffset;
-				if (rowCount % RowsPerRange == 0)
+				if (rowCount % RowsPerPage == 0)
 				{
 					for (int i = 0; i < headers.Count; i++)
 					{
@@ -72,14 +75,14 @@ public sealed class CsvIndexer : Indexer
 					rangeStartRow = rowCount;
 					currentFilters = headers.ToDictionary(
 						h => h,
-						_ => new BloomFilter(BloomFilterSize, HashFunctions, SupportedOperationFlags.StartsWith)
+						_ => new BloomFilter(BloomFilterSize, HashIterations, this.SupportedOperations)
 					);
 				}
 			}
 		}
 
 		// Handle the last range if it's not full
-		if (rowCount % RowsPerRange != 0)
+		if (rowCount % RowsPerPage != 0)
 		{
 			for (int i = 0; i < headers.Count; i++)
 			{
@@ -95,7 +98,7 @@ public sealed class CsvIndexer : Indexer
 		}
 
 		var fileIndex = new FileIndex(meta, fileRanges.ToDictionary(r => r.Key, r => r.Value.ToRope()));
-		return fileIndex;
+		return ValueTask.FromResult(fileIndex);
 		/*
 		using (var reader = new StreamReader(filePath))
 		{
@@ -171,109 +174,132 @@ public sealed class CsvIndexer : Indexer
 		*/
 	}
 
-	public async IAsyncEnumerable<(FileMetaData File, IReadOnlyList<RowRange> Ranges)> ShortListRanges(string column, string value)
+	// public async IAsyncEnumerable<(FileMetaData File, IReadOnlyList<RowRange> Ranges)> ShortListRanges(Search search, [EnumeratorCancellation] CancellationToken cancellation)
+	// {
+	// 	// Step 1 - Short list ranges
+	// 	foreach (var filePath in this.EnumerateFiles(null))
+	// 	{
+	// 		var index = await this.IndexFileAsync(filePath, cancellation);
+	// 		if (search.ShouldSearch(index))
+	// 		{
+	// 			var ranges = new List<RowRange>();
+	// 			foreach (var range in index.ColumnRanges[column])
+	// 			{
+	// 				if (range.Filter.MightContain(value))
+	// 				{
+	// 					ranges.Add(range);
+	// 				}
+	// 			}
+				
+	// 			if (ranges.Count > 0)
+	// 			{
+	// 				yield return (index.Meta, ranges);
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// public async IAsyncEnumerable<List<string>> SearchEquality(string column, string value, [EnumeratorCancellation] CancellationToken cancellation)
+	// {
+	// 	await foreach (var (file, ranges) in this.ShortListRanges(column, value, cancellation))
+	// 	{
+	// 		foreach (var result in SearchInRange(file, column, value, ranges, (a, b) => a == b))
+	// 		{
+	// 			yield return result;
+	// 		}
+	// 	}
+	// }
+
+	public async IAsyncEnumerable<Dictionary<string, string>> Search(string folderPath, Search search, [EnumeratorCancellation] CancellationToken cancellation)
 	{
 		// Step 1 - Short list ranges
-		foreach (var (filePath, indexTask) in this.Files.ToList())
+		foreach (var filePath in this.EnumerateFiles(folderPath))
 		{
-			var index = await indexTask;
-			if (index.ColumnRanges.ContainsKey(column))
+			// Step 2 - Should this search even bother opening this file?
+			var index = await this.IndexFileAsync(filePath, cancellation);
+			if (search.ShouldSearch(index)) 
 			{
-				var ranges = new List<RowRange>();
-				foreach (var range in index.ColumnRanges[column])
+				var headers = index.Meta.Headers;
+				var (stream, lastWrite) = this.ReadFile(filePath);
+				using (stream)
 				{
-					if (range.Filter.MightContain(value))
+					// Step 3 - Get row ranges that are relevant to this search criteria.
+					// TODO: Use SortedSet?
+					foreach (var (startOffset, endOffset) in search.SearchablePages(index)) 
 					{
-						ranges.Add(range);
-					}
+						var bufferSize = (int)(endOffset - startOffset);
+						var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+						var mem = buffer.AsMemory()[..bufferSize];
+                        stream.Seek(startOffset, SeekOrigin.Begin);
+                        await stream.ReadExactlyAsync(mem, cancellation);						
+						using var reader = new StreamReader(new ReadOnlyMemoryStream(mem));
+						var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed).ToRope();
+						if (search.Matches(values, headers))
+						{
+							yield return new Dictionary<string, string>(headers.Zip(values, (k,v) => new KeyValuePair<string, string>(k, v)));
+						}
+                        
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
 				}
-				
-				yield return (index.Meta, ranges);
 			}
-		}
-	}
-
-	public async IAsyncEnumerable<List<string>> SearchEquality(string column, string value)
-	{
-		await foreach (var (file, ranges) in this.ShortListRanges(column, value))
-		{
-			foreach (var result in SearchInRange(file, column, value, ranges, (a, b) => a == b))
-			{
-				yield return result;
-			}
-		}
-	}
-
-	public async IAsyncEnumerable<Dictionary<string, string>> Search(params Search[] all)
-	{
-		foreach (var search in all.Take(1))
-		{
-			await foreach (var (file, ranges) in this.ShortListRanges(search.Column, search.Value))
-			{
-				var headers = file.Headers;
-				if (all.All(s => headers.Contains(s.Column)))
-				{
-					foreach (var result in SearchInRange(file, ranges, (values) => all.All(s => s.Matches(values, headers))))
-					{
-						yield return result;
-					}
-				}			
-			}
-		}
-	}
 		
-
-	public async IAsyncEnumerable<List<string>> SearchStartsWith(string column, string prefix)
-	{
-		await foreach (var (file, ranges) in this.ShortListRanges(column, prefix))
-		{
-			foreach (var result in SearchInRange(file, column, prefix, ranges, (a, b) => a.StartsWith(b)))
-			{
-				yield return result;
-			}
 		}
 	}
 
-	private IEnumerable<List<string>> SearchInRange(FileMetaData file, string column, string value, IEnumerable<RowRange> ranges, Func<string, string, bool> matches)
-	{
-		var headers = file.Headers;
-		var columnIndex = (int)headers.IndexOf(column);
-		using (var reader = new StreamReader(file.Path))
-		{
-			foreach (var range in ranges.OrderBy(r => r.StartBytePosition))
-			{
-				reader.BaseStream.Seek(range.StartBytePosition, SeekOrigin.Begin);
-				while (reader.BaseStream.Position < range.EndBytePosition && !reader.EndOfStream)
-				{
-					var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed);
-					if (matches(values[columnIndex], value))
-					{
-						yield return values;
-					}
-				}
-			}
-		}
-	}
+	// public async IAsyncEnumerable<List<string>> SearchStartsWith(string column, string prefix, [EnumeratorCancellation] CancellationToken cancellation)
+	// {
+	// 	await foreach (var (file, ranges) in this.ShortListRanges(column, prefix, cancellation))
+	// 	{
+	// 		foreach (var result in SearchInRange(file, column, prefix, ranges, (a, b) => a.StartsWith(b)))
+	// 		{
+	// 			yield return result;
+	// 		}
+	// 	}
+	// }
 
-	private IEnumerable<Dictionary<string, string>> SearchInRange(FileMetaData file, IEnumerable<RowRange> ranges, Func<Rope<string>, bool> matches)
-	{
-		var headers = file.Headers;
-		using (var reader = new StreamReader(file.Path))
-		{
-			foreach (var range in ranges.OrderBy(r => r.StartBytePosition))
-			{
-				reader.BaseStream.Seek(range.StartBytePosition, SeekOrigin.Begin);
-				while (reader.BaseStream.Position < range.EndBytePosition && !reader.EndOfStream)
-				{
-					var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed).ToRope();
-					if (matches(values))
-					{
-						yield return headers.Zip(values).ToDictionary(h => h.First, h => h.Second);
-					}
-				}
-			}
-		}
-	}
+	// private IEnumerable<List<string>> SearchInRange(FileMetaData file, string column, string value, IEnumerable<RowRange> ranges, Func<string, string, bool> matches)
+	// {
+	// 	var headers = file.Headers;
+	// 	var columnIndex = (int)headers.IndexOf(column);
+    //     var (reader, lastWrite) = this.ReadFile(file.Path);
+    //     using (reader)
+	// 	{
+	// 		foreach (var range in ranges.OrderBy(r => r.StartBytePosition))
+	// 		{
+	// 			reader.Seek(range.StartBytePosition);
+	// 			while (reader.Peek() != -1)
+	// 			{
+	// 				var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed);
+	// 				if (matches(values[columnIndex], value))
+	// 				{
+	// 					yield return values;
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// private IEnumerable<Dictionary<string, string>> SearchInRange(FileMetaData file, IEnumerable<RowRange> ranges, Func<Rope<string>, bool> matches)
+	// {
+	// 	var headers = file.Headers;
+    //     var (reader, lastWriteTime) = this.ReadFile(file.Path);
+    //     using (reader)
+	// 	{
+	// 		foreach (var range in ranges.OrderBy(r => r.StartBytePosition))
+	// 		{
+	// 			reader.Seek(range.StartBytePosition);
+	// 			while (reader.Peek() != -1)
+	// 			{
+	// 				var values = reader.ReadCsvLine(headers.Count, out var bytesConsumed).ToRope();
+	// 				if (matches(values))
+	// 				{
+	// 					yield return headers.Zip(values).ToDictionary(h => h.First, h => h.Second);
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	public async ValueTask SaveIndexToJson(string filePath)
     {
@@ -286,9 +312,10 @@ public sealed class CsvIndexer : Indexer
 		var fileIndexes = await Task.WhenAll<FileIndex>(this.Files.Values.Select(v => v.AsTask()).ToList());
 		var indexData = new IndexData()
 		{
-			RowsPerRange = this.RowsPerRange,
-			BloomFilterSize = BloomFilterSize,
-			HashFunctions = HashFunctions,
+			RowsPerPage = this.RowsPerPage,
+			BloomFilterSize = this.BloomFilterSize,
+			HashIterations = this.HashIterations,
+            SupportedOperations = this.SupportedOperations,
 			Files = fileIndexes.Select(v => new FileIndexData(
 				v.Meta.Path, 
 				v.Meta.LastModifiedUtc, 
@@ -314,7 +341,7 @@ public sealed class CsvIndexer : Indexer
 				new RowRangeJsonConverter()
 				{
 					BloomFilterSize = meta.BloomFilterSize,
-					HashFunctions = meta.HashFunctions,
+					HashIterations = meta.HashFunctions,
 				},
 				new RopeJsonConverter<RowRange>(),
 				new RopeJsonConverter<string>()

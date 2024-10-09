@@ -17,7 +17,7 @@ public class MultiFileIndexingTests
         if (!File.Exists(IndexPath))
         {
             indexer = new CsvIndexer();
-            await indexer.IndexAllFilesInFolder(@"..\Data");
+            await indexer.IndexAllFilesInFolderAsync(@"..\Data", CancellationToken.None);
             await indexer.SaveIndexToJson(IndexPath);
         }
         else
@@ -27,7 +27,7 @@ public class MultiFileIndexingTests
         
         var s = Stopwatch.StartNew();
         var data = new List<Dictionary<string, string>>();
-        await foreach (var result in indexer.Search(new Search("year", "2022"), new Search("unit", "DOLLARS(millions)")))
+        await foreach (var result in indexer.Search(@"..\Data", new And(new ValueEquals("year", "2022"), new ValueEquals("unit", "DOLLARS(millions)")), CancellationToken.None))
         {
 
         }

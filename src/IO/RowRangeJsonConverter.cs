@@ -1,45 +1,61 @@
 namespace Rope.IO;
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 public sealed class RowRangeJsonConverter : JsonConverter<RowRange>
 {
 	public int BloomFilterSize  { get; init; }
-	public int HashFunctions { get; init; }
-	
-	public override RowRange Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+	public int HashIterations { get; init; }
+    public SupportedOperationFlags SupportedOperations { get; init; }
+
+    public override RowRange Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
 	{
-		var rowRange = new RowRange();
+		long startBytePosition = 0;
+		long endBytePosition = 0;
+		int startRowIndex = 0;
+		int endRowIndex = 0;
+		BloomFilter? filter = null;
 		while (reader.Read())
 		{
-			if (reader.TokenType == JsonTokenType.EndObject)
+			if (reader.TokenType == JsonTokenType.EndObject && filter != null)
 			{
-				return rowRange;
+				return new RowRange()
+				{
+
+					StartBytePosition  = startBytePosition,
+					EndBytePosition = endBytePosition,
+					StartRowIndex = startRowIndex,
+					EndRowIndex = endRowIndex,
+					Filter = filter
+				 };
 			}
 
 			if (reader.TokenType == JsonTokenType.PropertyName)
 			{
-				string propertyName = reader.GetString();
+				string? propertyName = reader.GetString();
 				reader.Read();
 				switch (propertyName)
 				{
 					case "s":
-						rowRange.StartBytePosition = reader.GetInt64();
+						startBytePosition = reader.GetInt64();
 						break;
 					case "e":
-						rowRange.EndBytePosition = reader.GetInt64();
+						endBytePosition = reader.GetInt64();
 						break;
 					case "sr":
-						rowRange.StartRowIndex = reader.GetInt32();
+						startRowIndex = reader.GetInt32();
 						break;
 					case "er":
-						rowRange.EndRowIndex = reader.GetInt32();
+						endRowIndex = reader.GetInt32();
 						break;
 					case "f":
-						rowRange.Filter = new BloomFilter(this.BloomFilterSize, this.HashFunctions, reader.GetString(), SupportedOperationFlags.StartsWith);
+                        filter = new BloomFilter(this.BloomFilterSize, this.HashIterations, this.SupportedOperations, reader.GetString()!);
 						break;
-				}
-			}
+                    default:
+                        break;
+                }
+            }
 		}
 		
 		throw new JsonException();

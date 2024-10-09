@@ -79,6 +79,35 @@ public static class StreamReaderExtensions
 		return channel.Reader;
 	}
 
+    public static void Seek(this TextReader reader, long offset)
+    {
+        if (reader is StreamReader sr && sr.BaseStream.CanSeek)
+        {
+            sr.BaseStream.Seek(offset, SeekOrigin.Begin);
+            sr.DiscardBufferedData();
+        }
+        else
+        {
+            const int BufferSize = 4096;
+            var temp = ArrayPool<char>.Shared.Rent(BufferSize);
+            try
+            {
+                long remaining = offset;
+                while (remaining > 0)
+                {
+                    int toRead = (int)Math.Min(remaining, BufferSize);
+                    int read = reader.ReadBlock(temp.AsSpan(0, toRead));
+                    if (read == 0) break; // End of stream
+                    remaining -= read;
+                }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(temp);
+            }
+        }
+    }
+
 // 	public static IAsyncEnumerable<(Rope<string> Cells, long StartOffset, long EndOffset)> ReadCsvFileAsync(string filePath) // , [EnumeratorCancellation] CancellationToken cancellation
 // 	{
 // 		var read = new Func<ChannelWriter<(Rope<string> Cells, long StartOffset, long EndOffset)>, ValueTask>(async (writer) =>
