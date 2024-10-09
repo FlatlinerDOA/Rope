@@ -301,29 +301,37 @@ public sealed class CsvIndexer : Indexer
 	// 	}
 	// }
 
-	public async ValueTask SaveIndexToJson(string filePath)
+	public async Task SaveIndexToJson(string filePath)
     {
         var options = new JsonSerializerOptions
         {
 			WriteIndented = true,
-			Converters = { new RowRangeJsonConverter() }
+			Converters =
+            {
+                new RowRangeJsonConverter()
+                {
+                    BloomFilterSize = this.BloomFilterSize,
+                    HashIterations = this.HashIterations,
+                    SupportedOperations = this.SupportedOperations
+                }
+            }
 		};
 
-		var fileIndexes = await Task.WhenAll<FileIndex>(this.Files.Values.Select(v => v.AsTask()).ToList());
+		var fileIndexes = await Task.WhenAll(this.Files.Values.Select(v => v.AsTask()));
 		var indexData = new IndexData()
 		{
 			RowsPerPage = this.RowsPerPage,
 			BloomFilterSize = this.BloomFilterSize,
 			HashIterations = this.HashIterations,
             SupportedOperations = this.SupportedOperations,
-			Files = fileIndexes.Select(v => new FileIndexData(
+			Files = fileIndexes.OrderBy(f => f.Meta.Path).Select(v => new FileIndexData(
 				v.Meta.Path, 
 				v.Meta.LastModifiedUtc, 
-				v.ColumnRanges.Select(cr => new ColumnIndexData(cr.Key, cr.Value.ToRope())).ToArray())).ToArray()
+				v.ColumnRanges.Select(cr => new ColumnIndexData(cr.Key, cr.Value)).ToArray())).ToArray()
 		};
 
 		using var f = File.OpenWrite(filePath);
-		await JsonSerializer.SerializeAsync(f, options);		
+		await JsonSerializer.SerializeAsync(f, indexData, options);		
 	}
 
 	public static CsvIndexer LoadIndexFromJson(string filePath)
@@ -334,24 +342,30 @@ public sealed class CsvIndexer : Indexer
 		// without repeating their configuration in the JSON.
 		var meta = JsonSerializer.Deserialize<IndexMetaData>(jsonString);
 
-		var options = new JsonSerializerOptions
-		{
-			Converters =
-			{ 
-				new RowRangeJsonConverter()
-				{
-					BloomFilterSize = meta.BloomFilterSize,
-					HashIterations = meta.HashFunctions,
-				},
-				new RopeJsonConverter<RowRange>(),
-				new RopeJsonConverter<string>()
-			}
-		};
+        if (meta != null)
+        {
+            var options = new JsonSerializerOptions
+            {
+                Converters =
+            {
+                new RowRangeJsonConverter()
+                {
+                    BloomFilterSize = meta.BloomFilterSize,
+                    HashIterations = meta.HashIterations,
+                    SupportedOperations = meta.SupportedOperations,
+                },
+                new RopeJsonConverter<RowRange>(),
+                new RopeJsonConverter<string>()
+            }
+            };
 
-		var indexData = JsonSerializer.Deserialize<IndexData>(jsonString, options);
+            var indexData = JsonSerializer.Deserialize<IndexData>(jsonString, options);
 
-		var indexer = new CsvIndexer(indexData);
+            var indexer = new CsvIndexer(indexData);
 
-		return indexer;
+            return indexer;
+        }
+
+        return null;
 	}
 }
