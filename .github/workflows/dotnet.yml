@@ -38,26 +38,34 @@ jobs:
     
     - name: Test .NET 8.0
       run: dotnet test --no-build --framework net8.0 --configuration Release
-
-    - name: Generate coverage report
-      run: dotnet test --no-build /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
-
+      
     - name: Publish test results
       uses: actions/upload-artifact@v3
       with:
         name: test-results
         path: '**/TestResults/*.trx'
+
+    - name: Generate coverage report
+      run: dotnet test --no-build --framework net8.0 /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: '**/coverage.opencover.xml'
+        retention-days: 90
+
         
     - name: Set Version
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'  
       run: |
-        VERSION=1.4.${GITHUB_RUN_NUMBER}
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Package Version: $VERSION"
+        PACKAGE_VERSION=1.4.${GITHUB_RUN_NUMBER}
+        echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+        echo "Package Version: $PACKAGE_VERSION"
 
     - name: Package
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: dotnet pack --no-build --configuration Release /p:Version=${VERSION} -o packages
+      run: dotnet pack --no-build --configuration Release /p:Version=${PACKAGE_VERSION} -o packages
 
     - name: Push to NuGet
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -68,8 +76,8 @@ jobs:
       run: |
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git tag -a v${VERSION} -m "Release v${VERSION}"
-        git push origin v${VERSION}
+        git tag -a v${PACKAGE_VERSION} -m "Release v${PACKAGE_VERSION}"
+        git push origin v${PACKAGE_VERSION}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
