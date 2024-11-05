@@ -13,7 +13,7 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup .NET Core 3.1
       uses: actions/setup-dotnet@v4
       with:
@@ -26,22 +26,52 @@ jobs:
     
     - name: Display dotnet versions
       run: dotnet --list-sdks
-    
+
+    - name: Set Version
+      run: |
+        VERSION=1.4.$(date -u +%Y%m%d%H%M)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Package Version: $VERSION"
+
     - name: Restore dependencies
       run: dotnet restore
     
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build --no-restore --configuration Release
     
     - name: Test .NET Core 3.1
-      run: dotnet test --no-build --framework netcoreapp3.1 --verbosity normal
+      run: dotnet test --no-build --framework netcoreapp3.1 --configuration Release
     
     - name: Test .NET 8.0
-      run: dotnet test --no-build --framework net8.0 --verbosity normal
-    
-    - name: Package for Nuget
-      run: dotnet pack --no-build --configuration Release
-    #- name: Publish Nuget to GitHub registry
-    #  run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
-    #  env:
-    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      run: dotnet test --no-build --framework net8.0 --configuration Release
+
+    - name: Generate coverage report
+      run: dotnet test --no-build /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+
+    - name: Publish test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+        
+    - name: Package
+      run: dotnet pack --no-build --configuration Release /p:Version=${VERSION} -o packages
+
+    - name: Push to NuGet
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet nuget push "packages/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+    - name: Tag Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git tag -a v${VERSION} -m "Release v${VERSION}"
+        git push origin v${VERSION}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+#    - name: Publish Nuget to GitHub registry
+#      run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
