@@ -27,12 +27,6 @@ jobs:
     - name: Display dotnet versions
       run: dotnet --list-sdks
 
-    - name: Set Version
-      run: |
-        VERSION=1.4.$(date -u +%Y%m%d%H%M)
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Package Version: $VERSION"
-
     - name: Restore dependencies
       run: dotnet restore
     
@@ -54,7 +48,15 @@ jobs:
         name: test-results
         path: '**/TestResults/*.trx'
         
+    - name: Set Version
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'  
+      run: |
+        VERSION=1.4.${GITHUB_RUN_NUMBER}
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Package Version: $VERSION"
+
     - name: Package
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: dotnet pack --no-build --configuration Release /p:Version=${VERSION} -o packages
 
     - name: Push to NuGet
