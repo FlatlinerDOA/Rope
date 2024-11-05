@@ -164,7 +164,7 @@ public class RopeEditingTests
         var random = new Random(42);
         var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
-        foreach (var rank in Enumerable.Range(0, 65000).Select(s => random.NextSingle()))
+        foreach (var rank in Enumerable.Range(0, 65000).Select(s => (float)random.NextDouble()))
         {
             rope = rope.InsertSorted(rank, comparer);
         }

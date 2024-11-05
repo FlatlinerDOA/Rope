@@ -16,11 +16,11 @@ public class Equals
 
     private Rope<char> ropeX;
     private Rope<char> ropeY;
-    private StringBuilder sbX;
+    private StringBuilder? sbX;
     private ReadOnlyMemory<char> sbY;
 
-    private string strX;
-    private string strY;
+    private string? strX;
+    private string? strY;
 
     private ImmutableArray<char> arrayX;
 
@@ -48,12 +48,12 @@ public class Equals
     [Benchmark(Description = "StringBuilder")]
     public void StringBuilder()
     {
-        _ = this.sbX.Equals(this.sbY.Span);
+        _ = this.sbX!.Equals(this.sbY.Span);
     }
 
     [Benchmark(Description = "string")]
     public void String()
     {
-        _ = this.strX.Equals(strY);
+        _ = this.strX!.Equals(strY);
     }
 }

@@ -55,10 +55,12 @@ public class ImmutableListInterface
     [DataRow('l', 0, 18)]
     [DataRow('Z', 0, 18)]
     [DataRow('z', 0, 18)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 0, 18)]
     [DataRow('ı', 0, 18)]
     [DataRow('i', 0, 18)]
     [DataRow('İ', 0, 18)]
+#endif
     [DataRow('A', 1, 1)]
     [DataRow('a', 1, 1)]
     [DataRow('B', 2, 1)]
@@ -82,10 +84,12 @@ public class ImmutableListInterface
     [DataRow('l', 0, 18)]
     [DataRow('Z', 0, 18)]
     [DataRow('z', 0, 18)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 0, 18)]
     [DataRow('ı', 0, 18)]
     [DataRow('i', 0, 18)]
     [DataRow('İ', 0, 18)]
+#endif
     [DataRow('A', 1, 1)]
     [DataRow('a', 1, 1)]
     [DataRow('B', 2, 1)]
@@ -109,10 +113,12 @@ public class ImmutableListInterface
     [DataRow('l', 0, 18, 17)]
     [DataRow('Z', 0, 18, -1)]
     [DataRow('z', 0, 18, -1)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 0, 18, 11)]
     [DataRow('ı', 0, 18, 11)]
     [DataRow('i', 0, 18, 10)]
     [DataRow('İ', 0, 18, 10)]
+#endif
     [DataRow('A', 1, 1, -1)]
     [DataRow('a', 1, 1, -1)]
     [DataRow('B', 2, 1, -1)]
@@ -137,10 +143,12 @@ public class ImmutableListInterface
     [DataRow('l', 18, 17)]
     [DataRow('Z', 18, 17)]
     [DataRow('z', 18, 17)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 18, 17)]
     [DataRow('ı', 18, 17)]
     [DataRow('i', 18, 17)]
     [DataRow('İ', 18, 17)]
+#endif
     [DataRow('A', 1, 1)]
     [DataRow('a', 1, 1)]
     [DataRow('B', 2, 1)]
@@ -164,10 +172,12 @@ public class ImmutableListInterface
     [DataRow('l', 18, 17)]
     [DataRow('Z', 18, 17)]
     [DataRow('z', 18, 17)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 18, 17)]
     [DataRow('ı', 18, 17)]
     [DataRow('i', 18, 17)]
     [DataRow('İ', 18, 17)]
+#endif
     [DataRow('A', 1, 1)]
     [DataRow('a', 1, 1)]
     [DataRow('B', 2, 1)]
@@ -191,10 +201,12 @@ public class ImmutableListInterface
     [DataRow('l', 18, 17)]
     [DataRow('Z', 18, 17)]
     [DataRow('z', 18, 17)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 18, 17)]
     [DataRow('ı', 18, 17)]
     [DataRow('i', 18, 17)]
     [DataRow('İ', 18, 17)]
+#endif
     [DataRow('A', 1, 1)]
     [DataRow('a', 1, 1)]
     [DataRow('B', 2, 1)]
@@ -218,10 +230,12 @@ public class ImmutableListInterface
     [DataRow('l', 18, 17, 17)]
     [DataRow('Z', 18, 17, -1)]
     [DataRow('z', 18, 17, -1)]
+#if NET8_0_OR_GREATER
     [DataRow('I', 18, 17, 13)]
     [DataRow('ı', 18, 17, 13)]
     [DataRow('i', 18, 17, 12)]
     [DataRow('İ', 18, 17, 12)]
+#endif
     [DataRow('A', 1, 1, -1)]
     [DataRow('a', 1, 1, -1)]
     [DataRow('B', 2, 1, -1)]

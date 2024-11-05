@@ -7,27 +7,80 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
+    
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET
+
+    - name: Setup .NET Core 3.1
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 3.1.x
+    
+    - name: Setup .NET 8.0
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
+    
+    - name: Display dotnet versions
+      run: dotnet --list-sdks
+
     - name: Restore dependencies
       run: dotnet restore
+    
     - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
-    - name: Package for Nuget
-      run: dotnet pack
-    #- name: Publish Nuget to GitHub registry
-    #  run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
-    #  env:
-    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      run: dotnet build --no-restore --configuration Release
+    
+    - name: Test .NET Core 3.1
+      run: dotnet test --no-build --framework netcoreapp3.1 --configuration Release
+    
+    - name: Test .NET 8.0
+      run: dotnet test --no-build --framework net8.0 --configuration Release
+      
+    - name: Publish test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+
+#    - name: Generate coverage report
+#      run: dotnet test --no-build --framework net8.0 /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+#
+#    - name: Upload coverage report
+#      uses: actions/upload-artifact@v3
+#      with:
+#        name: coverage-report
+#        path: '**/coverage.opencover.xml'
+#        retention-days: 90
+
+    - name: Set Version
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'  
+      run: |
+        PACKAGE_VERSION=1.4.${GITHUB_RUN_NUMBER}
+        echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+        echo "Package Version: $PACKAGE_VERSION"
+
+    - name: Package
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet pack --no-build --configuration Release /p:Version=${PACKAGE_VERSION} -o packages
+
+    - name: Push to NuGet
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet nuget push "packages/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+    - name: Tag Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git tag -a v${PACKAGE_VERSION} -m "Release v${PACKAGE_VERSION}"
+        git push origin v${PACKAGE_VERSION}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+#    - name: Publish Nuget to GitHub registry
+#      run: dotnet nuget push ./src/bin/Release/*.nupkg -s https://nuget.pkg.github.com/FlatlinerDOA/index.json -k ${GITHUB_TOKEN}
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

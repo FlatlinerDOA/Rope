@@ -34,8 +34,12 @@ public static partial class Patches
 {
     private static readonly Regex PatchHeaderPattern = CreatePatchHeaderPattern();
 
+#if NET8_0_OR_GREATER
     [GeneratedRegex("^@@ -(\\d+),?(\\d*) \\+(\\d+),?(\\d*) @@$")]
     private static partial Regex CreatePatchHeaderPattern();
+#else
+    private static Regex CreatePatchHeaderPattern() => new Regex("^@@ -(\\d+),?(\\d*) \\+(\\d+),?(\\d*) @@$");
+#endif
 
     /// <summary>
     /// Parse a textual representation of patches and return a list of <see cref="Patch{T}"/>.
