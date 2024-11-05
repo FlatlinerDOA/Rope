@@ -45,17 +45,16 @@ jobs:
         name: test-results
         path: '**/TestResults/*.trx'
 
-    - name: Generate coverage report
-      run: dotnet test --no-build --framework net8.0 /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+#    - name: Generate coverage report
+#      run: dotnet test --no-build --framework net8.0 /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+#
+#    - name: Upload coverage report
+#      uses: actions/upload-artifact@v3
+#      with:
+#        name: coverage-report
+#        path: '**/coverage.opencover.xml'
+#        retention-days: 90
 
-    - name: Upload coverage report
-      uses: actions/upload-artifact@v3
-      with:
-        name: coverage-report
-        path: '**/coverage.opencover.xml'
-        retention-days: 90
-
-        
     - name: Set Version
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'  
       run: |
