@@ -67,30 +67,30 @@ public class HowToUse
     [TestMethod]
     public void CreateDiffsOfAnything()
     {
-        Rope<Person> original =
-        [
+        Rope<Person> original = new[]
+        {
             new Person("Stephen", "King"),
             new Person("Jane", "Austen"),
             new Person("Mary", "Shelley"),
             new Person("JRR", "Tokien"),
             new Person("James", "Joyce"),
-        ];
+        };
 
-        Rope<Person> updated =
-        [
+        Rope<Person> updated = new[]
+        {
             new Person("Stephen", "King"),
             new Person("Jane", "Austen"),
             new Person("JRR", "Tokien"),
             new Person("Frank", "Miller"),
             new Person("George", "Orwell"),
             new Person("James", "Joyce"),
-        ];
+        };
 
         Rope<Diff<Person>> changes = original.Diff(updated, DiffOptions<Person>.Default);
         Assert.AreEqual(2, changes.Count(d => d.Operation != Operation.Equal));
 
         // Convert to a Delta string
-        Rope<char> delta = changes.ToDelta(p => p.ToString());
+        Rope<char> delta = changes.ToDelta(p => p!.ToString());
 
         // Rebuild the diff from the original list and a delta.
         Rope<Diff<Person>> fromDelta = Delta.Parse(delta, original, Person.Parse);
@@ -101,18 +101,18 @@ public class HowToUse
         // Get back the updated list.
         Assert.AreEqual(fromDelta.ToTarget(), updated);
 
-        // Make a patch text
+        // Make a patch list.
         Rope<Patch<Person>> patches = fromDelta.ToPatches();
 
         // Convert patches to text
-        Rope<char> patchText = patches.ToPatchString(p => p.ToString());
+        string patchText = patches.ToPatchString(p => p.ToString()).ToString();
 
         // Parse the patches back again
         Rope<Patch<Person>> parsedPatches = Patches.Parse(patchText, Person.Parse);
         Assert.AreEqual(parsedPatches, patches);
     }
 
-    private record Person(Rope<char> FirstName, Rope<char> LastName)
+    private record class Person(Rope<char> FirstName, Rope<char> LastName)
     {
         public override string ToString() => $"{FirstName} {LastName}";
 

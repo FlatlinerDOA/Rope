@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Diagnostics.Metrics;
 using System.Collections.Immutable;
 using System.Diagnostics.Contracts;
 using System.Diagnostics;
@@ -19,7 +18,9 @@ using System.Runtime.InteropServices;
 /// <summary>
 /// A rope is an immutable sequence built using a b-tree style data structure that is useful for efficiently applying and storing edits, most commonly to text, but any list or sequence can be edited.
 /// </summary>
+#if NET8_0_OR_GREATER
 [CollectionBuilder(typeof(RopeBuilder), "Create")]
+#endif
 public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
     /// <summary>
@@ -39,9 +40,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// </summary>
     public const int MaxDepthImbalance = 4;
 
-    private static readonly Meter meter = new Meter("rope");
+    ////private static readonly Meter meter = new Meter("rope");
 
-    private static readonly Counter<int> rebalances = meter.CreateCounter<int>($"rope.{typeof(T).Name}.rebalances");
+    ////private static readonly Counter<int> rebalances = meter.CreateCounter<int>($"rope.{typeof(T).Name}.rebalances");
 
     /// <summary>
     /// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
@@ -267,8 +268,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// Gets a value indicating whether this is a Node and Left and Right will be non-null, 
     /// otherwise it is a leaf and just wraps a slice of read only memory.
     /// </summary>
+#if NET8_0_OR_GREATER
     [MemberNotNullWhen(true, nameof(this.Left))]
     [MemberNotNullWhen(true, nameof(this.Right))]
+#endif
     public bool IsNode => this.Depth != 0;
 
     /// <summary>
@@ -697,7 +700,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     public static implicit operator Rope<T>(string a) =>
         typeof(T) == typeof(char) ? (Rope<T>)(object)new Rope<char>(a.AsMemory()) :
         typeof(T) == typeof(byte) ? (Rope<T>)(object)new Rope<byte>(Encoding.UTF8.GetBytes(a)) :
+#if NET8_0_OR_GREATER
         typeof(T) == typeof(Rune) ? (Rope<T>)(object)a.EnumerateRunes().ToRope() :
+#endif
         throw new InvalidCastException("Cannot implicitly convert type {typeof(T).Name} to string");
 
     /// <summary>
@@ -802,7 +807,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         if (this.data is ReadOnlyMemory<T> mem && other is ReadOnlyMemory<T> otherMem)
         {
             // Finding a Leaf within another leaf.
-            return MemoryExtensions.CommonPrefixLength(mem.Span, otherMem.Span);
+            return mem.Span.CommonPrefixLength(otherMem.Span);
         }
 
         long common = 0;
@@ -833,18 +838,6 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         }
 
         return common;
-
-        // Performance analysis: https://neil.fraser.name/news/2007/10/09/
-        // var n = Math.Min(this.Length, other.Length);
-        // for (long i = 0; i < n; i++)
-        // {
-        // 	if (!this.ElementAt(i).Equals(other.ElementAt(i)))
-        // 	{
-        // 		return i;
-        // 	}
-        // }
-
-        // return n;
     }
 
     /// <summary>
@@ -973,7 +966,11 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return memory;
             case RopeNode:
                 // Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
+#if NET8_0_OR_GREATER
                 var result = GC.AllocateUninitializedArray<T>((int)this.Length);
+#else
+                var result = new T[(int)this.Length];
+#endif
                 var mem = result.AsMemory();
                 this.CopyBuffers(mem);
                 return mem;
@@ -997,7 +994,11 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return memory.ToArray();
             case RopeNode:
                 // Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
+#if NET8_0_OR_GREATER
                 var result = GC.AllocateUninitializedArray<T>((int)this.Length);
+#else
+                var result = new T[(int)this.Length];
+#endif
                 var mem = result.AsMemory();
                 this.CopyBuffers(mem);
                 return result;
@@ -1434,7 +1435,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 for (int j = 0; j < findSpan.Length && match; j++)
                 {
                     long globalOffset = globalIndex + j;
-                    if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out var value) || !comparer.Equals(value, findSpan[j]))
+                    if (!TryGetValueAtGlobalIndex(buffers, globalOffset, out var value) || !comparer.Equals(value!, findSpan[j]))
                     {
                         match = false;
                         break;
@@ -1649,23 +1650,14 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return mem.Span.LastIndexOf(findMem.Span);
         }
 
-        var rentedBuffers = BufferPool.Rent(this.BufferCount);
-        var rentedFindBuffers = BufferPool.Rent(find.BufferCount);
-        try
-        {
-            var buffers = rentedBuffers[..this.BufferCount];
-            var findBuffers = rentedFindBuffers[..find.BufferCount];
-            this.FillBuffers(buffers);
-            find.FillBuffers(findBuffers);
-
-            var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
-            return i;
-        }
-        finally
-        {
-            BufferPool.Return(rentedFindBuffers);
-            BufferPool.Return(rentedBuffers);
-        }
+        using var rentedBuffers = BufferPool.Lease(this.BufferCount);
+        using var rentedFindBuffers = BufferPool.Lease(find.BufferCount);
+        var buffers = rentedBuffers.Span;
+        var findBuffers = rentedFindBuffers.Span;
+        this.FillBuffers(buffers);
+        find.FillBuffers(findBuffers);
+        var i = LastIndexOfDefaultEquality(buffers, findBuffers, find.Length);
+        return i;
     }
 
     [Pure]
@@ -2039,8 +2031,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return new string(chars.ToMemory().Span);
             case Rope<byte> utf8:
                 return Encoding.UTF8.GetString(utf8.ToMemory().Span);
+#if NET8_0_OR_GREATER
             case Rope<Rune> runes:
                 return string.Concat(this.Select(rune => rune.ToString()));
+#endif
             default:
                 return string.Join("\n", this.Select(element => element.ToString()));
         }

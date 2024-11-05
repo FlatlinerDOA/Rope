@@ -137,10 +137,12 @@ public class RopeConstructionTests
         Assert.AreEqual("test".ToRope(), actual);
     }
 
+#if NET8_0_OR_GREATER // Collection initializer not supported in .NET Standard 2.1
     [TestMethod]
     public void CollectionInitializer()
     {
         Rope<char> chars = ['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '!'];
         Assert.IsTrue(chars.SequenceEqual(['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '!']));
     }
+#endif
 }

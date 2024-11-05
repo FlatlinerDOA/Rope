@@ -30,7 +30,13 @@ public sealed class CharComparer : IEqualityComparer<char>
         this.options = options;
     }
 
+#if NET8_0_OR_GREATER
     public bool Equals(char x, char y) => culture.CompareInfo.Compare([x], [y], options) == 0;
 
     public int GetHashCode([DisallowNull] char obj) => culture.CompareInfo.GetHashCode([obj], options);
+#else
+    public bool Equals(char x, char y) => culture.CompareInfo.Compare(new string([x]), new string([y]), options) == 0;
+
+    public int GetHashCode([DisallowNull] char obj) => culture.CompareInfo.GetHashCode(new string([obj]), options);
+#endif
 }

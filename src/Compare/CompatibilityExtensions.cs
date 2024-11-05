@@ -135,7 +135,11 @@ internal static class CompatibilityExtensions
     public static Rope<char> DiffEncode<T>(this Rope<T> items, Func<T, Rope<char>> itemToString, char separator = '~') where T : IEquatable<T>
     {
         var find = (string.Empty + separator).ToRope();
+#if NET8_0_OR_GREATER
         var encoded = "%" + Convert.ToHexString(Encoding.UTF8.GetBytes(string.Empty + separator)).ToRope();
+#else
+        var encoded = "%" + BitConverter.ToString(Encoding.UTF8.GetBytes(string.Empty + separator)).Replace("-", string.Empty);
+#endif
         return items.Select(i => itemToString(i).Replace(find, encoded)).Join(separator).DiffEncode().Replace("%2B", "+").DiffEncode();
     }
 

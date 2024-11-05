@@ -11,7 +11,9 @@ public sealed class RopeTests
 {
     public RopeTests()
     {
+#if NET8_0_OR_GREATER
         Trace.Listeners.Add(new ConsoleTraceListener());
+#endif
     }
 
     [TestMethod]
@@ -133,7 +135,7 @@ public sealed class RopeTests
     public void StructuralNotEqualsOperator() => Assert.IsTrue("a".ToRope() + "bc".ToRope() != "ab".ToRope() + "bc".ToRope());
 
     [TestMethod]
-    public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals((object)null));
+    public void EmptyRopeNotEqualToNull() => Assert.IsFalse(Rope<char>.Empty.Equals((object)null!));
 
     [TestMethod]
     public void EmptyRopeEqualsEmptyRope() => Assert.IsTrue(Rope<char>.Empty.Equals(Rope<char>.Empty));

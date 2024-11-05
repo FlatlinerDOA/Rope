@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
 using Rope.Compare;
@@ -57,6 +58,29 @@ public static class RopeExtensions
         }
 
         return ret;
+    }
+
+    public static LeasedSpan<T> Lease<T>(this ArrayPool<T> source, int length) => new LeasedSpan<T>(source, length);
+
+    public ref struct LeasedSpan<T>
+    {
+        private ArrayPool<T> pool;
+        private T[] rented;
+        private Span<T> span;
+
+        public LeasedSpan(ArrayPool<T> pool, int length)
+        {
+            this.pool = pool;
+            this.rented = pool.Rent(length);  // Rent it.
+            this.span = this.rented.AsSpan().Slice(0, length); // Cut it down to size.
+        }
+
+        public Span<T> Span => this.span;
+
+        public void Dispose()
+        {
+            this.pool.Return(this.rented, true); // Always return it clean!
+        }
     }
 
     /// <summary>
