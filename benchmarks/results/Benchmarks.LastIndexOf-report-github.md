@@ -1,18 +1,19 @@
 ```
 
-BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3880/23H2/2023Update/SunValley3)
+BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4317/23H2/2023Update/SunValley3)
 AMD Ryzen 9 5950X, 1 CPU, 32 logical and 16 physical cores
-.NET SDK 8.0.302
-  [Host]     : .NET 8.0.7 (8.0.724.31311), X64 RyuJIT AVX2
-  DefaultJob : .NET 8.0.7 (8.0.724.31311), X64 RyuJIT AVX2
+.NET SDK 9.0.100-rc.2.24474.11
+  [Host]     : .NET 8.0.10 (8.0.1024.46610), X64 RyuJIT AVX2
+  Job-DEDBEB : .NET 8.0.10 (8.0.1024.46610), X64 RyuJIT AVX2
 
+Runtime=.NET 8.0  Toolchain=net8.0  
 
 ```
-| Method                                    | Mean       | Error     | StdDev    | Gen0   | Allocated |
-|------------------------------------------ |-----------:|----------:|----------:|-------:|----------:|
-| Rope&lt;char&gt;                                |   2.568 μs | 0.0514 μs | 0.0668 μs | 0.0038 |      80 B |
+| Method                                    | Mean       | Error     | StdDev    | Ratio  | RatioSD | Allocated | Alloc Ratio |
+|------------------------------------------ |-----------:|----------:|----------:|-------:|--------:|----------:|------------:|
+| Rope&lt;char&gt;                                |   2.679 μs | 0.0509 μs | 0.0523 μs |   1.00 |    0.00 |         - |          NA |
 | Fragmented
-Rope&lt;char&gt;                     |   3.938 μs | 0.0161 μs | 0.0151 μs | 0.0534 |     896 B |
+Rope&lt;char&gt;                     |   4.660 μs | 0.0141 μs | 0.0125 μs |   1.74 |    0.04 |         - |          NA |
 | &#39;Fragmented
-Rope&lt;char&gt; (Fragmented Find)&#39; |   3.382 μs | 0.0090 μs | 0.0084 μs | 0.0687 |    1168 B |
-| String                                    | 455.932 μs | 1.8262 μs | 1.5250 μs |      - |         - |
+Rope&lt;char&gt; (Fragmented Find)&#39; |   4.458 μs | 0.0177 μs | 0.0166 μs |   1.66 |    0.03 |         - |          NA |
+| String                                    | 483.925 μs | 8.3534 μs | 7.8138 μs | 180.64 |    5.13 |         - |          NA |
