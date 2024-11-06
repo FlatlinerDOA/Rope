@@ -1,3 +1,4 @@
+#if NET8_0_OR_GREATER
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,16 +16,16 @@ public class InsertSorted
 
     private static readonly float[] RandomFloats = Enumerable.Range(0, 65000).Select(s => random.NextSingle()).ToArray();
 
-    [Benchmark]
-    public void AddRangeThenOrderLong()
+    [Benchmark(Baseline = true)]
+    public long AddRangeThenOrderLong()
     {
         var rope = Rope<long>.Empty.AddRange(RandomLongs);
         var comparer = Comparer<long>.Default;
-        _ = rope.Order(comparer).First();
+        return rope.Order(comparer).First();
     }
 
     [Benchmark]
-    public void InsertSortedLong()
+    public long InsertSortedLong()
     {
         var rope = Rope<long>.Empty;
         var comparer = Comparer<long>.Default;
@@ -33,11 +34,11 @@ public class InsertSorted
             rope = rope.InsertSorted(RandomLongs[i], comparer);
         }
 
-        _ = rope[0];
+        return rope[0];
     }
 
     [Benchmark]
-    public void PriorityQueueOfLong()
+    public long PriorityQueueOfLong()
     {
         var comparer = Comparer<long>.Default;
         var queue = new PriorityQueue<long, long>(comparer);
@@ -46,19 +47,19 @@ public class InsertSorted
             queue.Enqueue(i, RandomLongs[i]);
         }
 
-        queue.Dequeue();
+        return queue.Dequeue();
     }
 
     [Benchmark]
-    public void AddRangeThenOrderFloat()
+    public float AddRangeThenOrderFloat()
     {
         var rope = Rope<float>.Empty.AddRange(RandomFloats);
         var comparer = Comparer<float>.Default;
-        _ = rope.Order(comparer).First();
+        return rope.Order(comparer).First();
     }
 
     [Benchmark]
-    public void InsertSortedFloat()
+    public float InsertSortedFloat()
     {
         var rope = Rope<float>.Empty;
         var comparer = Comparer<float>.Default;
@@ -67,11 +68,11 @@ public class InsertSorted
             rope = rope.InsertSorted(RandomFloats[i], comparer);
         }
 
-        _ = rope[0];
+        return rope[0];
     }
 
     [Benchmark]
-    public void PriorityQueueOfFloat()
+    public float PriorityQueueOfFloat()
     {
         var comparer = Comparer<float>.Default;
         var queue = new PriorityQueue<long, float>(comparer);
@@ -80,6 +81,7 @@ public class InsertSorted
             queue.Enqueue(i, RandomFloats[i]);
         }
 
-        queue.Dequeue();
+        return queue.Dequeue();
     }
 }
+#endif

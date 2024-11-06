@@ -11,8 +11,8 @@ public class InsertRange
     [Params(10, 100, 1000)]
     public int EditCount;
 
-    [Benchmark]
-    public void RopeOfChar()
+    [Benchmark(Baseline = true)]
+    public Rope<char> RopeOfChar()
     {
         var lorem = BenchmarkData.LoremIpsum.ToRope();
         var s = lorem;
@@ -21,11 +21,11 @@ public class InsertRange
             s = s.InsertRange(321, lorem);
         }
 
-        ////s.ToString();
+        return s;
     }
 
     [Benchmark]
-    public void ListOfChar()
+    public List<char> ListOfChar()
     {
         var lorem = BenchmarkData.LoremIpsum.ToCharArray();
         var s = new List<char>(lorem);
@@ -34,11 +34,11 @@ public class InsertRange
             s.InsertRange(321, lorem);
         }
 
-        ////s.ToString();
+        return s;
     }
 
     [Benchmark]
-    public void StringBuilder()
+    public StringBuilder StringBuilder()
     {
         var s = new StringBuilder(BenchmarkData.LoremIpsum);
         for (int i = 0; i < EditCount; i++)
@@ -46,6 +46,6 @@ public class InsertRange
             s.Insert(321, BenchmarkData.LoremIpsum);
         }
 
-        ////s.ToString();
+        return s;
     }
 }

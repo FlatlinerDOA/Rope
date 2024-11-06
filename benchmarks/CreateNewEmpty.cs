@@ -9,7 +9,7 @@ namespace Benchmarks;
 [MemoryDiagnoser]
 public class CreateNewEmpty
 {
-    [Benchmark(Description = "Rope<char>.Empty")]
+    [Benchmark(Description = "Rope<char>.Empty", Baseline = true)]
     public void EmptyRopeOfChar() => _ = Rope<char>.Empty;
 
     [Benchmark(Description = "new List<char>()")]

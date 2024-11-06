@@ -14,7 +14,7 @@ public class GetHashCode
     [Params(10, 100, 1000, 10000)]
     public int Length;
 
-    [Benchmark(Description = "Rope<char>")]
+    [Benchmark(Description = "Rope<char>", Baseline = true)]
     public void RopeOfChar()
     {
         _ = BenchmarkData.LoremIpsum.ToRope().Slice(Length).GetHashCode();

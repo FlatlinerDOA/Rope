@@ -14,7 +14,7 @@ public class LastIndexOf
 
     private static readonly Rope<char> Find = "[[New Haven Register]]".ToRope();
 
-    [Benchmark(Description = "Rope<char>")]
+    [Benchmark(Description = "Rope<char>", Baseline = true)]
     public void RopeOfChar()
     {
         _ = BenchmarkData.LongDiffText1.LastIndexOf(Find);
