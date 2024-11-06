@@ -22,176 +22,12 @@ using System.Runtime.InteropServices;
 [CollectionBuilder(typeof(RopeBuilder), "Create")]
 [DebuggerDisplay("{ToString(),raw}")]
 #endif
-public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
+public readonly partial record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmutableList<T>, IEquatable<Rope<T>> where T : IEquatable<T>
 {
     /// <summary>
     /// Temporary buffers for performing searches.
     /// </summary>
     private static readonly ArrayPool<ReadOnlyMemory<T>> BufferPool = ArrayPool<ReadOnlyMemory<T>>.Create(128, 16);
-
-    /// <summary>
-    /// sizeof(OneValue) where T is char is 2 bytes, where a char[] is 8 bytes.
-    /// </summary>
-    /// <param name="Value"></param>
-    private readonly record struct EmptyValue() : IReadOnlyList<T>
-    {
-        public static readonly EmptyValue Empty = new();
-
-        public T this[int index] => throw new IndexOutOfRangeException();
-
-        public int Count => 0;
-
-        public IEnumerator<T> GetEnumerator() => new EmptyEnumerator();
-
-        IEnumerator IEnumerable.GetEnumerator() => new EmptyEnumerator();
-
-        private readonly struct EmptyEnumerator() : IEnumerator<T>
-        {
-            public T Current => throw new ArgumentOutOfRangeException();
-
-            object IEnumerator.Current => throw new ArgumentOutOfRangeException();
-
-            public void Dispose()
-            {
-            }
-
-            public bool MoveNext() => false;
-
-            public void Reset()
-            {
-            }
-        }
-    }
-
-    /// <summary>
-    /// sizeof(OneValue) where T is char is 2 bytes, where a char[] is 8 bytes.
-    /// </summary>
-    /// <param name="Item1"></param>
-    private readonly record struct OneValue(T Item1) : IReadOnlyList<T>
-    {
-        public T this[int index] => index == 0 ? this.Item1 : throw new ArgumentOutOfRangeException();
-
-        public int Count => 1;
-
-        public IEnumerator<T> GetEnumerator() => new OneEnumerator(this.Item1);
-
-        IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
-
-        private struct OneEnumerator : IEnumerator<T>
-        {
-            private T value;
-            private int index;
-
-            public OneEnumerator(T value)
-            {
-                this.value = value;
-                this.index = -1;
-            }
-            public T Current => this.index == 0 ? this.value : throw new InvalidOperationException();
-
-            object IEnumerator.Current => this.Current;
-
-            public void Dispose()
-            {
-                this.index = -1;
-            }
-
-            public bool MoveNext() => ++this.index == 0;
-
-            public void Reset()
-            {
-                this.index = -1;
-            }
-        }
-    }
-
-    /// <summary>
-    /// sizeof(TwoValue) where T is char is 4 bytes, where a char[] is 8 bytes and ReadOnlyMemory is 16 bytes.
-    /// </summary>
-    /// <param name="Item1">First value</param>
-    /// <param name="Item2">Second value</param>
-    private readonly record struct TwoValue(T Item1, T Item2) : IReadOnlyList<T>
-    {
-        public T this[int index] => index == 0 ? this.Item1 : index == 1 ? this.Item2 : throw new ArgumentOutOfRangeException();
-
-        public int Count => 2;
-
-        public IEnumerator<T> GetEnumerator() => new TwoEnumerator(this);
-
-        IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
-
-        private struct TwoEnumerator : IEnumerator<T>
-        {
-            private readonly TwoValue value;
-            private int index;
-
-            public TwoEnumerator(TwoValue value)
-            {
-                this.value = value;
-                this.index = -1;
-            }
-
-            public T Current => index switch
-            {
-                0 => this.value.Item1,
-                1 => this.value.Item2,
-                _ => throw new InvalidOperationException()
-            };
-
-            object IEnumerator.Current => this.Current;
-
-            public void Dispose() { }
-
-            public bool MoveNext() => ++this.index < 2;
-
-            public void Reset()
-            {
-                this.index = -1;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Stores two ropes together.
-    /// </summary>
-    /// <param name="Left">The left part of the B-Tree.</param>
-    /// <param name="Right">The right part of the B-Tree.</param>
-    private readonly record struct RopeNode(Rope<T> Left, Rope<T> Right, byte Depth, bool IsBalanced, int Count) : IReadOnlyList<T>
-    {
-        public T this[int index] => this.Left.Length <= index ? this.Right[index - this.Left.Length] : this.Left[index];
-
-        public long Length => this.Left.Length + this.Right.Length;
-
-        public int BufferCount => this.Left.BufferCount + this.Right.BufferCount;
-
-        public readonly long IndexOf(T find)
-        {
-            // Node
-            var i = Left.IndexOf(find);
-            if (i != -1)
-            {
-                return i;
-            }
-
-            i = Right.IndexOf(find);
-            if (i != -1)
-            {
-                return Left.Length + i;
-            }
-
-            return -1;
-        }
-
-        public IEnumerator<T> GetEnumerator()
-        {
-            throw new NotImplementedException();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            throw new NotImplementedException();
-        }
-    }
 
     /// <summary>
     /// Static size of the maximum length of a leaf node in the rope's binary tree. This is used for balancing the tree.
@@ -216,10 +52,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// Abstract data storage of either:
     /// <see cref="OneValue"/> for a single element,
     /// <see cref="TwoValue"/> for two elements,
-    /// <see cref="ReadOnlyMemory{T}"/> for a single buffer,
-    /// or <see cref="Rope{T}"/> for a B-Tree.
+    /// <see cref="MemoryValue"/> for a single buffer,
+    /// or <see cref="NodeValue"/> for a B-Tree.
     /// </summary>
-    private readonly object data;
+    private readonly IRopeData<T> data;
     
     /////// <summary>
     /////// Number of elements stored, memoised for performance.
@@ -286,7 +122,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             0 => EmptyValue.Empty,
             1 => new OneValue(s[0]),
             2 => new TwoValue(s[0], s[1]),
-            _ => data
+            _ => new MemoryValue(data)
         };
         //this.isBalanced = true;
         //this.length = (uint)data.Length;
@@ -321,26 +157,18 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             var count = left.Count + right.Count;
             var depth = (byte)(Math.Max(left.Depth, right.Depth) + 1);
             var balanced = RopeExtensions.CalculateIsBalanced(count, depth);
-            this.data = new RopeNode(left, right, depth, balanced, count);
+            this.data = new NodeValue(left, right, depth, balanced, count);
             Debug.Assert(this.Depth < RopeExtensions.MaxTreeDepth, "Too deep!");
             //this.length = (uint)(left.length + right.length);
         }
 
-        Debug.Assert(this.data is EmptyValue or OneValue or TwoValue or ReadOnlyMemory<T> or RopeNode, "Bad data type");
+        Debug.Assert(this.data is EmptyValue or OneValue or TwoValue or MemoryValue or NodeValue, "Bad data type");
     }
 
     public T this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
-            return this.data switch
-            {
-                IReadOnlyList<T> list => list[index],
-                ReadOnlyMemory<T> memory => memory.Span[(int)index],
-                _ => throw new IndexOutOfRangeException(nameof(index)),
-            };
-        }
+        get => this.data[index];
     }
 
     /// <summary>
@@ -354,7 +182,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// <summary>
     /// Defines how many leaf node buffers this rope contains.
     /// </summary>
-    public int BufferCount => this.data is RopeNode r ? r.BufferCount : 1;
+    public int BufferCount => this.data is NodeValue r ? r.BufferCount : 1;
 
     /// <summary>
     /// Gets a range of elements in the form of a new instance of <see cref="Rope{T}"/>.
@@ -373,12 +201,12 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// <summary>
     /// Gets the left or prefix branch of the rope. May be null if this is a leaf node.
     /// </summary>
-    public Rope<T>? Left => this.data is RopeNode n ? n.Left : default;
+    public Rope<T>? Left => this.data is NodeValue n ? n.Left : default;
 
     /// <summary>
     /// Gets the right or suffix branch of the rope. May be null if this is a leaf node.
     /// </summary>
-    public Rope<T>? Right => this.data is RopeNode n ? n.Right : default;
+    public Rope<T>? Right => this.data is NodeValue n ? n.Right : default;
 
     /// <summary>
     /// Gets a value indicating whether this is a Node and Left and Right will be non-null, 
@@ -388,32 +216,27 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     [MemberNotNullWhen(true, nameof(this.Left))]
     [MemberNotNullWhen(true, nameof(this.Right))]
 #endif
-    public bool IsNode => this.data is RopeNode;
+    public bool IsNode => this.data is NodeValue;
 
     /// <summary>
     /// Gets the length of the left Node if this is a node (the split-point essentially), otherwise the length of the data. 
     /// </summary>
-    public long Weight => this.data is RopeNode n ? n.Left.Length : this.Length;
+    public long Weight => this.data is NodeValue n ? n.Left.Length : this.Length;
 
     /// <summary>
     /// Gets the length of the rope in terms of the number of elements it contains.
     /// </summary>
-    public long Length => this.data switch
-    {
-        ReadOnlyMemory<T> mem => mem.Length,
-        IReadOnlyList<T> list => list.Count,
-        _ => 0 // throw new InvalidOperationException("Rope is not initialized, which is the same as EmptyValue")
-    };
+    public long Length => this.data.LongLength;
 
     /// <summary>
     /// Gets a value indicating whether this rope is empty.
     /// </summary>
-    public bool IsEmpty => this.Length == 0;
+    public bool IsEmpty => this.data.LongLength == 0;
 
     /// <summary>
     /// Gets the maximum depth of the tree, returns 0 if this is a leaf, never exceeds <see cref="Rope{T}.MaxTreeDepth"/>.
     /// </summary>
-    public byte Depth => this.data is RopeNode n ? n.Depth : (byte)0;
+    public byte Depth => this.data is NodeValue n ? n.Depth : (byte)0;
 
     /// <summary>
     /// Gets the element at the specified index.
@@ -423,14 +246,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// <exception cref="IndexOutOfRangeException">Thrown if index is larger than or equal to the length or less than 0.</exception>
     [Pure]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly T ElementAt(long index) =>
-        this.data switch
-        {
-            RopeNode node => node.Left.Length <= index ? node.Right.ElementAt(index - node.Left.Length) : node.Left.ElementAt(index),
-            ReadOnlyMemory<T> memory => memory.Span[(int)index],
-            IReadOnlyList<T> list => list[(int)index],
-            _ => throw new IndexOutOfRangeException(nameof(index)),
-        };
+    public readonly T ElementAt(long index) => this.data.ElementAt(index);
 
     /// <summary>
     /// Gets an enumerable of slices of this rope, splitting by the given separator element.
@@ -521,47 +337,25 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     private readonly (Rope<T> Left, Rope<T> Right) SplitAt(long i, int recursionRemaining)
     {
         Debug.Assert(recursionRemaining > 0, $"Infinite loop? {this.Depth} {this.Length} {i}");
-        switch (this.data)
+        return this.data switch
         {
-            case EmptyValue or null:
-                return i == 0 ? (Empty, this) :
-                    throw new ArgumentOutOfRangeException(nameof(i));
-            case OneValue:
-                return i == 0 ? (Empty, this) :
-                    i == 1 ? (this, Empty) :
-                    throw new ArgumentOutOfRangeException(nameof(i));
-            case TwoValue t:
-                return i switch
+            EmptyValue => i == 0 ?
+                (Empty, this) :
+                throw new ArgumentOutOfRangeException(nameof(i)),
+            OneValue => i == 0 ? (Empty, this) :
+                i == 1 ? (this, Empty) :
+                throw new ArgumentOutOfRangeException(nameof(i)),
+            TwoValue t => i switch
                 {
                     0 => (Empty, this),
                     1 => (new Rope<T>(t.Item1), new Rope<T>(t.Item2)),
                     2 => (this, Empty),
                     _ => throw new ArgumentOutOfRangeException(nameof(i))
-                };
-            case ReadOnlyMemory<T> m:
-                return (new Rope<T>(m[..(int)i]), new Rope<T>(m[(int)i..]));
-            case RopeNode node:
-                if (i == 0)
-                {
-                    return (Empty, this);
-                }
-                else if (i == this.Length)
-                {
-                    return (this, Empty);
-                }
-                else if (i <= this.Weight)
-                {
-                    var (newLeft, newRight) = node.Left.SplitAt(i, --recursionRemaining);
-                    return (newLeft, new Rope<T>(newRight, node.Right));
-                }
-                else
-                {
-                    var (a, b) = node.Right.SplitAt(i - this.Weight, --recursionRemaining);
-                    return (new Rope<T>(node.Left, a), b);
-                }
-            default:
-                throw new ArgumentOutOfRangeException(nameof(i));
-        }
+                },
+            MemoryValue m => (new Rope<T>(m.Data[..(int)i]), new Rope<T>(m.Data[(int)i..])),
+            NodeValue node => node.SplitAt(i, recursionRemaining),
+            _ => throw new ArgumentOutOfRangeException(nameof(i))
+        };
     }
 
     /// <summary>
@@ -662,25 +456,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return this;
         }
 
-        switch (this.data)
-        {
-            // NOTE: OneValue is an impossible case because startIndex would have to be either 0 or 1, if not it's out of range.
-            case TwoValue m:
-                return startIndex == 1 ? new Rope<T>(m.Item1) : throw new ArgumentOutOfRangeException(nameof(startIndex));
-            case ReadOnlyMemory<T> m:
-                return new Rope<T>(m[..(int)startIndex]);
-            case RopeNode node:
-                if (startIndex <= this.Weight)
-                {
-                    return node.Left.RemoveRange(startIndex);
-                }
-                else
-                {
-                    return new Rope<T>(node.Left, node.Right.RemoveRange(startIndex - this.Weight));
-                }
-            default:
-                throw new ArgumentOutOfRangeException(nameof(startIndex));
-        }
+        return this.data.RemoveRange(startIndex);
     }
 
     /// <summary>
@@ -754,26 +530,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return Empty;
         }
 
-        switch (this.data)
-        {
-            // NOTE: OneValue is an impossible case because startIndex would have to be either 0 or 1, if not it's out of range.
-            case TwoValue t:
-                return start == 1 ? new Rope<T>(t.Item2) : throw new ArgumentOutOfRangeException(nameof(start));
-            case ReadOnlyMemory<T> m:
-                return new Rope<T>(m[(int)start..]);
-            case RopeNode node:
-                if (start <= this.Weight)
-                {
-                    var newLeft = node.Left.Slice(start);
-                    return new Rope<T>(newLeft, node.Right);
-                }
-                else
-                {
-                    return node.Right.Slice(start - this.Weight);
-                }
-            default:
-                throw new ArgumentOutOfRangeException(nameof(start));
-        }
+        return this.data.Slice(start);
     }
 
     /// <summary>
@@ -848,7 +605,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return this;
         }
 
-        if (this.data is RopeNode node)
+        if (this.data is NodeValue node)
         {
             ///rebalances.Add(1);
             if (this.Length <= MaxLeafLength)
@@ -899,17 +656,12 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
     /// | A rope of depth n is balanced if its length is at least Fn+2, e.g. a balanced rope
     /// | of depth 1 must have length at least 2.
     //// </remarks>
-    public bool IsBalanced => this.data is RopeNode r ? r.IsBalanced : true;
+    public readonly bool IsBalanced => this.data is NodeValue r ? r.IsBalanced : true;
 
     /// <summary>
     /// Gets the integer capped Length of the rope (for interfaces such as <see cref="IReadOnlyList{T}"/>.
     /// </summary>
-    public int Count => this.data switch
-    {
-        ReadOnlyMemory<T> mem => mem.Length,
-        IReadOnlyList<T> list => list.Count,
-        _ => throw new InvalidOperationException("Bad type")
-    };
+    public readonly int Count => this.data.Count;
 
     /// <summary>
     /// Calculates the longest common prefix length (The number of elements that are shared at the start of the sequence) 
@@ -930,10 +682,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return value.Equals(other[0]) ? 1 : 0;
         }
 
-        if (this.data is ReadOnlyMemory<T> mem && other is ReadOnlyMemory<T> otherMem)
+        if (this.data is MemoryValue mem && other is MemoryValue otherMem)
         {
             // Finding a Leaf within another leaf.
-            return mem.Span.CommonPrefixLength(otherMem.Span);
+            return mem.Data.Span.CommonPrefixLength(otherMem.Data.Span);
         }
 
         long common = 0;
@@ -984,11 +736,11 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return value.Item1.Equals(other[^1]) ? 1 : 0;
         }
 
-        if (this.data is ReadOnlyMemory<T> mem && other is ReadOnlyMemory<T> otherMem)
+        if (this.data is MemoryValue mem && other is MemoryValue otherMem)
         {
             // Finding a Leaf within another leaf.
-            var span = mem.Span;
-            var otherSpan = otherMem.Span;
+            var span = mem.Data.Span;
+            var otherSpan = otherMem.Data.Span;
 
             // Performance analysis: https://neil.fraser.name/news/2007/10/09/
             var nx = Math.Min(span.Length, otherSpan.Length);
@@ -1090,9 +842,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return new T[] { value.Item1 }.AsMemory();
             case TwoValue value:
                 return new T[] { value.Item1, value.Item2 }.AsMemory();
-            case ReadOnlyMemory<T> memory:
-                return memory;
-            case RopeNode:
+            case MemoryValue memory:
+                return memory.Data;
+            case NodeValue:
                 // Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
 #if NET8_0_OR_GREATER
                 var result = GC.AllocateUninitializedArray<T>((int)this.Length);
@@ -1120,9 +872,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return [value.Item1];
             case TwoValue value:
                 return [value.Item1, value.Item2];
-            case ReadOnlyMemory<T> memory:
-                return memory.ToArray();
-            case RopeNode:
+            case MemoryValue memory:
+                return memory.Data.ToArray();
+            case NodeValue:
                 // Instead of: new T[this.left.Length + this.right.Length]; we use an uninitialized array as we are copying over the entire contents.
 #if NET8_0_OR_GREATER
                 var result = GC.AllocateUninitializedArray<T>((int)this.Length);
@@ -1157,11 +909,11 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 other[0] = value.Item1;
                 other[1] = value.Item2;
                 break;
-            case ReadOnlyMemory<T> memory:
+            case MemoryValue memory:
                 // Leaf node so copy memory.
-                memory.Span.CopyTo(other);
+                memory.Data.Span.CopyTo(other);
                 break;
-            case RopeNode:
+            case NodeValue:
                 this.CopyBuffers(other);
                 break;
         }
@@ -1214,10 +966,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                     TwoValue findValues => values == findValues ? 0 : -1,
                     _ => -1
                 };
-            case ReadOnlyMemory<T> mem:
-                if (find.data is ReadOnlyMemory<T> findMem)
+            case MemoryValue mem:
+                if (find.data is MemoryValue findMem)
                 {
-                    return mem.Span.IndexOf(findMem.Span);
+                    return mem.Data.Span.IndexOf(findMem.Data.Span);
                 }
                 break;
             default:
@@ -1403,10 +1155,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 case TwoValue values:
                     buffers[0] = new[] { values.Item1, values.Item2 };
                     break;
-                case ReadOnlyMemory<T> mem:
-                    buffers[0] = mem;
+                case MemoryValue mem:
+                    buffers[0] = mem.Data;
                     break;
-                case RopeNode node:
+                case NodeValue node:
                     node.Left.FillBuffers(buffers[..node.Left.BufferCount]);
                     node.Right.FillBuffers(buffers[node.Left.BufferCount..]);
                     break;
@@ -1431,10 +1183,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 spant[1] = values.Item2;
                 writer.Advance(2);
                 break;
-            case ReadOnlyMemory<T> mem:
-                writer.Write(mem.Span);
+            case MemoryValue mem:
+                writer.Write(mem.Data.Span);
                 break;
-            case RopeNode node:
+            case NodeValue node:
                 node.Left.WriteTo(writer);
                 node.Right.WriteTo(writer);
                 break;
@@ -1719,14 +1471,14 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             {
                 OneValue value => find.Length == 1 && value.Item1.Equals(find.Span[0]) ? 0 : -1,
                 TwoValue values => values.Item1.Equals(find.Span[0]) ? 0 : values.Item2.Equals(find.Span[0]) ? 1 : -1,
-                ReadOnlyMemory<T> memory => memory.Span.IndexOf(find.Span),
+                MemoryValue memory => memory.Data.Span.IndexOf(find.Span),
                 _ => this.IndexOf(new Rope<T>(find)),
             },
             _ => this.data switch
             {
-                TwoValue values => find.Length == 2 && values.Item1.Equals(find.Span[0]) && values.Item2.Equals(find.Span[1]) ? 0 : -1,                
-                ReadOnlyMemory<T> memory => memory.Span.IndexOf(find.Span),
-                RopeNode => this.IndexOf(new Rope<T>(find)),
+                TwoValue values => find.Length == 2 && values.Item1.Equals(find.Span[0]) && values.Item2.Equals(find.Span[1]) ? 0 : -1,
+                MemoryValue memory => memory.Data.Span.IndexOf(find.Span),
+                NodeValue => this.IndexOf(new Rope<T>(find)),
                 _ => -1
             }
         };
@@ -1739,8 +1491,8 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         {            
             OneValue value => value.Item1.Equals(find) ? 0 : -1,
             TwoValue value => value.Item1.Equals(find) ? 0 : value.Item2.Equals(find) ? 1 : -1,
-            ReadOnlyMemory<T> memory => memory.Span.IndexOf(find),
-            RopeNode node => node.IndexOf(find),
+            MemoryValue memory => memory.Data.Span.IndexOf(find),
+            NodeValue node => node.IndexOf(find),
             _ => -1
         };
     }
@@ -1800,10 +1552,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             return values.Equals(findValues) ? 0 : -1;
         }
 
-        if (this.data is ReadOnlyMemory<T> mem && find is ReadOnlyMemory<T> findMem)
+        if (this.data is MemoryValue mem && find is MemoryValue findMem)
         {
             // Finding a Leaf within another leaf.
-            return mem.Span.LastIndexOf(findMem.Span);
+            return mem.Data.Span.LastIndexOf(findMem.Data.Span);
         }
 
         using var rentedBuffers = BufferPool.Lease(this.BufferCount);
@@ -2066,9 +1818,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return values.Item1.Equals(find) ? 0 :
                     values.Item2.Equals(find) ? 1 :
                     - 1;
-            case ReadOnlyMemory<T> memory:
-                return memory.Span.LastIndexOf(find);
-            case RopeNode node:
+            case MemoryValue memory:
+                return memory.Data.Span.LastIndexOf(find);
+            case NodeValue node:
                 // Node
                 var i = node.Right.LastIndexOf(find);
                 if (i != -1)
@@ -2099,8 +1851,8 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return equalityComparer.Equals(values.Item1, find) ? 0 :
                     equalityComparer.Equals(values.Item2, find) ? 1 :
                     -1;
-            case ReadOnlyMemory<T> memory:
-                var slice = memory.Span;
+            case MemoryValue memory:
+                var slice = memory.Data.Span;
                 for (var x = slice.Length - 1; x >= 0; x--)
                 {
                     if (equalityComparer.Equals(slice[x], find))
@@ -2110,7 +1862,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 }
 
                 return -1;
-            case RopeNode node:
+            case NodeValue node:
                 // Node
                 var i = node.Right.LastIndexOf(find, equalityComparer);
                 if (i != -1)
@@ -2280,9 +2032,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             case TwoValue values:
                 var a = comparer.Compare(values.Item1, item);
                 return a == 0 ? comparer.Compare(values.Item2, item) : a;
-            case ReadOnlyMemory<T> memory:
-                return MemoryExtensions.BinarySearch(memory.Span, item, comparer);
-            case RopeNode node:
+            case MemoryValue memory:
+                return MemoryExtensions.BinarySearch(memory.Data.Span, item, comparer);
+            case NodeValue node:
                 var r = node.Right.BinarySearch(item, comparer);
                 if (r != -1)
                 {
@@ -2317,9 +2069,9 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
                 return value.Item1.Equals(item) ? 0 : -1;
             case TwoValue values:
                 return values.Item1.Equals(item) ? 0 : values.Item2.Equals(item) ? 1 : -1;
-            case ReadOnlyMemory<T> memory:
-                return MemoryExtensions.BinarySearch(memory.Span, item, Comparer<T>.Default);
-            case RopeNode node:
+            case MemoryValue memory:
+                return MemoryExtensions.BinarySearch(memory.Data.Span, item, Comparer<T>.Default);
+            case NodeValue node:
                 var r = node.Right.BinarySearch(item, Comparer<T>.Default);
                 if (r != -1)
                 {
@@ -2346,10 +2098,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
             EmptyValue or null => other.Length == 0,
             OneValue value => other.data is OneValue otherValue && value.Item1.Equals(otherValue.Item1),
             TwoValue values => other.data is TwoValue otherValues && values.Item1.Equals(otherValues.Item1) && values.Item2.Equals(otherValues.Item2),
-            ReadOnlyMemory<T> mem =>
+            MemoryValue mem =>
                 other.data switch
                 {
-                    ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span),
+                    MemoryValue otherMem => mem.Data.Span.SequenceEqual(otherMem.Data.Span),
                     _ => AlignedEquals(other)
                 },
             _ => AlignedEquals(other)
@@ -2368,10 +2120,10 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         return this.data switch
         {
             EmptyValue or null => other.Length == 0,
-            ReadOnlyMemory<T> mem =>
+            MemoryValue mem =>
                 other.data switch
                 {
-                    ReadOnlyMemory<T> otherMem => mem.Span.SequenceEqual(otherMem.Span, equalityComparer),
+                    MemoryValue otherMem => mem.Data.Span.SequenceEqual(otherMem.Data.Span, equalityComparer),
                     _ => AlignedEquals(other, equalityComparer)
                 },
             OneValue value => other.data is OneValue otherValue && equalityComparer.Equals(value.Item1, otherValue.Item1),
@@ -2379,7 +2131,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         };
     }
 
-    private bool AlignedEquals(Rope<T> other)
+    private readonly bool AlignedEquals(Rope<T> other)
     {
         if (this.Length != other.Length)
         {
@@ -2420,7 +2172,7 @@ public readonly record struct Rope<T> : IEnumerable<T>, IReadOnlyList<T>, IImmut
         }
     }
 
-    private bool AlignedEquals(Rope<T> other, IEqualityComparer<T> comparer)
+    private readonly bool AlignedEquals(Rope<T> other, IEqualityComparer<T> comparer)
     {
         if (this.Length != other.Length)
         {

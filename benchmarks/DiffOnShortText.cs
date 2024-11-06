@@ -1,5 +1,6 @@
 // Copyright 2010 Google Inc.
 // All Right Reserved.
+#if NET8_0_OR_GREATER
 
 using System;
 using BenchmarkDotNet.Attributes;
@@ -40,3 +41,5 @@ public class DiffOnShortText
         this.DiffMatchPatch.diff_main(BenchmarkData.ShortDiffText1, BenchmarkData.ShortDiffText2);
     }
 }
+
+#endif
