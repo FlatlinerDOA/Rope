@@ -15,7 +15,7 @@ public class InsertSorted
 
     private static readonly float[] RandomFloats = Enumerable.Range(0, 65000).Select(s => random.NextSingle()).ToArray();
 
-    [Benchmark]
+    [Benchmark(Baseline = true)]
     public void AddRangeThenOrderLong()
     {
         var rope = Rope<long>.Empty.AddRange(RandomLongs);

@@ -13,7 +13,7 @@ public class AddRange
     [Params(10, 100, 500)]
     public int EditCount;
 
-    [Benchmark(Description = "Rope")]
+    [Benchmark(Description = "Rope", Baseline = true)]
     public void RopeOfChar()
     {
         var lorem = BenchmarkData.LoremIpsum.ToRope();
